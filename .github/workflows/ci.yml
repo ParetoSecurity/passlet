@@ -25,6 +25,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Nix exports Bash 4+ syntax; macOS ships Bash 3.2. Bootstrap from our pin.
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        if: runner.os == 'macOS'
+      - name: Select pinned Bash for macOS
+        if: runner.os == 'macOS'
+        run: |
+          bash_path=$(nix-build ./nix --attr bash --no-out-link)
+          echo "$bash_path/bin" >> "$GITHUB_PATH"
       - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
         with:
           auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}

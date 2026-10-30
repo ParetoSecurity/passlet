@@ -1,5 +1,6 @@
 { pkgs, ... }: {
   packages = with pkgs; [
+    bash
     go_1_27
     openssl
     python3

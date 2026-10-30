@@ -7,8 +7,9 @@ cd "$(dirname "$0")/.."
 : "${NOTARIZATION_PASSWORD:?Set app-specific password}"
 : "${APPLE_TEAM_ID:?Set Apple team ID}"
 python3 -c 'import os,re; assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", os.environ["PASSLET_VERSION"]), "Expected X.Y.Z version"'
-# nix-darwin can select an SDK that does not contain Apple's signing tools.
-# Keep the runner's selected Xcode when it provides them.
+# Use the selected Apple toolchain rather than Nix's DEVELOPER_DIR.
+DEVELOPER_DIR="${PASSLET_DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
+export DEVELOPER_DIR
 if ! /usr/bin/xcrun --find notarytool >/dev/null 2>&1; then
     export DEVELOPER_DIR=/Library/Developer/CommandLineTools
 fi

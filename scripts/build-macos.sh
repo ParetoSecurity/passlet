@@ -11,6 +11,8 @@ case "$mode" in development|release) ;; *) echo 'Invalid build mode' >&2; exit 1
 if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
     export DEVELOPER_DIR=/Library/Developer/CommandLineTools
 fi
+# Resolve the Apple SDK instead of inheriting the SDK injected by Nix.
+unset SDKROOT
 export SDKROOT="${PASSLET_SDKROOT:-$(/usr/bin/xcrun --sdk macosx --show-sdk-path)}"
 if [ "$mode" = release ]; then
     APP="$PWD/build/release/Passlet.app"

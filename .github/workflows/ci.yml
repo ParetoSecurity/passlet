@@ -41,10 +41,13 @@ jobs:
       - name: Compile Swift helper without credentials
         if: runner.os == 'macOS'
         run: |
-          export MACOSX_DEPLOYMENT_TARGET=14.0
+          if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
+            export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+          fi
+          unset SDKROOT
           SDKROOT="$(/usr/bin/xcrun --sdk macosx --show-sdk-path)"
           export SDKROOT
-          /usr/bin/xcrun swiftc -swift-version 5 macos/main.swift -o build/PassletHelper -framework AppKit -framework Security -framework LocalAuthentication
+          /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/main.swift -o build/PassletHelper -framework AppKit -framework Security -framework LocalAuthentication
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.os }}

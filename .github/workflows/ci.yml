@@ -9,6 +9,9 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
 jobs:
   test:
     name: Test (${{ matrix.os }})
@@ -18,22 +21,41 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    env:
-      PASSLET_GO_SYSTEM: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      # Nix exports Bash 4+ syntax; macOS ships Bash 3.2. Bootstrap from our pin.
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        if: runner.os == 'macOS'
+      - name: Select pinned Bash for macOS
+        if: runner.os == 'macOS'
+        run: |
+          bash_path=$(nix-build ./nix --attr bash --no-out-link)
+          echo "$bash_path/bin" >> "$GITHUB_PATH"
+      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
         with:
-          go-version: '1.26.8'
-          cache: true
-      - run: make check
-      - run: make build
+          auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Compile Swift helper without credentials
         if: runner.os == 'macOS'
         run: |
-          xcrun swiftc -swift-version 5 macos/main.swift -o build/PassletHelper -framework AppKit -framework Security -framework LocalAuthentication
+          unset DEVELOPER_DIR SDKROOT
+          DEVELOPER_DIR="$(/usr/bin/xcode-select -p)"
+          export DEVELOPER_DIR
+          if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
+            export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+          fi
+          unset SDKROOT
+          SDKROOT="$(/usr/bin/xcrun --sdk macosx --show-sdk-path)"
+          export SDKROOT
+          echo "Apple developer directory: $DEVELOPER_DIR"
+          echo "Apple SDK: $SDKROOT"
+          /usr/bin/xcrun --find swiftc
+          /usr/bin/xcrun swiftc --version
+          mkdir -p build
+          /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/main.swift -o build/PassletHelper -framework AppKit -framework Security -framework LocalAuthentication
+      - run: make check
+      - run: make build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.os }}
@@ -49,7 +71,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+        with:
+          auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Validate workflows, shell scripts, and tracked secrets
-        run: |
-          nix shell github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#actionlint github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#shellcheck github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#gitleaks --command sh -c 'actionlint .github/workflows/*.yml && shellcheck scripts/build-macos.sh scripts/check.sh scripts/go.sh scripts/icon.sh scripts/release.sh && gitleaks git --redact'
+        run: lint

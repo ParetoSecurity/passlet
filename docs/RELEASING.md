@@ -39,17 +39,18 @@ uploads, or automatic dependency merging into this CLI project.
 ## Local checks
 
 `make check` runs module verification, formatting, vet, race tests and coverage.
-`make build` builds the local CLI and Linux amd64 CLI. Local Go uses pinned Nix;
-CI uses exactly Go 1.26.8. `PASSLET_GO_SYSTEM=1` permits that exact system Go.
+`make build` builds the local CLI and Linux amd64 CLI. Run these commands inside
+`nix-shell`; all CI and release commands use the same `nix/flake.lock`. Apple
+SDK, signing, and notarization tools come from the macOS runner.
 
 On macOS, `make macos` builds the development helper using
 `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`. The default keeps
 the existing prototype identity. The icon source is `assets/passlet.png`;
 `scripts/icon.sh` creates all required icon sizes and the icns bundle.
 
-## Prepare and validate v0.1
+## Prepare and validate a release
 
-After CI passes on main, publish a GitHub release tagged `v0.1.0`.
+After CI passes on main, publish a GitHub release tagged `vX.Y.Z`.
 The **Release** workflow checks out the release tag, repeats tests, builds
 universal arm64/x86_64 macOS binaries, verifies Developer ID signing, notarizes,
 staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums,
@@ -75,12 +76,14 @@ run automatically, following the Pareto macOS distribution model. Keep
 GitHub parent credentials, refresh tokens, and app client secrets out of all CI
 secrets, artifacts, logs, and screenshots.
 
-## Current release gates
+## Release validation
 
-The workflow and scripts are preparatory until executed in GitHub Actions with
-real distribution credentials. A successful local build is not proof of
-notarization, Gatekeeper acceptance, or production Keychain behavior. Signing credential configuration, production profile,
-CI execution, real distribution tests, and publishing must be recorded separately.
+The v0.1.0 release workflow successfully built, signed, notarized, and attached
+artifacts using the configured distribution credentials:
+[successful release run](https://github.com/ParetoSecurity/passlet/actions/runs/41110201864).
+The devenv migration preserves that release trigger, environment, credentials,
+and Developer ID authority check. New toolchain changes still need validation
+in the release workflow; local checks do not establish production Keychain behavior.
 
 ## Local preparation results
 
@@ -96,8 +99,8 @@ CI execution, real distribution tests, and publishing must be recorded separatel
   verification with the existing development identity.
 - Linux arm64 CLI, macOS Intel CLI, and macOS Intel Swift helper cross-builds
   passed. They have not been runtime-tested on those architectures.
-- Developer ID signing, notarization and production Keychain tests remain release
-  gates. Local passing tests do not establish those outcomes.
+- Developer ID signing and notarization passed in the release run linked above.
+  Production Keychain interaction is a separate manual check.
 
 For the packaged Claude skill, configure `PASSLET_ENDPOINT` on the agent machine
 to the approving user's Mac before starting Claude. Existing installed personal

@@ -206,14 +206,25 @@ sqlite3 "$HOME/.local/share/passlet/audit.sqlite" \
 
 ## Build and test
 
-Local builds require Nix with flakes and Python 3. macOS builds also require Apple
-Command Line Tools and an appropriate signing identity/profile. Go is pinned to
-1.26.8; `go.mod` and `go.sum` pin the Go dependencies. CI uses that same Go version.
+Install Nix with flakes enabled, then enter `nix-shell` (or run `direnv allow`).
+`nix/flake.lock` pins Go, Python, and the lint/build tools for local development, CI,
+and releases. macOS builds also require Apple Command Line Tools and an appropriate
+signing identity/profile. `go.mod` and `go.sum` pin the Go dependencies.
 
 ```sh
+nix-shell
 make check
 make build
+lint
 ```
+
+Use `nix flake update --flake ./nix` to update the environment lock, and `go get -u ./... &&
+go mod tidy` inside the shell to update Go dependencies. Commit both lock files
+and run the checks before opening a PR.
+
+The Sunday updater in `teamniteo/ops` tracks `nix/flake.lock`, Go modules, and
+workflow action pins. CI uses `teamniteo/gha-actions/nix` to load this same
+devenv-backed shell once; subsequent steps inherit its tools.
 
 `make check` verifies modules, formatting, vet, race tests, and signing metadata.
 Tests use fakes and local HTTP/IPC fixtures; they need no GitHub credentials or

@@ -10,3 +10,7 @@ macos:
 	./scripts/build-macos.sh
 release:
 	./scripts/release.sh
+
+.PHONY: check-all
+check-all: check build
+	lint

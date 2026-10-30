@@ -31,3 +31,10 @@ __pycache__/
 /scripts/test-cruncher.sh
 /internal/passlet/live_test.go
 /packaging/cruncher.nix
+
+# Local devenv/direnv state; commit nix/flake.lock for reproducible tool versions.
+/.devenv/
+/.direnv/
+/devenv.local.nix
+/devenv.local.yaml
+!/.envrc

@@ -6,11 +6,15 @@ cd "$(dirname "$0")/.."
 mode=${PASSLET_BUILD_MODE:-development}
 version=${PASSLET_VERSION:-0.1.0}
 case "$mode" in development|release) ;; *) echo 'Invalid build mode' >&2; exit 1;; esac
-# nix-darwin may point DEVELOPER_DIR at an SDK without the Swift compiler.
-# CI's selected Xcode takes precedence when it supplies swiftc.
+# xcode-select also honors DEVELOPER_DIR; clear Nix's override first.
+unset DEVELOPER_DIR SDKROOT
+DEVELOPER_DIR="${PASSLET_DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
+export DEVELOPER_DIR
 if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
     export DEVELOPER_DIR=/Library/Developer/CommandLineTools
 fi
+# Resolve the Apple SDK instead of inheriting the SDK injected by Nix.
+unset SDKROOT
 export SDKROOT="${PASSLET_SDKROOT:-$(/usr/bin/xcrun --sdk macosx --show-sdk-path)}"
 if [ "$mode" = release ]; then
     APP="$PWD/build/release/Passlet.app"

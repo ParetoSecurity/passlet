@@ -11,7 +11,35 @@ defaults:
   run:
     shell: bash -eo pipefail {0}
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+      - id: verify
+        name: Verify release commit and maintainer agreement before signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PASSLET_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 -c 'import os,re; assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", os.environ["PASSLET_TAG"])'
+          sha=$(git rev-parse "refs/tags/$PASSLET_TAG^{commit}")
+          git merge-base --is-ancestor "$sha" origin/main
+          python3 scripts/review-quorum.py --repo "$GH_REPO" --release-sha "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
   release:
+    needs: verify
     runs-on: macos-15
     timeout-minutes: 45
     environment: release
@@ -23,7 +51,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.verify.outputs.sha }}
       # Nix exports Bash 4+ syntax; macOS ships Bash 3.2. Bootstrap from our pin.
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
       - name: Select pinned Bash for macOS
@@ -66,9 +94,13 @@ jobs:
         run: make release
       - name: Attach signed release artifacts
         env:
+          VERIFIED_SHA: ${{ needs.verify.outputs.sha }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          git fetch --no-tags origin "refs/tags/$PASSLET_TAG"
+          current_sha=$(git rev-parse 'FETCH_HEAD^{commit}')
+          test "$current_sha" = "$VERIFIED_SHA"
           gh release upload "$PASSLET_TAG" dist/*
       - name: Remove signing credentials
         if: always()

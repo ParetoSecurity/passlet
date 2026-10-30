@@ -156,6 +156,22 @@
         "type": "github"
       }
     },
+    "niteo-agents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791573082,
+        "narHash": "sha256-eETZxzL6pIFzgyMTZjfAHv8i+o3L49t9h9gtd2Gw6OU=",
+        "owner": "teamniteo",
+        "repo": "agents",
+        "rev": "f1d400ef81ee9d7e705415579f20bfdeaff172ce",
+        "type": "github"
+      },
+      "original": {
+        "owner": "teamniteo",
+        "repo": "agents",
+        "type": "github"
+      }
+    },
     "nix": {
       "inputs": {
         "flake-compat": [
@@ -277,6 +293,7 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
+        "niteo-agents": "niteo-agents",
         "nixpkgs": "nixpkgs_2"
       }
     },

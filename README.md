@@ -2,138 +2,77 @@
 
 # Passlet
 
-**Short-lived credentials for your agents.**
+Short-lived credentials for your agents.
 
-Your agent running in a remote server or a sandbox needs access to GitHub. Let it
-ask you for scoped permissions on-the-fly instead of giving it perpetual carte
-blanche access.
+Your agent running in a remote server or a sandbox needs access to GitHub. Let it ask you for scoped permissions on-the-fly instead of giving it perpetual carte blanche access.
 
-Approve a request on your Mac with one Touch ID/password prompt. Passlet retrieves
-protected Keychain credentials, obtains a repository- and permission-scoped GitHub
-App **user** token, and delivers only that token to the agent. Git and `gh` then
-work independently until the token expires, even while your Mac is offline.
-GitHub actions retain your user attribution.
+Approve each request on your Mac with one native Touch ID/password prompt. Passlet retrieves protected Keychain credentials using the same authentication context, obtains a repository- and permission-scoped GitHub App user token, and delivers only that token. Git and `gh` work independently until expiry, even with your Mac offline. API actions retain your GitHub identity; Git commit author metadata is configured separately.
 
-[Website](https://passlet.dev) · [Releases](https://github.com/paretosecurity/passlet/releases) · [Discord](https://discord.gg/989fwbsyw7)
+[Website](https://passlet.dev) · [Releases](https://github.com/ParetoSecurity/passlet/releases) · [Discord](https://discord.gg/989fwbsyw7)
 
-## Status and requirements
+## Version and requirements
 
-Version 0.1 supports GitHub only. GitHub App registration and user authorization
-are manual; guided onboarding is planned for v0.2. This is a CLI/service and a
-background macOS helper, with no menu bar UI. Opening the app alone does not
-configure or start the service.
+This branch implements v0.2; v0.1.0 is already released. Follow these instructions with the v0.2 build. There are no compatibility aliases or migrations before v1.0.
 
-- Approving Mac: macOS 14 or later, a logged-in graphical session, and Tailscale.
-- Agent: Linux or macOS, Tailscale, and Git and/or GitHub CLI (`gh`).
-- A GitHub App installed on the repositories you want to make eligible, with
-  expiring user tokens and device authorization enabled.
-- Tailscale network policy allowing agents to reach the approving Mac on TCP 8443.
+- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. No menu bar app is required.
+- Agent: macOS or Linux, Passlet on PATH, and Git and/or GitHub CLI.
+- Remote agents: OpenSSH with Unix socket forwarding, or opt-in Tailscale HTTPS.
+- Each person owns and authorizes their own GitHub App. Organization installation may require an organization administrator.
 
-## Install
+## Install and set up your Mac
 
-Download the matching archive from Releases and verify its SHA-256 checksum against
-the release's `SHA256SUMS` file. Release assets are attached automatically after
-the signing workflow finishes; see [release instructions](docs/RELEASING.md).
-
-On macOS, extract the universal archive and move `Passlet.app` to `/Applications`.
-The signed CLI and helper are inside that bundle:
+Download the matching release archive and verify its checksum against `SHA256SUMS`. Extract `Passlet.app` into `/Applications`. Keep the CLI and helper together inside the signed bundle:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
 ln -s /Applications/Passlet.app/Contents/MacOS/passlet "$HOME/.local/bin/passlet"
 export PATH="$HOME/.local/bin:$PATH"
 passlet version
+passlet setup github
+passlet service install
+passlet doctor
 ```
 
-Keep the helper executable inside the app bundle. On Linux, extract the amd64 or
-arm64 archive and place `passlet` on your PATH. The archive also includes the
-Claude skill and this README.
+`setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum includes Contents, Pull requests, Issues and Workflows write, plus Actions read. Override it with `--permissions contents:read,pull_requests:read` if you want a read-only app. Each later agent request must still name its exact repositories and permissions, within that maximum.
 
-## Configure GitHub and Keychain
+Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
-Register a GitHub App, enable expiring user tokens and device authorization, and
-install it on the repositories you want to make available. Set its repository
-permissions to the maximum access you want Passlet to be able to request. For
-example, pushing branches and opening pull requests requires Contents and Pull
-requests write access. Metadata read access is intrinsic.
+`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. Opening the app alone does not start the service. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
 
-Authorize the app as the user whose identity should appear on GitHub. Obtain the
-user access token and refresh token through GitHub's user authorization flow. The
-app's client ID and client secret are also required. The App's private signing key
-is **not** used by Passlet's user-token flow. Each person's GitHub access still
-limits what their tokens can do.
+## Local agents
 
-Prepare this JSON in a temporary mode-0600 file. `expires_at` is the actual parent
-access-token expiry, expressed as a UTC RFC3339 timestamp:
+On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Clear any explicit `PASSLET_ENDPOINT` if you want the default.
 
-```json
-{
-  "client_id": "YOUR_APP_CLIENT_ID",
-  "client_secret": "YOUR_APP_CLIENT_SECRET",
-  "access_token": "PARENT_USER_ACCESS_TOKEN",
-  "refresh_token": "PARENT_REFRESH_TOKEN",
-  "expires_at": "RFC3339_UTC_TIMESTAMP"
-}
-```
+## Remote agents over SSH
 
-Import it while the Mac is unlocked:
-
-```sh
-passlet import \
-  --helper /Applications/Passlet.app/Contents/MacOS/PassletHelper \
-  < /private/path/to/credentials.json
-```
-
-Remove the temporary credential file after a successful import. Never put secrets
-in arguments, Git, transcripts, or audit records. Import refuses to overwrite an
-existing credential. Keychain uses user-presence protection and
-`WhenUnlockedThisDeviceOnly`. Each request starts a fresh authentication context;
-the credential read reuses that context without a second prompt.
-
-## Start the Mac service
-
-Create a private audit directory, then run the service in your logged-in session:
+On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
 ```sh
 mkdir -p "$HOME/.local/share/passlet"
 chmod 700 "$HOME/.local/share/passlet"
-passlet serve \
-  --listen 127.0.0.1:8484 \
-  --helper /Applications/Passlet.app/Contents/MacOS/PassletHelper \
-  --audit "$HOME/.local/share/passlet/audit.sqlite"
 ```
 
-In a separate terminal, expose it through Tailscale Serve:
+From your Mac, keep this SSH connection open, substituting your actual remote username and host. The path before the colon is the remote absolute path; the path after it is on your Mac:
 
 ```sh
-tailscale serve --proxy-protocol=2 --tls-terminated-tcp=8443 tcp://127.0.0.1:8484
+ssh -NT -o ExitOnForwardFailure=yes \
+  -o StreamLocalBindUnlink=yes \
+  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/passlet.sock" \
+  alice@remote-box
 ```
 
-Use **Serve**, not Funnel. Both commands must keep running. Do not reset unrelated
-Tailscale Serve configuration. Set the approving Mac's actual Tailscale hostname
-on the agent (the hostname below is an example):
+On that remote account, before starting Claude:
 
 ```sh
-export PASSLET_ENDPOINT=https://your-mac.your-tailnet.ts.net:8443
+export PASSLET_ENDPOINT=unix:///home/alice/.local/share/passlet/mac.sock
+passlet doctor
 ```
 
-Tailscale policy controls network access; Passlet has no node allowlist. It obtains
-the caller from Serve's PROXY v2 connection and Tailscale WhoIs. Request bodies
-and HTTP headers cannot override that identity.
+The remote SSH server must permit Unix socket forwarding. See [SSH server configuration, stale sockets, and Alice/Bob setup](docs/SETUP.md). Bob uses his own remote Unix account, socket path, Mac, and GitHub App. Do not share a Unix account or use a shared `/tmp/passlet.sock`.
 
 ## Request and use access
 
-Ask for the least access your task needs. For one command, `exec` requests approval
-and then runs it with the scoped credential:
-
-```sh
-passlet exec \
-  --repos acme/project \
-  --permissions contents:read \
-  -- gh api repos/acme/project/contents
-```
-
-To reuse a grant for multiple commands:
+Ask for the minimum scope needed. Keep grant contents out of terminal transcripts:
 
 ```sh
 passlet_dir=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/passlet.XXXXXX")
@@ -149,99 +88,62 @@ passlet exec --grant "$passlet_dir/grant.json" -- \
   gh pr list --repo acme/project
 ```
 
-Use HTTPS Git remotes. `exec --grant` does not contact your Mac. It overrides
-ambient Git/gh credentials for its child process and does not persist the token
-in Git configuration. Configure commit author identity locally in your checkout
-if needed; API attribution and Git commit metadata are separate concepts.
+The receipt reports user and actual expiry without printing the token. Always pass `--out` for agent requests; without it, JSON containing the token goes to stdout. The new grant file is mode 0600 and cannot overwrite another file. Remove it when finished; deleting it does not revoke the token.
 
-Always use `--out` for agent requests: without it, grant JSON goes to stdout.
-The grant file is mode 0600 and cannot overwrite an existing file. Keep its
-contents out of transcripts. Remove the file when finished. Deleting a file does
-not revoke its token. GitHub sets expiry, typically eight hours.
+Use HTTPS Git remotes. `exec --grant` uses the delivered token without contacting the Mac, overrides ambient Git/gh credentials for the child, and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
+
+## Tailscale HTTPS, explicitly opt-in
+
+The default service opens no TCP port. To enable Tailscale alongside the local socket, install the service with `--tailscale-listen 127.0.0.1:8484` (uninstall an existing login service before changing its arguments), then expose only that loopback backend:
+
+```sh
+passlet service install --tailscale-listen 127.0.0.1:8484
+tailscale serve --proxy-protocol=2 --tls-terminated-tcp=8443 tcp://127.0.0.1:8484
+```
+
+Use Tailscale Serve, not Funnel. Keep Serve running and configure network policy to allow intended callers on TCP 8443. Do not reset unrelated Serve configuration. On the agent, set `PASSLET_ENDPOINT=https://your-mac.your-tailnet.ts.net:8443`. Passlet uses PROXY v2 and WhoIs for caller identity; no Passlet node allowlist is added.
 
 ## Claude skill
 
-Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to
-`~/.claude/skills/passlet/SKILL.md` on the agent machine. Set `PASSLET_ENDPOINT`
-before launching Claude. The skill teaches Claude to request minimum access,
-reuse approved grants, and handle unavailable Macs without credential fallbacks.
+Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to `~/.claude/skills/passlet/SKILL.md` on each agent account. Local Mac agents use the default socket; remote agents inherit their own `PASSLET_ENDPOINT`. The skill requests minimum access, reuses grants, and stops on unavailable Macs without credential fallbacks. It is also included in release archives and the app's `Contents/Resources/skills`.
 
-The skill ships in Linux archives and in the macOS app at
-`Passlet.app/Contents/Resources/skills/passlet/SKILL.md`.
-
-## Boundaries and failures
-
-- Requests accept one repository owner, up to three repositories and eight
-  permissions, with bounded prompt length. No caller descriptions or requested TTL.
-- No queue, automatic retry, unattended approval, or early token revocation.
-  If your Mac is unavailable, the agent can continue work that needs no new token
-  and ask you to bring it online before requesting again.
-- Connection timeout is 5 seconds, server deadline 120 seconds, and client timeout
-  130 seconds. Disconnects and timeouts cancel pending native authentication.
-- A scoped token is still a bearer credential. Anyone who obtains it can use its
-  granted access until it expires. Your agent must protect the delivered grant.
-- WhoIs identifies a Tailscale node, not an individual process or Unix user on a
-  shared server. Only approve callers and scopes you intend to authorize.
-- Serve's backend listener is loopback-only. Local processes are trusted on that
-  hop: PROXY headers are not cryptographically authenticated. Do not use this
-  boundary between mutually untrusted users on the same Mac.
-- A token's effective access is limited by its requested scope, the GitHub App's
-  permissions and installation, and the authorizing user's access. Some listing
-  endpoints may expose repository metadata outside the requested content scope.
-- Refresh tokens, parent access tokens, and client secrets never go to the agent.
-  A refresh is saved through the authenticated Keychain context before delivery;
-  failure to store rotated credentials may require fresh GitHub authorization.
-
-## Audit
-
-The local SQLite audit log contains request IDs, caller identity, requested and
-granted access, decisions, expiry, and delivery outcome. It contains no tokens.
-A successful response write records delivery from the server's perspective; it
-is not an acknowledgement that an agent stored the token.
+## Status, diagnostics, and audit
 
 ```sh
-sqlite3 "$HOME/.local/share/passlet/audit.sqlite" \
-  'SELECT data FROM events ORDER BY rowid DESC LIMIT 10;'
+passlet status
+passlet doctor
+passlet audit --limit 20
+passlet service status
 ```
 
-## Build and test
+Diagnostics never mint tokens or trigger authentication. They distinguish locally recorded GitHub identity from current GitHub state; protected Keychain availability can remain unknown without authentication. `doctor` returns nonzero for detected faults and suggests repairs. `audit` reads an existing local SQLite database without creating one and emits structured events: caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
 
-Install Nix with flakes enabled, then enter `nix-shell` (or run `direnv allow`).
-`nix/flake.lock` pins Go, Python, and the lint/build tools for local development, CI,
-and releases. macOS builds also require Apple Command Line Tools and an appropriate
-signing identity/profile. `go.mod` and `go.sum` pin the Go dependencies.
+## Trust and failure boundaries
+
+- A socket connection proves access to the socket, not that Claude initiated it. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
+- Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The loopback PROXY backend trusts local Mac processes; do not treat it as an isolation boundary between hostile local users.
+- Every request requires native user presence. There are no queues, automatic request retries, client pairing, session keys, unattended approvals, or early revocation.
+- If the Mac is offline, continue work requiring no new credential. Bring it online and make a new explicit request when ready. The connection timeout is 5 seconds, server deadline 120 seconds, and client timeout 130 seconds. Timeout or disconnect cancels pending authentication.
+- Tokens are bearer credentials. Anyone who obtains one can use its granted access until expiry. Effective access is constrained by the requested scope, app permissions/installation, and the author's GitHub access. Some GitHub listing endpoints expose metadata beyond the scoped content repositories.
+- Requests accept one repository owner, at most three repositories and eight permissions, with bounded prompt text. No caller-provided description or requested TTL is accepted.
+- A successful response write records delivery from the server's perspective, not proof the agent saved it. Failed rotated-credential storage may require fresh GitHub authorization.
+
+## Development and validation
+
+Install Nix with flakes enabled, then use the pinned devenv shell:
 
 ```sh
 nix-shell
-make check
-make build
-lint
+make check-all
+make integration             # Linux KVM, or a configured Linux remote builder
+make check-macos             # macOS with Apple Command Line Tools
 ```
 
-Use `nix flake update --flake ./nix` to update the environment lock, and `go get -u ./... &&
-go mod tidy` inside the shell to update Go dependencies. Commit both lock files
-and run the checks before opening a PR.
+The pinned flake exports `lib.integrationTest`; `nix/tests.nix` supplies the repository source to it. On an Apple Silicon Mac with an aarch64 Linux KVM builder, run `nix-build nix/tests.nix --argstr system aarch64-linux --no-out-link`. Three isolated NixOS guests run real SSH, Unix accounts, Git, gh, and Passlet. Approval and GitHub fixtures exist only in the test binary; production has no bypass switches. These VM tests do not test Keychain, Touch ID, launchd, or Mac sleep/wake.
 
-The Sunday updater in `teamniteo/ops` tracks `nix/flake.lock`, Go modules, and
-workflow action pins. CI uses `teamniteo/gha-actions/nix` to load this same
-devenv-backed shell once; subsequent steps inherit its tools.
+See [manual and UI validation](docs/VALIDATION.md) and [release controls](docs/RELEASING.md). For a development-signed helper, set `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`, then `make macos`. The output is `build/Passlet.app`; use a dedicated test account/profile for isolated Keychain testing.
 
-`make check` verifies modules, formatting, vet, race tests, and signing metadata.
-Tests use fakes and local HTTP/IPC fixtures; they need no GitHub credentials or
-Touch ID and cannot disable approval in the production executable.
-
-For a development-signed macOS helper:
-
-```sh
-export PASSLET_PROVISIONING_PROFILE=/private/path/to/development.provisionprofile
-export PASSLET_SIGNING_IDENTITY=YOUR_SIGNING_CERTIFICATE_FINGERPRINT
-make macos
-```
-
-Use an explicit App ID and a development profile containing your Mac and identity.
-The output is `build/Passlet.app`. Distribution uses a separate Developer ID build,
-notarization, and stapling; see [RELEASING.md](docs/RELEASING.md). The production
-bundle's separate Keychain identity requires its own credential import.
+`nix/flake.lock` pins the tools and the non-flake `teamniteo/agents` input. Entering the environment links upstream rules and skills into `.claude`, preserving the local Passlet skill. Generated links are ignored and are not release assets. `nix flake update --flake ./nix` advances these conventions along with dependencies; the lock and workflow pins use the format supported by the Sunday updater in `teamniteo/ops`. Its `updates/projects.yaml` still needs a Passlet entry with `remote: ParetoSecurity/passlet`, `flakes: [nix]`, `go: ["."]`, `actions: [.github/workflows]`, `lint: {dir: ".", target: check-all}`, `ci: ci.yml`, and `active: true` before weekly updates include this repository. Update Go modules inside the shell with `go get -u ./... && go mod tidy`, then refresh the integration package’s `vendorHash` in `nix/test-package.nix` if dependencies changed and run checks. CI uses the same `teamniteo/gha-actions/nix` environment without giving PR jobs cache-write credentials.
 
 ## License
 

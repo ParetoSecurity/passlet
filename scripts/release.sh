@@ -30,11 +30,12 @@ spctl --assess --type execute --verbose "$app"
 ditto -c -k --keepParent "$app" "$archive"
 for arch in amd64 arm64; do
     stage="build/release/linux-$arch"
-    mkdir -p "$stage/skills/passlet"
+    mkdir -p "$stage/skills/passlet" "$stage/docs"
     GOOS=linux GOARCH="$arch" CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-s -w -X main.version=$PASSLET_VERSION" -o "$stage/passlet" ./cmd/passlet
     cp skills/passlet/SKILL.md "$stage/skills/passlet/SKILL.md"
     cp README.md LICENSE "$stage/"
-    tar -czf "dist/passlet_${PASSLET_VERSION}_linux_${arch}.tar.gz" -C "$stage" passlet skills README.md LICENSE
+    cp docs/*.md "$stage/docs/"
+    tar -czf "dist/passlet_${PASSLET_VERSION}_linux_${arch}.tar.gz" -C "$stage" passlet skills docs README.md LICENSE
 done
 (cd dist && shasum -a 256 "passlet_${PASSLET_VERSION}_macos_universal.zip" "passlet_${PASSLET_VERSION}_linux_amd64.tar.gz" "passlet_${PASSLET_VERSION}_linux_arm64.tar.gz" > "passlet_${PASSLET_VERSION}_SHA256SUMS")
 echo 'Artifacts prepared in dist/. Nothing has been published.'

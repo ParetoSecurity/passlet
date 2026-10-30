@@ -5,7 +5,7 @@ description: Obtain scoped GitHub access through Passlet before using git or gh 
 
 # GitHub access through Passlet
 
-Run Claude normally. Request GitHub access yourself when the task needs it. `passlet` must be on PATH. The user configures `PASSLET_ENDPOINT` to their approving Mac’s Tailscale HTTPS origin. If it is unset, ask for the endpoint before requesting access; do not guess a teammate’s Mac. The user authenticates on the Mac, and only a scoped GitHub user token reaches this agent. Actions retain the user's GitHub attribution.
+Run Claude normally. Request GitHub access yourself when the task needs it. `passlet` must be on PATH. Local Mac agents use the default private Unix socket when `PASSLET_ENDPOINT` is unset. Remote agents use their own SSH-forwarded socket (for example `unix:///home/alice/.local/share/passlet/mac.sock`) or an explicitly configured Tailscale HTTPS origin. Never guess a teammate’s endpoint. Use `passlet doctor` to diagnose availability without prompting or minting a token. Socket access does not authenticate Claude; other processes in the same account and remote root are trusted. The user authenticates on the Mac, and only a scoped GitHub user token reaches this agent. Actions retain the user's GitHub attribution.
 
 Use Passlet for authenticated GitHub operations. Do not use inherited PAT variables, cached SSH-session tokens, `gh auth login`, SSH Git remotes, or other credentials as a fallback. Local Git operations need no grant. Existing task authorization still determines which changes you may make; receiving a token does not authorize unrelated writes.
 
@@ -30,7 +30,6 @@ Tell the user which repositories and permissions you are requesting, then make o
 passlet_dir=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/passlet.XXXXXX")
 chmod 700 "$passlet_dir"
 passlet request \
-  --endpoint "${PASSLET_ENDPOINT:?Set the approving Mac endpoint}" \
   --repos acme/project \
   --permissions contents:read \
   --out "$passlet_dir/grant.json"

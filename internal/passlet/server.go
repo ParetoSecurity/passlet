@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"time"
 )
@@ -26,8 +27,23 @@ type Server struct {
 	Deadline time.Duration
 }
 
+type transportKey struct{}
+
+func ConnectionContext(ctx context.Context, c net.Conn) context.Context {
+	return context.WithValue(ctx, transportKey{}, c.LocalAddr().Network())
+}
+
+func connectionIdentity(ctx context.Context, remote string) (Caller, error) {
+	if ctx.Value(transportKey{}) == "unix" {
+		return Caller{Transport: "unix", Name: "local/SSH socket client"}, nil
+	}
+	c, err := WhoIs(ctx, remote)
+	c.Transport = "tailscale"
+	return c, err
+}
+
 func NewServer(approval Approval, g Minter, a Recorder) *Server {
-	return &Server{Approval: approval, GitHub: g, Audit: a, Identity: WhoIs, busy: make(chan struct{}, 1), Deadline: ServerDeadline}
+	return &Server{Approval: approval, GitHub: g, Audit: a, Identity: connectionIdentity, busy: make(chan struct{}, 1), Deadline: ServerDeadline}
 }
 func apiError(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -37,6 +53,19 @@ func apiError(w http.ResponseWriter, status int, code string) {
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	if r.Header.Get("Origin") != "" {
+		apiError(w, 403, "browser_requests_not_supported")
+		return
+	}
+	if r.URL.Path == "/v1/health" && r.Method == "GET" {
+		if _, err := s.Identity(r.Context(), r.RemoteAddr); err != nil {
+			apiError(w, 403, "identity_unavailable")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"status":"ready"}`)
+		return
+	}
 	if r.URL.Path != "/v1/grants" {
 		apiError(w, 404, "not_found")
 		return

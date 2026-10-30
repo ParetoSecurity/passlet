@@ -22,6 +22,12 @@ Private Unix sockets are the default transport. Users can forward their Mac's
 socket to a remote server or VM over SSH. Tailscale HTTPS remains an explicit
 opt-in. No client pairing or session keys are included in this release.
 
+Local agents on the Mac use the default socket without SSH or Tailscale. Discover
+that socket when no explicit endpoint is configured, document local Claude use,
+and test it. Processes sharing a Unix account are not isolated from each other's
+delivered tokens. Identify socket clients honestly without claiming to prove the
+agent application's identity.
+
 Support multiple users on Cruncher: each Unix account connects to its owner's
 Mac, uses that person's GitHub authorization, and receives approval on that Mac.
 Private socket directories isolate Unix accounts; the remote host's root is

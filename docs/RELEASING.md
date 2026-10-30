@@ -17,8 +17,7 @@ uploads, or automatic dependency merging into this CLI project.
    publish development evidence, credentials, provisioning profiles, or builds.
 2. Require CI's Linux and macOS test jobs on main; require reviewed PRs. Disable
    force pushes and branch deletion. Enable secret scanning/push protection where
-   available. Use a `release` environment restricted to release tags (`v*`). Do not require an environment reviewer if
-   signing should start automatically when a release is published.
+   available. Use a `release` environment restricted to release tags (`v*`). Review the v0.2 [maintainer-policy settings proposal](REVIEW-POLICY.md) before enabling release signing. Repository settings have not been applied by this branch.
 3. Register an explicit production Apple App ID such as `dev.passlet.app` on the
    signing team. Create a Developer ID provisioning profile authorizing its
    Keychain access group. The existing Mac Development profile is not a release
@@ -51,7 +50,7 @@ the existing prototype identity. The icon source is `assets/passlet.png`;
 ## Prepare and validate a release
 
 After CI passes on main, publish a GitHub release tagged `vX.Y.Z`.
-The **Release** workflow checks out the release tag, repeats tests, builds
+The Release workflow first resolves the tag to a reviewed main merge commit and freshly verifies two-maintainer agreement (a maintainer author counts). It passes that exact commit SHA to the signing job, repeats tests, builds
 universal arm64/x86_64 macOS binaries, verifies Developer ID signing, notarizes,
 staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums,
 and uploads the artifacts to that existing release. Uploads refuse to overwrite
@@ -105,3 +104,7 @@ in the release workflow; local checks do not establish production Keychain behav
 For the packaged Claude skill, configure `PASSLET_ENDPOINT` on the agent machine
 to the approving user's Mac before starting Claude. Existing installed personal
 skills are not modified by editing the release source.
+
+## v0.2 controls
+
+See [REVIEW-POLICY.md](REVIEW-POLICY.md) for the exact quorum, protected paths, proposed rulesets, and remaining bypass limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its environment and the independent quorum gate. Do not publish v0.2 until the manual [validation checklist](VALIDATION.md) and administrative settings review are complete. The historical v0.1 results above do not establish v0.2 validation.

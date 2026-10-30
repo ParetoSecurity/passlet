@@ -1,0 +1,69 @@
+name: Release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: passlet-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write
+    env:
+      PASSLET_GO_SYSTEM: '1'
+      PASSLET_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.8'
+      - name: Validate release tag
+        run: |
+          python3 -c 'import os,re; assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", os.environ["PASSLET_TAG"]), "Expected vX.Y.Z release tag"'
+          echo "PASSLET_VERSION=${PASSLET_TAG#v}" >> "$GITHUB_ENV"
+      - name: Import Developer ID certificate and profile
+        env:
+          APPLICATION_CERTIFICATE_DATA: ${{ secrets.APPLICATION_CERTIFICATE_DATA }}
+          APPLICATION_CERTIFICATE_PASSPHRASE: ${{ secrets.APPLICATION_CERTIFICATE_PASSPHRASE }}
+          PROVISIONING_PROFILE_DATA: ${{ secrets.PROVISIONING_PROFILE_DATA }}
+        run: |
+          set -eu
+          umask 077
+          keychain="$RUNNER_TEMP/passlet-signing.keychain-db"
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          printf '%s' "$APPLICATION_CERTIFICATE_DATA" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$PROVISIONING_PROFILE_DATA" | base64 --decode > "$RUNNER_TEMP/passlet.provisionprofile"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLICATION_CERTIFICATE_PASSPHRASE" -t cert -f pkcs12 -k "$keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          echo "PASSLET_PROVISIONING_PROFILE=$RUNNER_TEMP/passlet.provisionprofile" >> "$GITHUB_ENV"
+      - name: Build, sign, notarize, and verify
+        env:
+          PASSLET_SIGNING_IDENTITY: ${{ vars.PASSLET_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          NOTARIZATION_USERNAME: ${{ secrets.NOTARIZATION_USERNAME }}
+          NOTARIZATION_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD }}
+        run: make release
+      - name: Attach signed release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "$PASSLET_TAG" dist/*
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/passlet-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/passlet.provisionprofile"

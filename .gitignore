@@ -1,0 +1,33 @@
+passlet-zupo-test-client-secret
+prototypes/keychain/build/
+/build/
+/.state/
+*.key
+*.p12
+*.provisionprofile
+*.cer
+*.sqlite*
+.env*
+*.pem
+*.certSigningRequest
+*.mobileprovision
+
+__pycache__/
+*.pyc
+
+/dist/
+*.p8
+*.keychain-db
+.DS_Store
+
+# Local validation evidence includes account and machine information.
+/github-test-results/
+
+# Historical experiments and machine-specific validation are local only.
+/prototypes/
+/RESULTS.md
+/scripts/import-test-credentials.py
+/scripts/live-remote.py
+/scripts/test-cruncher.sh
+/internal/passlet/live_test.go
+/packaging/cruncher.nix

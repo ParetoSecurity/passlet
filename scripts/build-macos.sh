@@ -25,6 +25,9 @@ python3 scripts/app-metadata.py "$(dirname "$APP")/profile.plist" "$APP" "$versi
 cp "$PASSLET_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
 ./scripts/icon.sh
 cp build/Passlet.icns "$APP/Contents/Resources/Passlet.icns"
+cp LICENSE README.md "$APP/Contents/Resources/"
+mkdir -p "$APP/Contents/Resources/skills/passlet"
+cp skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
 for arch in $architectures; do
     /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/main.swift -o "$(dirname "$APP")/helper-$arch" -framework AppKit -framework Security -framework LocalAuthentication
 done

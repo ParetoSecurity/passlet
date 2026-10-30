@@ -39,7 +39,7 @@ if [ "$mode" = release ]; then
     /usr/bin/lipo -create build/release/cli-arm64 build/release/cli-amd64 -output "$APP/Contents/MacOS/passlet"
     /usr/bin/codesign --force --timestamp --options runtime --sign "$PASSLET_SIGNING_IDENTITY" "$APP/Contents/MacOS/passlet"
     /usr/bin/codesign --force --timestamp --options runtime --sign "$PASSLET_SIGNING_IDENTITY" --entitlements build/release/entitlements.plist "$APP"
-    /usr/bin/codesign -dv "$APP" 2>&1 | /usr/bin/grep -q 'Authority=Developer ID Application:' || { echo 'Release requires Developer ID Application signing' >&2; exit 1; }
+    /usr/bin/codesign -dvv "$APP" 2>&1 | /usr/bin/grep -q 'Authority=Developer ID Application:' || { echo 'Release requires Developer ID Application signing' >&2; exit 1; }
 else
     cp build/helper-arm64 "$APP/Contents/MacOS/PassletHelper"
     /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" --entitlements build/entitlements.plist "$APP"

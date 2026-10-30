@@ -36,11 +36,10 @@ jobs:
       - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
         with:
           auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-      - run: make check
-      - run: make build
       - name: Compile Swift helper without credentials
         if: runner.os == 'macOS'
         run: |
+          unset DEVELOPER_DIR SDKROOT
           DEVELOPER_DIR="$(/usr/bin/xcode-select -p)"
           export DEVELOPER_DIR
           if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
@@ -53,7 +52,10 @@ jobs:
           echo "Apple SDK: $SDKROOT"
           /usr/bin/xcrun --find swiftc
           /usr/bin/xcrun swiftc --version
+          mkdir -p build
           /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/main.swift -o build/PassletHelper -framework AppKit -framework Security -framework LocalAuthentication
+      - run: make check
+      - run: make build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.os }}

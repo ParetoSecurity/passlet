@@ -7,7 +7,8 @@ cd "$(dirname "$0")/.."
 : "${NOTARIZATION_PASSWORD:?Set app-specific password}"
 : "${APPLE_TEAM_ID:?Set Apple team ID}"
 python3 -c 'import os,re; assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", os.environ["PASSLET_VERSION"]), "Expected X.Y.Z version"'
-# Use the selected Apple toolchain rather than Nix's DEVELOPER_DIR.
+# xcode-select also honors DEVELOPER_DIR; clear Nix's override first.
+unset DEVELOPER_DIR SDKROOT
 DEVELOPER_DIR="${PASSLET_DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
 export DEVELOPER_DIR
 if ! /usr/bin/xcrun --find notarytool >/dev/null 2>&1; then

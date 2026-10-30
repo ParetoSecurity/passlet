@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 mode=${PASSLET_BUILD_MODE:-development}
 version=${PASSLET_VERSION:-0.1.0}
 case "$mode" in development|release) ;; *) echo 'Invalid build mode' >&2; exit 1;; esac
-# Use the selected Apple toolchain rather than Nix's DEVELOPER_DIR.
+# xcode-select also honors DEVELOPER_DIR; clear Nix's override first.
+unset DEVELOPER_DIR SDKROOT
 DEVELOPER_DIR="${PASSLET_DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
 export DEVELOPER_DIR
 if ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then

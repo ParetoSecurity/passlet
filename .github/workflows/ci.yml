@@ -49,7 +49,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
       - name: Validate workflows, shell scripts, and tracked secrets
         run: |
           nix shell github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#actionlint github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#shellcheck github:NixOS/nixpkgs/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36#gitleaks --command sh -c 'actionlint .github/workflows/*.yml && shellcheck scripts/build-macos.sh scripts/check.sh scripts/go.sh scripts/icon.sh scripts/release.sh && gitleaks git --redact'

@@ -57,7 +57,8 @@ and uploads the artifacts to that existing release. Uploads refuse to overwrite
 existing assets. The release will be visible before its assets finish building.
 
 Download the release artifacts and verify checksums. Extract the macOS archive and
-move Passlet.app to /Applications. The CLI is inside the signed bundle at
+move Passlet.app to /Applications. The license, README and Claude skill are included in the signed app resources
+and Linux archives. The CLI is inside the signed bundle at
 `/Applications/Passlet.app/Contents/MacOS/passlet`; place a symlink to it in your
 PATH. Use `/Applications/Passlet.app/Contents/MacOS/PassletHelper` for --helper.
 Do not move the helper executable outside its app bundle.

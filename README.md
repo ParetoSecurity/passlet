@@ -166,7 +166,8 @@ Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to
 before launching Claude. The skill teaches Claude to request minimum access,
 reuse approved grants, and handle unavailable Macs without credential fallbacks.
 
-The skill ships in Linux archives; macOS users can obtain it from this repository.
+The skill ships in Linux archives and in the macOS app at
+`Passlet.app/Contents/Resources/skills/passlet/SKILL.md`.
 
 ## Boundaries and failures
 

@@ -39,8 +39,9 @@ uploads, or automatic dependency merging into this CLI project.
 ## Local checks
 
 `make check` runs module verification, formatting, vet, race tests and coverage.
-`make build` builds the local CLI and Linux amd64 CLI. Local Go uses pinned Nix;
-CI uses exactly Go 1.26.8. `PASSLET_GO_SYSTEM=1` permits that exact system Go.
+`make build` builds the local CLI and Linux amd64 CLI. Run these commands inside
+`nix-shell`; all CI and release commands use the same `nix/flake.lock`. Apple
+SDK, signing, and notarization tools come from the macOS runner.
 
 On macOS, `make macos` builds the development helper using
 `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`. The default keeps

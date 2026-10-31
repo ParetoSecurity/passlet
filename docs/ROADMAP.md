@@ -99,13 +99,7 @@ approval, denial, protected Keychain retrieval using the same authentication
 context without a second prompt, and sleep/wake behavior. UI automation must
 not bypass user-presence protection or claim to validate biometric approval.
 
-Add a menu bar app for the approving Mac. Run and supervise `passlet serve`
-while it is open unless the login service is installed. Show service health, the
-locally recorded GitHub account, Keychain setup state, and recent audit events
-without unlocking credentials. Open GitHub setup in Terminal, show the doctor
-report, and offer start at login and
-self-update from GitHub Releases, ported from wgsplit: verify size, SHA-256,
-signature, Gatekeeper and the same Developer ID before replacing the bundle.
+Use the CLI for provider setup, foreground serving, diagnostics, and audit history. Package managers own service lifecycle. Keep the signed macOS helper limited to protected Keychain access and native per-request approval.
 
 Before v1.0, make breaking changes directly and update documentation and tests
 alongside them. Do not add compatibility shims, deprecated aliases, migration
@@ -121,3 +115,5 @@ conventions on environment entry. Document this integration and verify that
 generated links are not committed or packaged as machine-specific store paths.
 
 Harden the release pipeline in v0.2 using GitHub's built-in controls: require a pull request with code-owner approval, dismiss stale approvals after changes, and require passing CI. The release environment must require approval from one of `zupo`, `dz0ny`, or `am-on`, prevent the release initiator from approving their own run, and disable administrator bypass. Keep signing credentials scoped to that environment and release tags tied to exact commits on main. Do not maintain custom approval-counting workflows or an author-dependent quorum. Document remaining administrator rule-editing powers and distinguish configured settings from proposed ones.
+
+Homebrew and Nix/Home Manager are the only supported installation paths. They own upgrades, per-user login startup, crash recovery and removal. Provider setup never registers a service. Keep `serve` as the foreground entry point invoked by package-managed launchd jobs. Do not add a shell installer or CLI service installation commands.

@@ -1,0 +1,25 @@
+class PassletAgent < Formula
+  desc "Short-lived credentials for your agents"
+  homepage "https://passlet.dev"
+  version "@VERSION@"
+  license "GPL-3.0-only"
+
+  depends_on :linux
+
+  on_arm do
+    url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_linux_arm64.tar.gz"
+    sha256 "@LINUX_ARM64_SHA256@"
+  end
+  on_intel do
+    url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_linux_amd64.tar.gz"
+    sha256 "@LINUX_AMD64_SHA256@"
+  end
+
+  def install
+    bin.install "passlet"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/passlet version")
+  end
+end

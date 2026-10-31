@@ -19,6 +19,10 @@ func defaultHelper() string {
 	if err != nil {
 		return ""
 	}
+	self, err = filepath.EvalSymlinks(self)
+	if err != nil {
+		return ""
+	}
 	return filepath.Join(filepath.Dir(self), "PassletHelper")
 }
 
@@ -35,7 +39,16 @@ func serve(ctx context.Context, args []string) error {
 		return errors.New("serve_requires_absolute_helper_and_no_positional_arguments")
 	}
 	if info, err := os.Stat(*helper); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		return errors.New("helper_unavailable_install_signed_Passlet_app_or_set_helper")
+		return errors.New("helper_unavailable_reinstall_Passlet_through_Homebrew_or_Home_Manager")
+	}
+	explicitTCP := false
+	fs.Visit(func(f *flag.Flag) { explicitTCP = explicitTCP || f.Name == "tailscale-listen" })
+	if !explicitTCP {
+		configured, err := configuredTailscaleListener()
+		if err != nil {
+			return err
+		}
+		*tcp = configured
 	}
 	if *tcp != "" {
 		host, _, err := net.SplitHostPort(*tcp)

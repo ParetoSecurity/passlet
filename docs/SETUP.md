@@ -12,25 +12,13 @@ The local `account.json` contains only the last verified login, app ID/URL, and 
 
 ## Login startup
 
-Choose one way to run the service. The menu bar app runs it while the app is open; turn on **Start at Login** in its menu. Or install the login service below, which runs without the menu. When the login service is installed, the menu app does not start its own service.
+[Homebrew or Home Manager](INSTALLATION.md) installs the per-user LaunchAgent and manages updates and removal. It starts at graphical login and restarts failures with a ten-second throttle. Startup never runs provider setup or unlocks Keychain. Do not edit the generated plist or install the service through another manager.
 
-```sh
-passlet service install
-passlet service status
-passlet doctor
-```
+Run `passlet status` or `passlet doctor` to check availability. For launchd details use `launchctl print gui/$(id -u)/dev.passlet.agent`. If startup fails, verify you are in the logged-in Mac's graphical session and check this output for its last exit status. Reinstall the Homebrew cask or reactivate Home Manager after correcting the problem.
 
-The launch agent is `~/Library/LaunchAgents/dev.passlet.agent.plist`. It uses the installed CLI/helper paths and current PATH, writes logs under `~/.local/share/passlet/service.log`, starts at graphical login, and restarts failures with a ten-second throttle. It never runs setup or unlocks Keychain on startup. Keep the app at its installed path.
+To troubleshoot in the foreground, stop the managed service with `launchctl bootout gui/$(id -u)/dev.passlet.agent`, then run `passlet serve`. This is a temporary diagnostic command, not an installation method. Reinstall/reactivate the package when finished. A private lock prevents two approvers from replacing each other's active socket. Never delete a live socket or its lock to work around an error.
 
-To stop automatic startup while preserving credentials and audit history:
-
-```sh
-passlet service uninstall
-```
-
-To change service arguments, uninstall then install with the new flags. A second install refuses to overwrite an existing plist. To debug in the foreground, uninstall first and run `passlet serve`. Do not run two approvers against the same socket. A private lock prevents replacement of an active socket; after a crash, the next service can remove its own stale socket safely. Never delete a live socket or its lock to work around an error.
-
-If bootstrap fails, verify you are in the logged-in Mac's graphical session. Inspect `passlet service status` and the service log. Resolve the cause, uninstall the incomplete service, then install again. After replacing an app with a new version, restart its login service explicitly. Sleep temporarily makes the Mac unavailable; existing delivered tokens remain usable.
+Uninstalling through the package manager removes startup while retaining credentials and audit history. Sleep temporarily makes the Mac unavailable; delivered tokens remain usable.
 
 ## SSH server configuration
 
@@ -58,9 +46,11 @@ Unix permissions isolate Alice from Bob, but not either from remote root or othe
 
 ## Tailscale
 
-Enable `--tailscale-listen 127.0.0.1:8484` explicitly on `serve` or `service install`, then use Tailscale Serve's TLS-terminated TCP forwarding with PROXY protocol v2. Do not point HTTP reverse proxy mode at this listener. The local socket remains available and both transports share one active-approval limit.
+For Home Manager, set `programs.passlet.service.tailscaleListen = "127.0.0.1:8484"` and reactivate. For Homebrew, create `~/.config/passlet/serve.json` containing `{"tailscale_listen":"127.0.0.1:8484"}`, then reinstall the cask to restart it. The configuration file accepts only this setting; it contains no credentials. Home Manager passes an explicit setting so its Nix configuration takes precedence over this file. An empty setting disables TCP. For foreground diagnostics, use `passlet serve --tailscale-listen 127.0.0.1:8484`.
 
-Use the Mac's actual `.ts.net` HTTPS hostname and port. WhoIs must be accessible to the serving process through its inherited PATH. Tailscale network policy controls which nodes can connect. A caller-provided hostname, description, or HTTP header cannot replace WhoIs identity. A shared server's node identity does not distinguish its Unix users; prefer per-user SSH sockets for that case.
+Then use Tailscale Serve's TLS-terminated TCP forwarding with PROXY protocol v2. Do not point HTTP reverse proxy mode at this listener. The local socket remains available and both transports share one active-approval limit.
+
+Use the Mac's actual `.ts.net` HTTPS hostname and port. WhoIs must be accessible to the serving process on the package-managed service PATH. Tailscale network policy controls which nodes can connect. A caller-provided hostname, description, or HTTP header cannot replace WhoIs identity. A shared server's node identity does not distinguish its Unix users; prefer per-user SSH sockets for that case.
 
 ## Diagnostics
 

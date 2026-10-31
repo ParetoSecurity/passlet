@@ -52,7 +52,7 @@ func setupCommand(ctx context.Context, args []string) error {
 			return errors.New("credentials_saved_but_account_metadata_write_failed")
 		}
 		fmt.Println("GitHub account verified:", account.Login)
-		fmt.Println("Setup complete. Run passlet service install, then passlet doctor.")
+		fmt.Println("Setup complete. Run passlet doctor to check the package-managed service.")
 		return nil
 	}, func(url string) error {
 		fmt.Println("Complete GitHub App creation, installation, and authorization in your browser within 10 minutes.")

@@ -2,10 +2,8 @@ package passlet
 
 import (
 	"context"
-	"encoding/xml"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -48,7 +46,7 @@ func TestAuditReadIsReadOnlyAndBounded(t *testing.T) {
 	}
 }
 
-func TestAccountMetadataAndLaunchAgent(t *testing.T) {
+func TestAccountMetadata(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "private", "account.json")
 	want := AccountInfo{Login: "alice", AppID: 123, VerifiedAt: time.Now().UTC()}
 	if err := SaveAccount(path, want); err != nil {
@@ -57,22 +55,5 @@ func TestAccountMetadataAndLaunchAgent(t *testing.T) {
 	got, err := LoadAccount(path)
 	if err != nil || got.Login != want.Login {
 		t.Fatal(err)
-	}
-	data, err := LaunchAgent("/Applications/Passlet & Test.app/passlet", "/Applications/Passlet & Test.app/helper", "/Users/alice/.local/share/passlet/s", "/Users/alice/audit", "/Users/alice/log", "", "/usr/bin:/bin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := xml.NewDecoder(strings.NewReader(string(data)))
-	for {
-		_, err := d.Token()
-		if err != nil {
-			if err.Error() != "EOF" {
-				t.Fatal(err)
-			}
-			break
-		}
-	}
-	if strings.Contains(string(data), "--tailscale-listen") || !strings.Contains(string(data), "&amp;") || !strings.Contains(string(data), "SuccessfulExit") || !strings.Contains(string(data), "Aqua") {
-		t.Fatal("unsafe launch agent")
 	}
 }

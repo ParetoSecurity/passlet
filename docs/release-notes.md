@@ -1,11 +1,7 @@
-Passlet gives remote agents repository- and permission-scoped GitHub user tokens
-after a native approval on your Mac. GitHub actions retain your attribution, and
-agents can keep using delivered tokens while your Mac is offline.
+Passlet gives agents repository- and permission-scoped GitHub user tokens after a native approval on your Mac. GitHub actions retain your attribution, and agents can keep using delivered tokens while your Mac is offline.
 
-This first release includes the Go CLI/service, native macOS Keychain helper,
-Tailscale caller identification, structured SQLite audit records, and a Claude
-skill. GitHub App creation and authorization are manual in v0.1.
+Homebrew and Nix/Home Manager own installation, updates and per-user login startup. Use the CLI for GitHub onboarding, requests, diagnostics and audit history. The signed macOS helper handles protected Keychain access and native approval, with no menu app or self-updater.
 
-macOS requires macOS 14 or later, Tailscale, and a logged-in graphical session.
-Linux CLI archives are available for amd64 and arm64. Review the setup and trust
-boundaries in README.md before configuring the service.
+Local agents use a private Unix socket. Remote agents connect through per-user SSH socket forwarding or explicitly enabled Tailscale HTTPS. Each person configures their own GitHub App and account.
+
+macOS requires version 14 or later and a logged-in graphical session. Linux agents are supported on amd64 and arm64. Follow docs/INSTALLATION.md after the release's package metadata has been published.

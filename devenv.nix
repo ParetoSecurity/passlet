@@ -22,7 +22,7 @@
   scripts.lint.exec = ''
     set -eu
     actionlint .github/workflows/*.yml
-    shellcheck scripts/*.sh
+    shellcheck scripts/*.sh packaging/homebrew/*.sh
     gitleaks git --redact
   '';
 

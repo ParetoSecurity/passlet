@@ -34,7 +34,6 @@ make macos
 export PATH="$PWD/build/Passlet.app/Contents/MacOS:$PATH"
 passlet version
 passlet setup github
-passlet service install
 passlet doctor
 ```
 
@@ -46,7 +45,7 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 
 1. Build a development-signed v0.2 app with its explicit profile, or use the reviewed signed release candidate. Verify codesign and the expected Keychain identity. Use a dedicated macOS test account for fresh onboarding so the existing production authorization is not overwritten.
 2. Run `passlet setup github`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm `passlet status` reports that locally recorded user. Confirm no private signing key or credential file was saved by setup. Check incomplete/pending organization approval produces an actionable error.
-3. Run `passlet service install`, then `passlet doctor`. Confirm no default TCP listener. Log out and back in; confirm service startup and no unsolicited credential prompt. Kill only this test service's Go process and confirm launchd restarts it and the socket works again.
+3. Install through Homebrew or enable the Home Manager module, then run `passlet doctor`. Confirm no default TCP listener. Log out and back in; confirm service startup and no unsolicited credential prompt. Kill only this test service's Go process and confirm launchd restarts it and the socket works again.
 4. Start a request with explicit repositories and permissions and a private `--out` path. Verify the native prompt shows the honest socket caller, complete repositories/permissions, and approximate provider expiry. Approve with Touch ID: exactly one prompt must release the protected credential and produce a scoped token. Repeat using password, then denial. Denial must create no grant.
 5. Leave a request unapproved for the 120-second server deadline. Confirm the native prompt disappears and no grant is delivered. Repeat by cancelling the requesting CLI or closing its SSH tunnel. A late interaction must never produce a grant for a cancelled request.
 6. On the remote host, set up separate Alice and Bob Unix accounts and separate SSH tunnels from their own Macs. Each user onboards their own GitHub App/account. Request concurrently; each prompt must appear on the correct Mac and GitHub actions must be attributed to the corresponding user. Bob must be unable to connect to Alice's socket or read her grant as an ordinary user. Root is deliberately trusted.
@@ -54,6 +53,12 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 8. Run local Claude on the Mac with no `PASSLET_ENDPOINT`; verify it uses the private socket. Enable opt-in Tailscale with PROXY v2 and verify WhoIs caller text and the same scopes/approval behavior. Confirm neither request bodies nor headers can claim a different caller.
 9. Put the Mac to sleep, confirm an agent handles unavailability without retries, wake it, and make a fresh explicit request. Verify login service and the chosen transport recover; re-establish SSH explicitly if it closed.
 10. Check `passlet audit --limit 30`: request, requested/granted scope, approval/denial/cancellation, expiry, and delivery outcomes must be present without tokens. Run `status` and `doctor` while Keychain is locked; they must not prompt or claim fresh GitHub verification.
-11. Run `passlet service uninstall` and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
+11. Uninstall through Homebrew or disable Passlet in Home Manager and reactivate and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.
+
+## Package lifecycle
+
+Use a disposable Mac account for both package managers separately. Install a signed release, confirm the CLI is on PATH and the service runs before provider setup, then complete setup with disposable repositories. Confirm one native approval unlocks Keychain. Upgrade through the package manager and verify the running process uses the new version. Log out/in and test crash recovery. Uninstall and verify the LaunchAgent and process are gone while credentials and audit history remain. Repeat after a failed installation and verify errors are actionable. Attempt to enable both managers and verify an ownership conflict is reported.
+
+Automated fixture tests and Home Manager evaluation do not substitute for this signed-release lifecycle test. Record unperformed checks as not run.

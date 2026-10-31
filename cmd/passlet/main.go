@@ -27,15 +27,13 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: passlet setup github | service | serve | request | exec | doctor | status | audit | import | version")
+		return errors.New("usage: passlet setup github | serve | request | exec | doctor | status | audit | import | version")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	switch os.Args[1] {
 	case "setup":
 		return setupCommand(ctx, os.Args[2:])
-	case "service":
-		return serviceCommand(ctx, os.Args[2:])
 	case "doctor", "status":
 		return diagnostics(ctx, os.Args[1], os.Args[2:])
 	case "audit":

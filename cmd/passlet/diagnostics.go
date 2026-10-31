@@ -29,7 +29,7 @@ func diagnostics(ctx context.Context, command string, args []string) error {
 	fmt.Println("Endpoint:", *endpoint)
 	failed := false
 	if err := passlet.Health(ctx, *endpoint); err != nil {
-		fmt.Println("Service: unavailable; run passlet service status on the Mac and check the SSH tunnel or Tailscale endpoint.")
+		fmt.Println("Service: unavailable; check the Homebrew or Home Manager service on the Mac and check the SSH tunnel or Tailscale endpoint.")
 		failed = true
 	} else {
 		fmt.Println("Service: ready (connectivity only; no credentials unlocked)")
@@ -50,7 +50,7 @@ func diagnostics(ctx context.Context, command string, args []string) error {
 		}
 		state, err := passlet.KeychainStatus(ctx, *helper)
 		if err != nil {
-			fmt.Println("Helper: unavailable; install the signed Passlet app or set --helper.")
+			fmt.Println("Helper: unavailable; install Passlet through Homebrew or Home Manager.")
 			failed = true
 		} else {
 			fmt.Println("Keychain:", state, "(no authentication performed)")

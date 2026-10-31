@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"passlet.dev/passlet/internal/passlet"
@@ -77,5 +80,50 @@ func TestExecRejectsExpiredGrant(t *testing.T) {
 	os.WriteFile(path, data, 0600)
 	if fixture(t, "exec", "--grant", path, "--", "true").Run() == nil {
 		t.Fatal("expired grant executed")
+	}
+}
+
+func TestDiagnosticsUseSelectedSocketWithoutApproving(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "passlet-cli-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "s")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/v1/health" {
+			t.Error("diagnostic requested more than health")
+			w.WriteHeader(403)
+			return
+		}
+		w.Write([]byte(`{"status":"ready"}`))
+	})}
+	go server.Serve(listener)
+	defer server.Close()
+	for _, command := range []string{"doctor", "status"} {
+		if err := diagnostics(context.Background(), command, []string{"--endpoint", "unix://" + path}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server.Close()
+	if err := diagnostics(context.Background(), "doctor", []string{"--endpoint", "unix://" + path}); err == nil {
+		t.Fatal("offline doctor succeeded")
+	}
+	if err := diagnostics(context.Background(), "doctor", []string{"--endpoint", "https://secret@example.test"}); err == nil {
+		t.Fatal("credential-bearing endpoint accepted")
+	}
+}
+
+func TestAuditCLIRequiresExistingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.sqlite")
+	if err := auditCommand([]string{"--path", path}); err == nil {
+		t.Fatal("missing audit accepted")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("audit command created database")
 	}
 }

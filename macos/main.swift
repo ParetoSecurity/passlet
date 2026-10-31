@@ -22,6 +22,21 @@ func credentialData(_ value: Any?) -> Data? {
           ["client_id", "client_secret", "access_token", "refresh_token", "expires_at"].allSatisfy({ (c[$0] as? String)?.isEmpty == false }) else { return nil }
     return try? JSONSerialization.data(withJSONObject: c)
 }
+if CommandLine.arguments.contains("--status") {
+    let context = LAContext()
+    context.interactionNotAllowed = true
+    var q = query()
+    q[kSecReturnAttributes as String] = true
+    q[kSecMatchLimit as String] = kSecMatchLimitOne
+    q[kSecUseAuthenticationContext as String] = context
+    let status = SecItemCopyMatching(q as CFDictionary, nil)
+    context.invalidate()
+    // Some OS versions protect attributes too. Do not unlock the item to
+    // disambiguate, and never treat interactionNotAllowed as proof of access.
+    reply(["status": status == errSecSuccess ? "configured" :
+        (status == errSecItemNotFound ? "missing" : "protected_or_unavailable")])
+    exit(0)
+}
 if CommandLine.arguments.contains("--import") {
     guard let line = readLine(), line.utf8.count <= 65536,
           let msg = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
@@ -41,9 +56,7 @@ if CommandLine.arguments.contains("--import") {
 
 final class Helper: NSObject, NSApplicationDelegate {
     var context: LAContext?
-    var authorized = false
-    var started = false
-    var finishing = false
+    var state = ApprovalState()
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.global().async { [self] in
             while let line = readLine() {
@@ -59,26 +72,23 @@ final class Helper: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 120) { self.finish("approval_cancelled") }
     }
     func finish(_ error: String?) {
-        guard !finishing else { return }
-        finishing = true
+        guard state.finish() else { return }
         context?.invalidate()
-        authorized = false
         if let error = error { reply(["ok": false, "error": error]) }
         NSApp.terminate(nil)
     }
     func handle(_ msg: [String: Any]) {
-        guard !finishing else { return }
+        guard !state.finishing else { return }
         switch msg["op"] as? String {
         case "approve":
-            guard !started, let prompt = msg["prompt"] as? String, !prompt.isEmpty, prompt.count <= 1000 else { finish("invalid_request"); return }
-            started = true
+            guard let prompt = msg["prompt"] as? String, state.begin(prompt: prompt) else { finish("invalid_request"); return }
             let ctx = LAContext()
             ctx.localizedCancelTitle = "Deny"
             ctx.touchIDAuthenticationAllowableReuseDuration = 0
             context = ctx
             ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: prompt) { [self] success, error in
                 DispatchQueue.main.async {
-                    guard !self.finishing else { return }
+                    guard !self.state.finishing else { return }
                     guard success else {
                         let denied = (error as? LAError)?.code == .userCancel
                         self.finish(denied ? "approval_denied" : "approval_cancelled"); return
@@ -93,25 +103,24 @@ final class Helper: NSObject, NSApplicationDelegate {
                         let status = SecItemCopyMatching(q as CFDictionary, &result)
                         let credentials = (result as? Data).flatMap { try? JSONSerialization.jsonObject(with: $0) }
                         DispatchQueue.main.async {
-                            guard !self.finishing else { return }
+                            guard !self.state.finishing else { return }
                             guard status == errSecSuccess, let credentials = credentials else {
                                 self.finish(status == errSecItemNotFound ? "credentials_missing" : "keychain_unavailable"); return
                             }
-                            self.authorized = true
+                            guard self.state.authorize() else { return }
                             reply(["ok": true, "credentials": credentials])
                         }
                     }
                 }
             }
         case "store":
-            guard authorized, let ctx = context, let data = credentialData(msg["credentials"]) else { finish("invalid_request"); return }
-            authorized = false // one rotation write per approval
+            guard let ctx = context, let data = credentialData(msg["credentials"]), state.consumeRotation() else { finish("invalid_request"); return }
             DispatchQueue.global().async {
                 var q = query()
                 q[kSecUseAuthenticationContext as String] = ctx
                 let status = SecItemUpdate(q as CFDictionary, [kSecValueData as String: data] as CFDictionary)
                 DispatchQueue.main.async {
-                    guard !self.finishing else { return }
+                    guard !self.state.finishing else { return }
                     if status == errSecSuccess { reply(["ok": true]) }
                     else { self.finish("keychain_unavailable") }
                 }

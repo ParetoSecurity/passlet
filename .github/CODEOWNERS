@@ -1,0 +1,3 @@
+# Review routing only; GitHub treats multiple owners as alternatives.
+# Exact two-person quorum is evaluated by the trusted policy workflow.
+* @zupo @dz0ny @am-on

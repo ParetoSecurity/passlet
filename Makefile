@@ -14,3 +14,9 @@ release:
 .PHONY: check-all
 check-all: check build
 	lint
+
+.PHONY: integration check-macos
+integration:
+	nix-build nix/tests.nix --no-out-link
+check-macos:
+	./scripts/check-macos.sh

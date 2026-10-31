@@ -1,0 +1,13 @@
+# Unprivileged notification only. The trusted workflow_run handler re-reads
+# reviews through GitHub's API; it never downloads artifacts or PR code.
+name: Review activity
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+permissions: {}
+jobs:
+  notify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: echo 'Review activity recorded'

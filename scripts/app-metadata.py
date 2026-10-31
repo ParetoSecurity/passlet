@@ -37,3 +37,10 @@ info = {
     'CFBundleIconFile': 'Passlet', 'LSMinimumSystemVersion': '14.0', 'LSUIElement': True,
 }
 (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+# The optional menu bar app is nested and has no restricted entitlements.
+menu = app / 'Contents/Helpers/PassletMenu.app/Contents'
+(menu / 'MacOS').mkdir(parents=True, exist_ok=True)
+(menu / 'Resources').mkdir(parents=True, exist_ok=True)
+menu_info = dict(info, CFBundleIdentifier=info['CFBundleIdentifier'] + '.menu',
+                 CFBundleName='Passlet Menu', CFBundleDisplayName='Passlet Menu', CFBundleExecutable='PassletMenu')
+(menu / 'Info.plist').write_bytes(plistlib.dumps(menu_info))

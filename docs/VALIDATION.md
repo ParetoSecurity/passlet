@@ -57,3 +57,11 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 11. Run `passlet service uninstall` and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.
+
+## Menu app updates
+
+Automated macOS checks cover rejection of a different bundle ID, a mismatched release version, replay/downgrade, and missing executables. Filesystem tests cover successful replacement, copy failure, failure after the old app is moved, failed rollback preserving the backup, an existing recovery copy, concurrent-update locking, and paths with spaces and quotes. These use dummy bundles, not live releases or signing credentials.
+
+Before release, manually test updating a signed installation using an approved signed release: confirm signature/Gatekeeper acceptance, the version after relaunch, and service restart. Also test an installation requiring administrator permission and cancelling that permission dialog. These manual checks have not been performed by the automated tests.
+
+A failed replacement restores the previous app. If restoration itself fails, or the updater is forcibly terminated or power is lost, it preserves `Passlet.app.previous` beside the installation. Quit Passlet, inspect and restore that backup to `Passlet.app` if necessary, and remove `Passlet.app.update-lock` only after confirming no update is running. The updater refuses to overwrite an existing backup or another updater's lock.

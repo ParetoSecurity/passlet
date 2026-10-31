@@ -46,3 +46,90 @@ check(!ServiceProbe.healthy(ready.replacingOccurrences(of: "200 OK", with: "403 
 check(!ServiceProbe.healthy("HTTP/1.1 200 OK\r\n\r\n{\"status\":\"starting\"}"), "not ready")
 check(!ServiceProbe.healthy(""), "no response")
 print("PASS: menu update selection, checksum lookup and service health parsing")
+
+let fm = FileManager.default
+let root = fm.temporaryDirectory.appendingPathComponent("passlet-update-tests-\(UUID().uuidString)")
+try fm.createDirectory(at: root, withIntermediateDirectories: true)
+defer { try? fm.removeItem(at: root) }
+
+func makeApp(_ app: URL, version: String, identifier: String = "dev.passlet.app") throws {
+    for (path, executable, bundleID) in [("Contents", "PassletHelper", identifier),
+                                        ("Contents/Helpers/PassletMenu.app/Contents", "PassletMenu", identifier + ".menu")] {
+        let contents = app.appendingPathComponent(path)
+        try fm.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+        let info = ["CFBundleIdentifier": bundleID, "CFBundleExecutable": executable,
+                    "CFBundlePackageType": "APPL", "CFBundleVersion": version, "CFBundleShortVersionString": version]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
+        for name in executable == "PassletHelper" ? [executable, "passlet"] : [executable] {
+            let file = contents.appendingPathComponent("MacOS/\(name)")
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: file)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+    }
+}
+
+let current = root.appendingPathComponent("Current.app")
+let next = root.appendingPathComponent("Next.app")
+try makeApp(current, version: "0.1.0")
+try makeApp(next, version: "0.2.0")
+try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.2.0"))
+func rejects(_ body: () throws -> Void, _ message: String) {
+    do { try body(); check(false, message) } catch {}
+}
+rejects({ try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.3.0")) }, "reject mismatched release")
+try makeApp(next, version: "0.2.0", identifier: "dev.other.app")
+rejects({ try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.2.0")) }, "reject same-signer different app")
+try makeApp(next, version: "0.1.0")
+rejects({ try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.1.0")) }, "reject replay")
+try makeApp(next, version: "0.0.9")
+rejects({ try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.0.9")) }, "reject downgrade")
+try makeApp(next, version: "0.2.0")
+try fm.removeItem(at: next.appendingPathComponent("Contents/MacOS/passlet"))
+rejects({ try UpdateInstall.validate(installed: current, downloaded: next, release: release("v0.2.0")) }, "reject incomplete bundle")
+
+func replacement(_ name: String, failMove: Bool = false, failRestore: Bool = false, failCopy: Bool = false, existingBackup: Bool = false, existingLock: Bool = false) throws {
+    let directory = root.appendingPathComponent(name + " ' quoted")
+    try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+    let target = directory.appendingPathComponent("Passlet.app")
+    let source = directory.appendingPathComponent("Downloaded.app")
+    let backup = URL(fileURLWithPath: target.path + ".previous")
+    try makeApp(target, version: "0.1.0")
+    try makeApp(source, version: "0.2.0")
+    if existingBackup { try makeApp(backup, version: "0.0.9") }
+    if existingLock { try fm.createDirectory(atPath: target.path + ".update-lock", withIntermediateDirectories: false) }
+    var script = UpdateInstall.replacementScript(installed: target, downloaded: source)
+    // Fault injection is confined to this test executable, never a production option.
+    if failMove {
+        script = script.replacingOccurrences(of: "/bin/mv \"$staged\" \"$target\"", with: "/usr/bin/false")
+    }
+    if failRestore {
+        script = script.replacingOccurrences(of: "/bin/mv \"$backup\" \"$target\"", with: "/usr/bin/false")
+    }
+    if failCopy {
+        script = script.replacingOccurrences(of: "/usr/bin/ditto \"$source\" \"$staged\"", with: "/usr/bin/false")
+    }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = ["-c", script]
+    try process.run()
+    process.waitUntilExit()
+    let fails = failMove || failCopy || existingBackup || existingLock
+    check((process.terminationStatus != 0) == fails, "replacement status: \(name)")
+    if failRestore {
+        check(!fm.fileExists(atPath: target.path), "failed restore leaves no incomplete target")
+        check(fm.fileExists(atPath: backup.appendingPathComponent("Contents/Info.plist").path), "failed restore preserves previous app")
+        return
+    }
+    let info = try Data(contentsOf: target.appendingPathComponent("Contents/Info.plist"))
+    let metadata = try PropertyListSerialization.propertyList(from: info, format: nil) as! [String: String]
+    check(metadata["CFBundleVersion"] == (fails ? "0.1.0" : "0.2.0"), "old app restored or new app installed: \(name)")
+    check(fm.fileExists(atPath: backup.path) == existingBackup, "never destroy an earlier backup: \(name)")
+    check(fm.fileExists(atPath: target.path + ".update-lock") == existingLock, "clean own lock only: \(name)")
+}
+try replacement("success")
+try replacement("failed second move", failMove: true)
+try replacement("failed recovery", failMove: true, failRestore: true)
+try replacement("failed staging", failCopy: true)
+try replacement("interrupted earlier update", existingBackup: true)
+try replacement("concurrent update", existingLock: true)
+print("PASS: update identity, version, executable checks and replacement recovery")

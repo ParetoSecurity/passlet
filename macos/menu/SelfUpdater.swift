@@ -101,6 +101,7 @@ enum SelfUpdater {
                                                 downloaded: downloadedSigner.description)
         }
 
+        try UpdateInstall.validate(installed: installed, downloaded: downloaded, release: release)
         try replace(installed, with: downloaded)
         restartService()
         relaunch(installed.appendingPathComponent("Contents/Helpers/PassletMenu.app"))
@@ -126,14 +127,7 @@ enum SelfUpdater {
     /// Swaps the whole bundle so no stale file breaks the signature seal.
     private static func replace(_ installed: URL, with downloaded: URL) throws {
         let target = installed.path
-        let script = [
-            "set -e",
-            "rm -rf \(quoted(target + ".update")) \(quoted(target + ".previous"))",
-            "/usr/bin/ditto \(quoted(downloaded.path)) \(quoted(target + ".update"))",
-            "mv \(quoted(target)) \(quoted(target + ".previous"))",
-            "mv \(quoted(target + ".update")) \(quoted(target))",
-            "rm -rf \(quoted(target + ".previous"))",
-        ].joined(separator: "; ")
+        let script = UpdateInstall.replacementScript(installed: installed, downloaded: downloaded)
         let parent = installed.deletingLastPathComponent().path
         if FileManager.default.isWritableFile(atPath: parent), FileManager.default.isWritableFile(atPath: target) {
             let result = run("/bin/sh", ["-c", script])

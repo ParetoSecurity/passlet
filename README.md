@@ -21,7 +21,7 @@ This branch implements v0.2; v0.1.0 is already released. Follow these instructio
 
 ## Install and set up your Mac
 
-Download the matching release archive and verify its checksum against `SHA256SUMS`. Extract `Passlet.app` into `/Applications`. Keep the CLI and helper together inside the signed bundle:
+Download the matching release archive and verify its checksum against `SHA256SUMS`. Extract `Passlet.app` into `/Applications`. Open the app and choose **Install Command Line Tool…**, also offered on first launch. This links `/usr/local/bin/passlet` to the bundled CLI and requests administrator approval when needed. Existing files are never replaced. Alternatively, manage a link with Home Manager or create a user-local link:
 
 ```sh
 mkdir -p "$HOME/.local/bin"

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -25,6 +26,9 @@ func diagnostics(ctx context.Context, command string, args []string) error {
 	}
 	if _, err := passlet.EndpointURL(*endpoint, "/v1/health"); err != nil {
 		return errors.New("invalid_endpoint_use_unix_absolute_socket_or_Tailscale_HTTPS_origin")
+	}
+	if command == "doctor" {
+		fmt.Println(cliAvailability())
 	}
 	fmt.Println("Endpoint:", *endpoint)
 	failed := false
@@ -86,4 +90,30 @@ func auditCommand(args []string) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(entries)
+}
+
+// GUI apps inherit a restricted PATH. Distinguish an installed CLI from one
+// available to this process, without running binaries or evaluating shell files.
+func cliAvailability() string {
+	var dirs []string
+	if runtime.GOOS == "darwin" {
+		home, _ := os.UserHomeDir()
+		dirs = []string{filepath.Join(home, ".local/bin"), "/usr/local/bin", "/opt/homebrew/bin"}
+	}
+	return cliAvailabilityIn(dirs)
+}
+
+func cliAvailabilityIn(dirs []string) string {
+	if _, err := exec.LookPath("passlet"); err == nil {
+		return "CLI: available on PATH."
+	}
+	for _, dir := range dirs {
+		if _, err := exec.LookPath(filepath.Join(dir, "passlet")); err == nil {
+			return "CLI: installed in " + dir + "; this process PATH does not include it. Ensure your agent's PATH includes this directory."
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		return "Warning: CLI missing from PATH. Choose Install Command Line Tool… in the Passlet menu, or link the app's CLI through Home Manager."
+	}
+	return "Warning: CLI missing from PATH. Install the Passlet CLI and add its directory to your agent's PATH."
 }

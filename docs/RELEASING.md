@@ -62,6 +62,10 @@ and Linux archives. The CLI is inside the signed bundle at
 `/Applications/Passlet.app/Contents/MacOS/passlet`; place a symlink to it in your
 PATH. Use `/Applications/Passlet.app/Contents/MacOS/PassletHelper` for --helper.
 Do not move the helper executable outside its app bundle.
+`PassletHelper` stays the main executable because macOS accepts the Keychain
+entitlement and provisioning profile only there. The optional menu bar app is
+nested at `Contents/Helpers/PassletMenu.app` with no restricted entitlements.
+The build signs it before the outer bundle.
 
 On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
 approval/denial/cancellation flow. On Linux, verify `passlet version`, then the

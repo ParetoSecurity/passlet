@@ -14,7 +14,7 @@ Approve each request on your Mac with one native Touch ID/password prompt. Passl
 
 This branch implements v0.2; v0.1.0 is already released. Follow these instructions with the v0.2 build. There are no compatibility aliases or migrations before v1.0.
 
-- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. No menu bar app is required.
+- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. Run the service from the menu bar app or as a login service.
 - Agent: macOS or Linux, Passlet on PATH, and Git and/or GitHub CLI.
 - Remote agents: OpenSSH with Unix socket forwarding, or opt-in Tailscale HTTPS.
 - Each person owns and authorizes their own GitHub App. Organization installation may require an organization administrator.
@@ -33,11 +33,13 @@ passlet service install
 passlet doctor
 ```
 
+Or open `Passlet.app`: the menu bar app runs the service and has **Set Up GitHub…** and **Run Doctor** items. Turn on **Start at Login** in its menu instead of `passlet service install`.
+
 `setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum includes Contents, Pull requests, Issues and Workflows write, plus Actions read. Override it with `--permissions contents:read,pull_requests:read` if you want a read-only app. Each later agent request must still name its exact repositories and permissions, within that maximum.
 
 Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
-`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. Opening the app alone does not start the service. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
+`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. When the login service is installed, the menu bar app leaves the service to it. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
 
 ## Local agents
 
@@ -106,6 +108,14 @@ Use Tailscale Serve, not Funnel. Keep Serve running and configure network policy
 ## Claude skill
 
 Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to `~/.claude/skills/passlet/SKILL.md` on each agent account. Local Mac agents use the default socket; remote agents inherit their own `PASSLET_ENDPOINT`. The skill requests minimum access, reuses grants, and stops on unavailable Macs without credential fallbacks. It is also included in release archives and the app's `Contents/Resources/skills`.
+
+## Menu bar app
+
+Opening `Passlet.app` starts the menu bar app. If the login service is not installed, it runs `passlet serve` while it is open, restarts it after a crash, and stops it when you quit. The service log is `~/.local/share/passlet/menu-service.log`. If the login service is installed, launchd keeps the service and the menu only shows status. The socket lock prevents two services from running at once.
+
+The menu shows whether the service is ready, the locally recorded GitHub account, the Keychain setup state, and recent requests from the audit log. **Set Up GitHub…** opens `passlet setup github` in Terminal, because it waits for the browser flow. **Run Doctor** shows the `passlet doctor` report. **Start at Login** opens the menu, and so the service, at login. The menu never unlocks credentials or approves requests; the native approval prompt keeps that job.
+
+The menu checks GitHub Releases once a day (you can turn this off) and offers newer versions. An update must match the published size and SHA-256, pass a strict signature and Gatekeeper check, and be signed by the same Developer ID and team as the installed app. Passlet then replaces the whole app bundle, asking for an administrator password if the folder is not writable, restarts the login service if it is installed, and relaunches the menu.
 
 ## Status, diagnostics, and audit
 

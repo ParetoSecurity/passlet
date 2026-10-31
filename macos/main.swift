@@ -53,6 +53,17 @@ if CommandLine.arguments.contains("--import") {
     else { reply(["ok": false, "error": status == errSecDuplicateItem ? "credentials_already_exist" : "keychain_import_failed", "status": status]) }
     exit(status == errSecSuccess ? 0 : 1)
 }
+// Finder and `open` start the app with no arguments and no request pipe.
+// Open the optional menu bar app and exit. Approvals always come through a pipe.
+var stdinInfo = stat()
+if CommandLine.arguments.count == 1, fstat(STDIN_FILENO, &stdinInfo) == 0,
+   (stdinInfo.st_mode & S_IFMT) != S_IFIFO, (stdinInfo.st_mode & S_IFMT) != S_IFSOCK {
+    let menu = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/PassletMenu.app")
+    let done = DispatchSemaphore(value: 0)
+    NSWorkspace.shared.openApplication(at: menu, configuration: NSWorkspace.OpenConfiguration()) { _, _ in done.signal() }
+    _ = done.wait(timeout: .now() + 10)
+    exit(0)
+}
 
 final class Helper: NSObject, NSApplicationDelegate {
     var context: LAContext?

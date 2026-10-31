@@ -87,6 +87,21 @@ enum ServiceProbe {
         }
     }
 
+    /// Runs `passlet doctor`. It never mints tokens or asks for authentication.
+    static func doctor(app: URL) -> (ok: Bool, output: String) {
+        let process = Process()
+        process.executableURL = app.appendingPathComponent("Contents/MacOS/passlet")
+        process.arguments = ["doctor"]
+        process.standardInput = FileHandle.nullDevice
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        guard (try? process.run()) != nil else { return (false, "Cannot run passlet doctor.") }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus == 0, String(decoding: data, as: UTF8.self))
+    }
+
     private static func relativeTime(_ value: String) -> String? {
         let parser = ISO8601DateFormatter()
         parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

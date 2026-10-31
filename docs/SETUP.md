@@ -12,6 +12,8 @@ The local `account.json` contains only the last verified login, app ID/URL, and 
 
 ## Login startup
 
+Choose one way to run the service. The menu bar app runs it while the app is open; turn on **Start at Login** in its menu. Or install the login service below, which runs without the menu. When the login service is installed, the menu app does not start its own service.
+
 ```sh
 passlet service install
 passlet service status

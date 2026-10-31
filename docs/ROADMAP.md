@@ -99,9 +99,11 @@ approval, denial, protected Keychain retrieval using the same authentication
 context without a second prompt, and sleep/wake behavior. UI automation must
 not bypass user-presence protection or claim to validate biometric approval.
 
-Add an optional menu bar app for the approving Mac. Show service health, the
+Add a menu bar app for the approving Mac. Run and supervise `passlet serve`
+while it is open unless the login service is installed. Show service health, the
 locally recorded GitHub account, Keychain setup state, and recent audit events
-without unlocking credentials or starting the service. Offer start at login and
+without unlocking credentials. Open GitHub setup in Terminal, show the doctor
+report, and offer start at login and
 self-update from GitHub Releases, ported from wgsplit: verify size, SHA-256,
 signature, Gatekeeper and the same Developer ID before replacing the bundle.
 

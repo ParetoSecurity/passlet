@@ -6,7 +6,14 @@ Use GitHub's built-in PR reviews, required CI checks, tag rules, and environment
 
 The `release` environment requires approval from one of `zupo`, `dz0ny`, or `am-on`. It prevents self-review and disables administrator bypass. Deployment is limited to tags matching `v*`. The user confirmed signing/notarization credentials are environment secrets. Check that no duplicate repository or accessible organization secrets expose those credentials outside this gate.
 
-The rulesets API returned no repository rulesets at inspection time. Classic branch protection cannot be inspected with the scoped Passlet grant, so branch protections remain unverified. This document does not apply settings automatically.
+The rulesets API confirms that [Protect main](https://github.com/ParetoSecurity/passlet/rules/26273079) and [Protect release tags](https://github.com/ParetoSecurity/passlet/rules/26273084) are active, with empty bypass lists. Their configured reviews, required checks, and tag restrictions match the import files below. Classic branch protection cannot be inspected with the scoped Passlet grant. This document does not apply settings automatically.
+
+## Importable rulesets
+
+- [Main branch](../.github/rulesets/main.json)
+- [Release tags](../.github/rulesets/release-tags.json)
+
+Import these JSON files through Settings → Rules → Rulesets → New ruleset → Import a ruleset. They contain no repository IDs or credentials. Keep them synchronized with settings changes, including renamed CI checks. GitHub may add default fields when importing. The files describe the intended configuration, while the live ruleset links above show what GitHub currently enforces.
 
 ## Main branch settings
 

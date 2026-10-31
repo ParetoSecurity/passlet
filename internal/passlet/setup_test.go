@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,7 @@ type setupProvider struct {
 	conversions, exchanges, verifies int
 	verifier                         string
 	fail                             bool
+	missingInstallation              bool
 }
 
 func (p *setupProvider) ConvertManifest(context.Context, string) (AppRegistration, error) {
@@ -36,6 +38,9 @@ func (p *setupProvider) AuthorizeCode(_ context.Context, _ AppRegistration, _, _
 }
 func (p *setupProvider) VerifySetup(context.Context, AppRegistration, Credentials) (AccountInfo, error) {
 	p.verifies++
+	if p.missingInstallation {
+		return AccountInfo{}, errors.New("install_app_on_an_accessible_repository_and_approve_all_permissions_in_the_org")
+	}
 	return AccountInfo{Login: "alice", AppID: 123, AppURL: "https://github.com/apps/example", VerifiedAt: time.Now()}, nil
 }
 
@@ -48,7 +53,7 @@ func setupRequest(s *SetupFlow, path string) *httptest.ResponseRecorder {
 func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 	p := &setupProvider{}
 	stored := 0
-	s, err := NewSetupFlow("http://127.0.0.1:12345", map[string]string{"contents": "read"}, p, func(_ context.Context, c Credentials, a AccountInfo) error {
+	s, err := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"contents": "read"}, p, func(_ context.Context, c Credentials, a AccountInfo) error {
 		stored++
 		if c.AccessToken != "hidden-parent" || a.Login != "alice" {
 			t.Fatal("wrong import")
@@ -62,6 +67,13 @@ func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), "Create my GitHub App") {
 		t.Fatal("no manifest page")
 	}
+	manifestHTML := html.UnescapeString(page.Body.String())
+	if !strings.Contains(manifestHTML, `"name":"passlet-alice"`) {
+		t.Fatal("missing prefilled app name")
+	}
+	if strings.Contains(manifestHTML, `"setup_url"`) || !strings.Contains(manifestHTML, `"request_oauth_on_install":false`) {
+		t.Fatal("manifest must disable installation redirects and automatic authorization")
+	}
 	wrongHost := httptest.NewRequest("GET", s.base+s.prefix+"/start", nil)
 	wrongHost.Host = "attacker.invalid"
 	w := httptest.NewRecorder()
@@ -73,13 +85,31 @@ func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 		t.Fatal("CSRF accepted")
 	}
 	created := setupRequest(s, "/created?code=test&state="+s.state)
-	if created.Code != 303 || created.Header().Get("Location") != "https://github.com/apps/example/installations/new" {
+	if created.Code != 303 || created.Header().Get("Location") != s.prefix+"/install" {
 		t.Fatal("registration failed")
 	}
 	if setupRequest(s, "/created?code=test&state="+s.state).Code != 400 || p.conversions != 1 {
 		t.Fatal("replayed manifest conversion")
 	}
-	installed := setupRequest(s, "/installed")
+	installPage := setupRequest(s, "/install")
+	if installPage.Code != 200 || !strings.Contains(installPage.Body.String(), `href="https://github.com/apps/example/installations/new" target="_blank" rel="noopener noreferrer"`) || !strings.Contains(installPage.Body.String(), s.prefix+"/authorize?state="+s.oauthState) {
+		t.Fatal("missing installation or continuation link")
+	}
+	if setupRequest(s, "/install").Code != 200 || p.conversions != 1 {
+		t.Fatal("refresh repeated manifest conversion")
+	}
+	for _, path := range []string{"/installed", "/authorize", "/authorize?state=wrong", "/authorize?state=" + s.oauthState + "&state=" + s.oauthState, "/authorized?code=unsolicited&state=" + s.oauthState} {
+		if setupRequest(s, path).Code < 400 || p.exchanges != 0 || stored != 0 {
+			t.Fatal("invalid transition accepted", path)
+		}
+	}
+	installed := setupRequest(s, "/authorize?state="+s.oauthState)
+	if installed.Code != 303 || p.exchanges != 0 || stored != 0 {
+		t.Fatal("continuation must only start protected authorization")
+	}
+	if setupRequest(s, "/authorize?state="+s.oauthState).Code != 400 {
+		t.Fatal("continuation replay accepted")
+	}
 	authorize, _ := url.Parse(installed.Header().Get("Location"))
 	query := authorize.Query()
 	if query.Get("scope") != "offline_access" || query.Get("code_challenge_method") != "S256" || query.Get("state") == s.state {
@@ -92,6 +122,7 @@ func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 	if complete.Code != 200 || stored != 1 || p.verifies != 1 {
 		t.Fatal("setup not completed", complete.Body.String())
 	}
+
 	hash := sha256.Sum256([]byte(p.verifier))
 	if query.Get("code_challenge") != base64.RawURLEncoding.EncodeToString(hash[:]) {
 		t.Fatal("PKCE mismatch")
@@ -99,7 +130,7 @@ func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 	if setupRequest(s, "/authorized?code=test&state="+s.oauthState).Code != 400 || p.exchanges != 1 || stored != 1 {
 		t.Fatal("OAuth replay accepted")
 	}
-	for _, response := range []*httptest.ResponseRecorder{page, created, installed, complete} {
+	for _, response := range []*httptest.ResponseRecorder{page, created, installPage, installed, complete} {
 		if strings.Contains(response.Body.String(), "hidden-") || strings.Contains(response.Header().Get("Location"), "hidden-") {
 			t.Fatal("secret exposed to browser")
 		}
@@ -113,22 +144,39 @@ func TestSetupFlowStatePKCEAndSecretHandling(t *testing.T) {
 }
 
 func TestSetupDenialNeverImports(t *testing.T) {
-	s, _ := NewSetupFlow("http://127.0.0.1:12345", map[string]string{"contents": "read"}, &setupProvider{}, func(context.Context, Credentials, AccountInfo) error {
+	s, _ := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"contents": "read"}, &setupProvider{}, func(context.Context, Credentials, AccountInfo) error {
 		t.Fatal("denied setup imported credentials")
 		return nil
 	})
 	setupRequest(s, "/created?code=test&state="+s.state)
-	setupRequest(s, "/installed")
+	setupRequest(s, "/authorize?state="+s.oauthState)
 	w := setupRequest(s, "/authorized?error=access_denied&state="+s.oauthState)
 	if w.Code != 400 || <-s.done == nil {
 		t.Fatal("denial not reported")
 	}
 }
 
+func TestSetupContinueWithoutInstallationNeverImports(t *testing.T) {
+	p := &setupProvider{missingInstallation: true}
+	s, _ := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"contents": "read"}, p, func(context.Context, Credentials, AccountInfo) error {
+		t.Fatal("uninstalled app credentials saved")
+		return nil
+	})
+	setupRequest(s, "/created?code=test&state="+s.state)
+	setupRequest(s, "/authorize?state="+s.oauthState)
+	w := setupRequest(s, "/authorized?code=test&state="+s.oauthState)
+	if w.Code != 400 || <-s.done == nil || p.verifies != 1 || s.app.ClientSecret != "" {
+		t.Fatal("missing installation must fail without saving credentials")
+	}
+	if strings.Contains(w.Body.String(), "hidden-") {
+		t.Fatal("credentials exposed in verification failure")
+	}
+}
+
 func TestSetupCancelledClosesListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var endpoint string
-	err := RunSetup(ctx, map[string]string{"contents": "read"}, &setupProvider{}, nil, func(u string) error { endpoint = u; cancel(); return nil })
+	err := RunSetup(ctx, "alice", map[string]string{"contents": "read"}, &setupProvider{}, nil, func(u string) error { endpoint = u; cancel(); return nil })
 	if err == nil {
 		t.Fatal("cancelled setup succeeded")
 	}
@@ -191,7 +239,7 @@ func TestSetupProviderRejectsNonExpiringAndUnverifiedCredentials(t *testing.T) {
 			}))
 			defer srv.Close()
 			g := &GitHub{HTTP: srv.Client(), API: srv.URL, OAuth: srv.URL + "/oauth"}
-			app := AppRegistration{ID: 123, ClientID: "id", ClientSecret: "secret", Permissions: map[string]string{"contents": "read", "metadata": "read"}}
+			app := AppRegistration{ID: 123, ClientID: "id", ClientSecret: "secret", Permissions: map[string]string{"contents": "read", "metadata": "read", "interaction_limits": "write"}}
 			app.Owner.Login = "alice"
 			c, err := g.AuthorizeCode(context.Background(), app, "code", "http://127.0.0.1:1/callback", "verifier")
 			if err == nil {
@@ -220,5 +268,101 @@ func TestManifestDiscardsPrivateKey(t *testing.T) {
 	data, _ := json.Marshal(app)
 	if strings.Contains(string(data), "unused-") {
 		t.Fatal("unused App secret retained")
+	}
+}
+
+func TestGitHubAppName(t *testing.T) {
+	for _, tc := range []struct{ handle, want string }{
+		{"zupo", "passlet-zupo"}, {" @Alice-Smith ", "passlet-alice-smith"},
+		{strings.Repeat("a", 39), "passlet-" + strings.Repeat("a", 26)},
+	} {
+		got, err := GitHubAppName(tc.handle)
+		if err != nil || got != tc.want {
+			t.Fatalf("unexpected name %q: %v", got, err)
+		}
+	}
+	for _, handle := range []string{"", "../alice", "a b", "-alice", "alice-", "a--b", strings.Repeat("a", 40)} {
+		if _, err := GitHubAppName(handle); err == nil {
+			t.Fatalf("accepted invalid handle %q", handle)
+		}
+	}
+}
+
+func TestMaximumAppPermissionsDoNotWidenAgentRequests(t *testing.T) {
+	permissions := map[string]string{}
+	for _, item := range strings.Split(DefaultSetupPermissions, ",") {
+		pair := strings.SplitN(item, ":", 2)
+		permissions[pair[0]] = pair[1]
+	}
+	flow, err := NewSetupFlow("http://127.0.0.1:12345", "alice", permissions, &setupProvider{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(flow.permissions) != len(permissionCatalog)-len(manifestExcludedPermissions) || flow.permissions["metadata"] != "read" {
+		t.Fatal("default setup does not cover supported permissions")
+	}
+	for name := range manifestExcludedPermissions {
+		if _, present := flow.permissions[name]; present {
+			t.Fatalf("unsupported manifest permission %s", name)
+		}
+		if _, err := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{name: "write"}, &setupProvider{}, nil); err == nil {
+			t.Fatalf("explicit unsupported manifest permission accepted: %s", name)
+		}
+	}
+	if permissions["metadata"] != "read" {
+		t.Fatal("setup modified caller permissions")
+	}
+	req := Request{Repositories: []string{"alice/example"}, Permissions: flow.permissions}
+	if req.Validate() == nil {
+		t.Fatal("app setup bypassed native request limits")
+	}
+	for _, invalid := range []map[string]string{{}, {"metadata": "write"}, {"contents": "admin"}, {"unknown": "write"}, {"workflows": "read"}} {
+		if _, err := NewSetupFlow("http://127.0.0.1:12345", "alice", invalid, &setupProvider{}, nil); err == nil {
+			t.Fatal("invalid setup permissions accepted")
+		}
+	}
+}
+
+func TestSetupManifestUsesRegistrationPermissionNames(t *testing.T) {
+	s, err := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"email_addresses": "write", "git_ssh_keys": "write"}, &setupProvider{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := html.UnescapeString(setupRequest(s, "/start").Body.String())
+	for _, expected := range []string{`"emails":"write"`, `"keys":"write"`, `"metadata":"read"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("manifest missing %s", expected)
+		}
+	}
+	for _, unexpected := range []string{`"email_addresses"`, `"git_ssh_keys"`} {
+		if strings.Contains(body, unexpected) {
+			t.Fatalf("manifest contains API-only name %s", unexpected)
+		}
+	}
+	if s.permissions["email_addresses"] != "write" || s.permissions["git_ssh_keys"] != "write" {
+		t.Fatal("manifest translation changed expected API permissions")
+	}
+}
+
+func TestExistingAppInstallationPage(t *testing.T) {
+	flow, err := newInstallationFlow("http://127.0.0.1:12345", AccountInfo{Login: "alice", AppURL: "https://github.com/apps/passlet-alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		page := setupRequest(flow, "/start")
+		if page.Code != 200 || !strings.Contains(page.Body.String(), "https://github.com/apps/passlet-alice/installations/new") || !strings.Contains(page.Body.String(), "passlet setup github") || strings.Contains(page.Body.String(), "Continue to authorization") {
+			t.Fatal("incorrect existing-app page")
+		}
+	}
+	for _, path := range []string{"/created?code=x&state=" + flow.state, "/authorize?state=" + flow.oauthState, "/authorized?code=x&state=" + flow.oauthState} {
+		if setupRequest(flow, path).Code != 400 {
+			t.Fatal("management page allowed credential flow", path)
+		}
+	}
+	for _, appURL := range []string{"https://attacker.invalid/apps/a", "https://github.com/apps/a?x=1", "https://github.com/apps/a/extra"} {
+		if _, err := newInstallationFlow("http://127.0.0.1:12345", AccountInfo{Login: "alice", AppURL: appURL}); err == nil {
+			t.Fatal("accepted invalid app URL")
+		}
 	}
 }

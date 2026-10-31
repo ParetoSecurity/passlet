@@ -83,3 +83,32 @@ func TestClientCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClientRejectsChangedWideScope(t *testing.T) {
+	for _, scope := range []string{"organization", "account"} {
+		for _, changed := range []bool{false, true} {
+			req := Request{Organization: "acme", Permissions: map[string]string{"members": "write"}}
+			if scope == "account" {
+				req = Request{Account: "alice", Permissions: map[string]string{"git_ssh_keys": "write"}}
+			}
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var got Request
+				json.NewDecoder(r.Body).Decode(&got)
+				grant := Grant{ID: "test", Token: "child", User: "alice", ExpiresAt: time.Now().Add(time.Hour), Organization: got.Organization, Account: got.Account, Permissions: got.Permissions}
+				if changed {
+					if scope == "organization" {
+						grant.Organization = "other"
+					} else {
+						grant.Account = "other"
+					}
+				}
+				json.NewEncoder(w).Encode(grant)
+			}))
+			_, err := requestGrant(context.Background(), server.URL, req, server.Client())
+			server.Close()
+			if (err != nil) != changed {
+				t.Fatalf("%s changed=%v error=%v", scope, changed, err)
+			}
+		}
+	}
+}

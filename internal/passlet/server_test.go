@@ -188,7 +188,7 @@ func TestInvalidInputNeverPrompts(t *testing.T) {
 	for _, body := range []string{
 		`{"repositories":[],"permissions":{"contents":"read"}}`,
 		`{"repositories":["x/a","y/b"],"permissions":{"contents":"read"}}`,
-		`{"repositories":["x/a"],"permissions":{"administration":"write"}}`,
+		`{"repositories":["x/a"],"permissions":{"not_a_permission":"write"}}`,
 		`{"repositories":["x/a"],"permissions":{"contents":"read"},"ttl_seconds":60}`,
 		validBody + ` garbage`, validBody + ` {}`, strings.Repeat("x", 9000),
 	} {

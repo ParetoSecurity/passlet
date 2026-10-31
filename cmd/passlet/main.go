@@ -63,7 +63,9 @@ func run() error {
 		fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 		endpoint := fs.String("endpoint", passlet.DefaultEndpoint(), "unix:///absolute/socket or Tailscale HTTPS origin")
 		repos := fs.String("repos", "", "comma-separated owner/repository list")
-		perms := fs.String("permissions", "", "comma-separated permission:read|write list")
+		org := fs.String("org", "", "organization-wide permission target (exclusive with --repos/--account)")
+		account := fs.String("account", "", "account-wide permission target (exclusive with --repos/--org)")
+		perms := fs.String("permissions", "", "comma-separated permission:read|write|admin list")
 		out := fs.String("out", "", "write grant JSON to a new mode-0600 file (request only)")
 		grantFile := fs.String("grant", "", "existing grant JSON file (exec only)")
 		if err := fs.Parse(os.Args[2:]); err != nil {
@@ -71,7 +73,7 @@ func run() error {
 		}
 		var grant passlet.Grant
 		if *grantFile != "" {
-			if os.Args[1] != "exec" || *repos != "" || *perms != "" {
+			if os.Args[1] != "exec" || *repos != "" || *perms != "" || *org != "" || *account != "" {
 				return errors.New("--grant is exclusive with request scope flags")
 			}
 			f, err := os.Open(*grantFile)
@@ -83,11 +85,14 @@ func run() error {
 				return errors.New("grant_expired_or_invalid")
 			}
 		} else {
-			requested := passlet.Request{Repositories: strings.Split(*repos, ","), Permissions: map[string]string{}}
+			requested := passlet.Request{Organization: *org, Account: *account, Permissions: map[string]string{}}
+			if *repos != "" {
+				requested.Repositories = strings.Split(*repos, ",")
+			}
 			for _, p := range strings.Split(*perms, ",") {
 				kv := strings.Split(p, ":")
 				if len(kv) != 2 {
-					return errors.New("permissions must be comma-separated name:read|write")
+					return errors.New("permissions must be comma-separated name:read|write|admin")
 				}
 				if _, ok := requested.Permissions[kv[0]]; ok {
 					return errors.New("duplicate_permission")

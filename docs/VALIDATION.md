@@ -57,6 +57,14 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.
 
+## GitHub onboarding
+
+2026-10-31: live browser testing completed personal app creation, manifest permission verification, OAuth authorization, installation/identity verification, and replacement of existing credentials through the installed signed helper after native approval. Replacement used an ignored local test harness; production fresh import and later scoped-token use remain separate checks.
+
+Pending live validation: in a disposable Mac account, run `passlet setup github`, create a test app, open Install app in a new tab, and select a disposable repository. Return to the setup tab and Continue to authorization. Confirm Keychain import succeeds. Verify App settings have no Setup URL and Request user authorization during installation is disabled. Repeat with authorization denied and confirm no credentials are saved.
+
+After setup exits, install the same app in a second test organization or change its selected repositories. Confirm GitHub finishes without redirecting to localhost. Verify a scoped request on an installed disposable repository still requires native approval. The OAuth callback remains registered, but installations do not use it. Automated fixtures do not substitute for these live browser and Keychain checks.
+
 ## Package lifecycle
 
 Use a disposable Mac account for both package managers separately. Install a signed release, confirm the CLI is on PATH and the service runs before provider setup, then complete setup with disposable repositories. Confirm one native approval unlocks Keychain. Upgrade through the package manager and verify the running process uses the new version. Log out/in and test crash recovery. Uninstall and verify the LaunchAgent and process are gone while credentials and audit history remain. Repeat after a failed installation and verify errors are actionable. Attempt to enable both managers and verify an ownership conflict is reported.

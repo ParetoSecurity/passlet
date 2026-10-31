@@ -16,6 +16,8 @@ const ClientDeadline = 130 * time.Second
 const ConnectDeadline = 5 * time.Second
 
 type Request struct {
+	Organization string            `json:"organization,omitempty"`
+	Account      string            `json:"account,omitempty"`
 	Repositories []string          `json:"repositories"`
 	Permissions  map[string]string `json:"permissions"`
 }
@@ -27,6 +29,8 @@ type Caller struct {
 	Tags      []string `json:"tags,omitempty"`
 }
 type Grant struct {
+	Organization string            `json:"organization,omitempty"`
+	Account      string            `json:"account,omitempty"`
 	ID           string            `json:"grant_id"`
 	Token        string            `json:"token"`
 	ExpiresAt    time.Time         `json:"expires_at"`
@@ -50,11 +54,31 @@ func (c Credentials) Validate() error {
 }
 
 var component = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
-var permissionLevels = map[string]bool{"contents": true, "pull_requests": true, "issues": true, "actions": true, "checks": true, "deployments": true, "statuses": true, "security_events": true, "workflows": true, "metadata": true}
 
 func (r *Request) Validate() error {
-	if len(r.Repositories) < 1 || len(r.Repositories) > 3 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
+	if len(r.Repositories) > 3 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
 		return errors.New("invalid_request")
+	}
+	scope := "repository"
+	if r.Organization != "" {
+		scope = "organization"
+	}
+	if r.Account != "" {
+		scope = "account"
+	}
+	if (r.Organization != "" && r.Account != "") || (scope != "repository" && len(r.Repositories) != 0) || (scope == "repository" && len(r.Repositories) == 0) {
+		return errors.New("choose_one_scope_repositories_organization_or_account")
+	}
+	if scope != "repository" {
+		target := r.Organization
+		if scope == "account" {
+			target = r.Account
+		}
+		if !githubHandle.MatchString(target) || len(target) > 39 {
+			return errors.New("invalid_scope_target")
+		}
+		r.Organization = strings.ToLower(r.Organization)
+		r.Account = strings.ToLower(r.Account)
 	}
 	seen := map[string]bool{}
 	owner := ""
@@ -78,8 +102,13 @@ func (r *Request) Validate() error {
 		return errors.New("invalid_request")
 	}
 	for k, v := range r.Permissions {
-		if !permissionLevels[k] || (v != "read" && v != "write") || (k == "metadata" && v != "read") || (k == "workflows" && v != "write") {
+		if !validPermission(k, v) {
 			return errors.New("invalid_permission")
+		}
+	}
+	for name := range r.Permissions {
+		if name != "metadata" && permissionCatalog[name].Scope != scope {
+			return errors.New("permission_requires_" + permissionCatalog[name].Scope + "_scope")
 		}
 	}
 	// Metadata read is intrinsic to GitHub repository tokens and must be displayed.
@@ -110,6 +139,12 @@ func (r Request) Prompt(c Caller) string {
 	}
 	sort.Strings(keys)
 	lines := []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Repositories:"}
+	if r.Organization != "" {
+		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Organization: " + r.Organization, "Organization-wide access", "All installed repositories: metadata read only"}
+	}
+	if r.Account != "" {
+		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Account: " + r.Account, "Account-wide access", "All installed repositories: metadata read only"}
+	}
 	for _, repo := range r.Repositories {
 		lines = append(lines, "• "+repo)
 	}

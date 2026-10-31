@@ -22,6 +22,8 @@ Choose explicit `owner/repository` names and the minimum permissions needed:
 | Read or update issues | `issues:read` or `issues:write` |
 | Inspect Actions runs | `actions:read` |
 
+For administrative work, use `administration:write` with `--repos` for a repository. Organization permissions use `--org NAME` (for example `members:write`); account permissions use `--account HANDLE` (for example `git_ssh_keys:write`). These scope selectors are mutually exclusive. Organization/account grants are explicitly wider than a repository grant and include metadata read access to all installed repositories for that target. Never substitute an organization or account grant for a repository grant without explaining and obtaining approval for the wider scope. Use `--out` and reuse grants as below for every scope.
+
 Request additional permissions only when the task needs their specific operations. Passlet includes intrinsic `metadata:read`. The MVP accepts one owner per request, up to three repositories, and bounded prompt length. It accepts no caller description or requested TTL.
 
 Tell the user which repositories and permissions you are requesting, then make one request. Allow the command at least 130 seconds so the user has time to approve. Never put this request in a retry loop.

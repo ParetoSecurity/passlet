@@ -171,6 +171,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	grant.ID = event.RequestID
 	event.ExpiresAt = &grant.ExpiresAt
+	event.GrantedOrganization = grant.Organization
+	event.GrantedAccount = grant.Account
 	event.GrantedPermissions = grant.Permissions
 	event.GrantedRepositories = grant.Repositories
 	event.GitHubUser = grant.User

@@ -4,11 +4,14 @@ Use the signed v0.2 bundle on each approving Mac and the matching CLI on the age
 
 ## GitHub onboarding
 
-Run `passlet setup github` on the Mac. The loopback browser session expires after ten minutes. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
+Run `passlet setup github` on the Mac and enter your GitHub handle, or use `passlet setup github --github-user alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. If the name is already taken, choose another on GitHub. The loopback browser session expires after ten minutes. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
 
-If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials, setup refuses to overwrite them. Use Keychain Access to remove only the Passlet item when deliberately resetting an account, revoke the old GitHub authorization, and perform fresh setup. This is an explicit reset, not an automatic migration.
+After app creation, open the installation link in a new tab, select All repositories on GitHub, then return to Passlet's setup tab and select Continue to authorization. Passlet starts authorization with state and PKCE and verifies installation access before saving credentials. New apps have no Setup URL and do not request authorization during installation, so subsequent installations finish on GitHub without contacting the Mac. The temporary OAuth callback remains registered for the initial authorization; it is not a reusable sign-in endpoint. Fresh authorization of an existing app is not supported by this setup command.
+
+If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials and saved app metadata is available, setup reopens installation instructions for that app without replacing credentials. Resetting an account requires a separate deliberate credential replacement; protected items may not appear in Keychain Access.
 
 The local `account.json` contains only the last verified login, app ID/URL, and verification time. It is informational; editing it cannot change authorization. `status` does not claim these details are currently verified with GitHub. If metadata cannot be saved after Keychain import, credentials remain protected; correct the local filesystem problem and reset deliberately rather than repeatedly running setup.
+
 
 ## Login startup
 
@@ -71,3 +74,13 @@ Common failures:
 | Authorization expired/invalid | Perform fresh GitHub authorization; do not fall back to a PAT. |
 
 `passlet audit --limit 20` reads recent structured records from the Mac. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. Use `--path /absolute/path/audit.sqlite` for another existing database; the command never creates one. Keep support excerpts limited to needed metadata, even though credentials are excluded.
+
+## Administrative access
+
+Repository administration uses `--repos owner/repository --permissions administration:write`. Organization permissions require `--org organization`, for example `--org teamniteo --permissions members:write`. Account permissions require `--account your-handle`, for example `--account alice --permissions git_ssh_keys:write`. These three scopes are mutually exclusive. Account requests must match the authenticated GitHub user. Levels are validated per permission, including `admin` where GitHub supports it.
+
+Organization and account requests explicitly approve wide access plus metadata read access to all repositories in that target's installation. They cannot include repository content permissions. The prompt, delivered grant, client validation, and audit record retain the scope. All grants still require exact permission matching, an expiring token, and native approval. Narrow requests remain bounded to fit the native prompt; broad app permissions do not mean an agent can request every permission at once.
+
+`internal/passlet/github_permissions.json` is generated from GitHub's public `app-permissions` OpenAPI schema using `python3 scripts/github-permissions.py path/to/api.github.com.json`. Review the catalog diff and scope classifications before committing updates. The source hash is recorded. Metadata is overridden to read-only; single-file access needs a separate path design, and enterprise-only permissions are excluded. Account permissions are authorized by the user, not an installation's permission map. New organization/account scoped-token combinations require live GitHub validation; API fixtures alone do not establish provider support.
+
+GitHub’s token API schema and app registration accept different permission sets. `manifestExcludedPermissions` records known registration incompatibilities separately; `organization_packages` is omitted from setup and rejected if explicitly requested during setup. Schema generation must not remove these exclusions. The remaining broad defaults still require live registration validation.

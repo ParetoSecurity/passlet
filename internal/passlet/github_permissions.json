@@ -1,0 +1,393 @@
+{
+  "source": "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json",
+  "sha256": "72e362731e73c6adc9b12a4d18eb7dd8e095400ae55d47daab06c54714331b6d",
+  "excluded": {
+    "single_file": "Requires a separately approved file-path configuration.",
+    "enterprise_custom_properties_for_organizations": "Enterprise-owned apps only."
+  },
+  "permissions": {
+    "actions": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "administration": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "artifact_metadata": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "attestations": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "checks": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "code_quality": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "codespaces": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "contents": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "custom_properties_for_organizations": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "dependabot_secrets": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "deployments": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "discussions": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "email_addresses": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "environments": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "followers": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "git_ssh_keys": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "gpg_keys": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "interaction_limits": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "issues": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "members": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "merge_queues": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "metadata": {
+      "scope": "repository",
+      "levels": [
+        "read"
+      ]
+    },
+    "organization_administration": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_announcement_banners": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_copilot_agent_settings": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_copilot_requests": {
+      "scope": "organization",
+      "levels": [
+        "read"
+      ]
+    },
+    "organization_copilot_seat_management": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_custom_org_roles": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_custom_properties": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write",
+        "admin"
+      ]
+    },
+    "organization_custom_roles": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_events": {
+      "scope": "organization",
+      "levels": [
+        "read"
+      ]
+    },
+    "organization_external_properties_for_repos": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write",
+        "admin"
+      ]
+    },
+    "organization_hooks": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_packages": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_personal_access_token_requests": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_personal_access_tokens": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_plan": {
+      "scope": "organization",
+      "levels": [
+        "read"
+      ]
+    },
+    "organization_projects": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write",
+        "admin"
+      ]
+    },
+    "organization_secrets": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_self_hosted_runners": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "organization_user_blocking": {
+      "scope": "organization",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "packages": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "pages": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "profile": {
+      "scope": "account",
+      "levels": [
+        "write"
+      ]
+    },
+    "pull_requests": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "repository_custom_properties": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "repository_hooks": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "repository_projects": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write",
+        "admin"
+      ]
+    },
+    "secret_scanning_alerts": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "secrets": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "security_events": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "starring": {
+      "scope": "account",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "statuses": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "vulnerability_alerts": {
+      "scope": "repository",
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "workflows": {
+      "scope": "repository",
+      "levels": [
+        "write"
+      ]
+    }
+  }
+}

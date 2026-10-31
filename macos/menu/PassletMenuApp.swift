@@ -12,7 +12,14 @@ struct PassletMenuApp: App {
         MenuBarExtra {
             MenuContent(model: model)
         } label: {
-            Image(systemName: model.serviceReady ? "lock.shield" : "lock.trianglebadge.exclamationmark")
+            HStack(spacing: 2) {
+                Image(nsImage: MenuIcon.image)
+                if !model.serviceReady {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9))
+                }
+            }
+            .accessibilityLabel(model.serviceReady ? "Passlet" : "Passlet, service unavailable")
         }
     }
 }

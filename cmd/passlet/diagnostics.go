@@ -26,6 +26,16 @@ func diagnostics(ctx context.Context, command string, args []string) error {
 	if _, err := passlet.EndpointURL(*endpoint, "/v1/health"); err != nil {
 		return errors.New("invalid_endpoint_use_unix_absolute_socket_or_Tailscale_HTTPS_origin")
 	}
+	if command == "doctor" {
+		// exec supplies the same scoped token to these variables and the Git
+		// helper. This comparison avoids noisy warnings; it is not authentication.
+		scopedToken := os.Getenv("PASSLET_GIT_TOKEN")
+		for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+			if token := os.Getenv(name); token != "" && token != scopedToken {
+				fmt.Printf("Warning: %s is set; it can give agents GitHub access outside Passlet approval. Remove it from your shell or server configuration and use the Passlet skill.\n", name)
+			}
+		}
+	}
 	fmt.Println("Endpoint:", *endpoint)
 	failed := false
 	if err := passlet.Health(ctx, *endpoint); err != nil {

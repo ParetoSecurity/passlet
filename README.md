@@ -157,6 +157,10 @@ The menu checks GitHub Releases once a day (you can turn this off) and offers ne
 
 ## Status, diagnostics, and audit
 
+`passlet doctor` warns about ambient `GH_TOKEN` and `GITHUB_TOKEN` credentials,
+showing names only. It checks the inherited environment without reading secret
+files or contacting GitHub. Tokens supplied by `passlet exec` are excluded.
+
 ```sh
 passlet status
 passlet doctor

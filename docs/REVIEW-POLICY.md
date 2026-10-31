@@ -18,7 +18,7 @@ The Review activity workflow is unprivileged and only wakes the trusted workflow
 
 Configure an organization-managed ruleset for main:
 
-- Require pull requests, current CI Linux/macOS checks, workflow/secret checks, NixOS SSH integration, and the `Maintainer quorum` status.
+- Require pull requests, current CI Linux/macOS checks (Linux includes workflow/secret checks), NixOS SSH integration, and the `Maintainer quorum` status.
 - Require at least one native approving review, dismiss stale approvals on new commits, require code-owner review, and resolve conversations. CODEOWNERS routes to the three maintainers but does not enforce two of them.
 - Block force pushes and deletion. Remove routine actor bypasses, including administrator bypass where supported. Restrict who can change Actions permissions, rulesets, repository ownership, collaborators, teams, and environments.
 - Protect `.github/**`, `scripts/review-quorum.py`, its tests, `scripts/release.sh`, signing/build scripts, Nix/devenv inputs, and policy documentation under the same rules. The wildcard CODEOWNERS includes those paths; organization controls must prevent replacing the required checker with PR-controlled code.

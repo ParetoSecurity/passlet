@@ -20,12 +20,13 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
-    # A cold macOS cache builds devenv's Rust task runner before our checks.
+    # Retain headroom when a newly pinned dependency is not cached yet.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       # Nix exports Bash 4+ syntax; macOS ships Bash 3.2. Bootstrap from our pin.
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         if: runner.os == 'macOS'
@@ -35,6 +36,25 @@ jobs:
           bash_path=$(nix-build ./nix --attr bash --no-out-link)
           echo "$bash_path/bin" >> "$GITHUB_PATH"
       - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+        with:
+          cache: devenv
+      - name: Locate Go caches
+        id: go-cache
+        run: |
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      - name: Restore Go modules and build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.modules }}
+            ${{ steps.go-cache.outputs.build }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'go.mod', 'go.sum') }}-
+      - name: Validate workflows, shell scripts, and tracked secrets
+        if: runner.os == 'Linux'
+        run: lint
       - name: Compile Swift helper without credentials
         if: runner.os == 'macOS'
         run: ./scripts/check-macos.sh
@@ -46,19 +66,6 @@ jobs:
           path: build/coverage.txt
           retention-days: 14
 
-  quality:
-    name: Workflow and secret checks
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
-      - name: Validate workflows, shell scripts, and tracked secrets
-        run: lint
-
   integration:
     name: NixOS SSH integration
     runs-on: ubuntu-24.04
@@ -68,6 +75,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+        with:
+          cache: devenv
       - name: Enable KVM for the Nix build users
         run: |
           test -c /dev/kvm

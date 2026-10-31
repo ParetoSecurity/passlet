@@ -33,7 +33,7 @@
       "parameters": {
         "required_status_checks": [
           {
-            "context": "Test (ubuntu-24.04)",
+            "context": "Test (ubuntu-26.04)",
             "integration_id": 15368
           },
           {

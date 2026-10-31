@@ -158,3 +158,11 @@ See [manual and UI validation](docs/VALIDATION.md) and [release controls](docs/R
 ## License
 
 GNU General Public License v3.0 (GPL-3.0-only). See [LICENSE](LICENSE).
+
+### Download a development build
+
+The macOS CI job builds and uploads a universal app before running its tests. Linux checks and NixOS integration run in parallel. Open the [CI runs](https://github.com/ParetoSecurity/passlet/actions/workflows/ci.yml), select the commit or PR, and download `Passlet-macOS-preview.zip` from Artifacts once the build job finishes. Extract the ZIP once to obtain `Passlet.app`. Tests may still be running, so check the complete run before trusting a change. After CI finishes, a bot updates one PR comment with the preview download link, build-job link, and protected-Keychain limitation. The commenting workflow activates after it is merged into the default branch.
+
+Preview builds use ad-hoc signatures without an Apple signing identity, provisioning profile, or notarization. They have a separate `dev.passlet.preview` bundle identifier and cannot exercise the production protected-Keychain flow. Use them to inspect the menu and other non-credential features. Keep the released app installed for real credentials, and quit one app before launching the other because they share the local service configuration. macOS may require allowing the downloaded preview in System Settings → Privacy & Security. Only run artifacts from code you trust, including when downloading PR builds.
+
+Developer ID signing and notarization remain exclusive to approved releases. To reproduce the preview locally, run `PASSLET_BUILD_MODE=unsigned ./scripts/build-macos.sh` inside devenv.

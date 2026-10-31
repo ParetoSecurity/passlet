@@ -12,7 +12,7 @@ defaults:
     shell: bash -eo pipefail {0}
 jobs:
   verify:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     outputs:
       sha: ${{ steps.verify.outputs.sha }}

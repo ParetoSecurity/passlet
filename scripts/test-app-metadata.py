@@ -28,6 +28,17 @@ class MetadataTests(unittest.TestCase):
                 self.menu_info = plistlib.loads((root / 'Passlet.app/Contents/Helpers/PassletMenu.app/Contents/Info.plist').read_bytes())
             return result.returncode, metadata
 
+    def test_preview_needs_no_profile_or_keychain_entitlements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / 'Passlet.app'
+            result = subprocess.run(['python3', str(SCRIPT), '-', str(app), '0.2.0', 'unsigned'], capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+            self.assertEqual(info['CFBundleIdentifier'], 'dev.passlet.preview')
+            self.assertFalse((root / 'entitlements.plist').exists())
+            self.assertFalse((app / 'Contents/embedded.provisionprofile').exists())
+
     def test_distribution_entitlements(self):
         code, entitlements = self.run_profile()
         self.assertEqual(code, 0)

@@ -1,0 +1,6 @@
+{
+  "name": "passlet",
+  "version": "0.1.0",
+  "description": "Request scoped GitHub credentials with approval on your Mac.",
+  "license": "GPL-3.0-only"
+}

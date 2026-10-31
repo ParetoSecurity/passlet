@@ -105,9 +105,47 @@ tailscale serve --proxy-protocol=2 --tls-terminated-tcp=8443 tcp://127.0.0.1:848
 
 Use Tailscale Serve, not Funnel. Keep Serve running and configure network policy to allow intended callers on TCP 8443. Do not reset unrelated Serve configuration. On the agent, set `PASSLET_ENDPOINT=https://your-mac.your-tailnet.ts.net:8443`. Passlet uses PROXY v2 and WhoIs for caller identity; no Passlet node allowlist is added.
 
-## Claude skill
+## Agent plugins
 
-Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to `~/.claude/skills/passlet/SKILL.md` on each agent account. Local Mac agents use the default socket; remote agents inherit their own `PASSLET_ENDPOINT`. The skill requests minimum access, reuses grants, and stops on unavailable Macs without credential fallbacks. It is also included in release archives and the app's `Contents/Resources/skills`.
+Install the native plugin on each agent account. Both plugins use the same
+[Passlet skill](skills/passlet/SKILL.md).
+
+Claude Code:
+
+```sh
+claude plugin marketplace add ParetoSecurity/passlet
+claude plugin install passlet@passlet --scope user
+```
+
+Codex CLI:
+
+```sh
+codex plugin marketplace add ParetoSecurity/passlet
+codex plugin add passlet@passlet
+```
+
+Start a new agent session after installation. To update:
+
+```sh
+# Claude Code
+claude plugin marketplace update passlet
+claude plugin update passlet@passlet
+
+# Codex CLI
+codex plugin marketplace upgrade passlet
+codex plugin add passlet@passlet
+```
+
+Install the Passlet CLI separately and configure the transport first. Local Mac
+agents use the default socket; remote agents use their own `PASSLET_ENDPOINT`.
+Installing a plugin does not mint a token or bypass native approval. Remove any
+previous manually installed standalone Passlet skill to avoid duplicate skills.
+The skill is also included in release archives and the app's
+`Contents/Resources/skills`.
+
+Plugin versions are independent of app releases. When changing the bundled
+skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
+managers can identify the update.
 
 ## Menu bar app
 

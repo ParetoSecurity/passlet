@@ -14,7 +14,7 @@ Approve each request on your Mac with one native Touch ID/password prompt. Passl
 
 This branch implements v0.2; v0.1.0 is already released. Follow these instructions with the v0.2 build. There are no compatibility aliases or migrations before v1.0.
 
-- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. No menu bar app is required.
+- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. The menu bar app is optional.
 - Agent: macOS or Linux, Passlet on PATH, and Git and/or GitHub CLI.
 - Remote agents: OpenSSH with Unix socket forwarding, or opt-in Tailscale HTTPS.
 - Each person owns and authorizes their own GitHub App. Organization installation may require an organization administrator.
@@ -37,7 +37,7 @@ passlet doctor
 
 Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
-`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. Opening the app alone does not start the service. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
+`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. Opening the app shows the optional menu bar status; it does not start the service. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
 
 ## Local agents
 
@@ -106,6 +106,12 @@ Use Tailscale Serve, not Funnel. Keep Serve running and configure network policy
 ## Claude skill
 
 Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to `~/.claude/skills/passlet/SKILL.md` on each agent account. Local Mac agents use the default socket; remote agents inherit their own `PASSLET_ENDPOINT`. The skill requests minimum access, reuses grants, and stops on unavailable Macs without credential fallbacks. It is also included in release archives and the app's `Contents/Resources/skills`.
+
+## Menu bar app
+
+Opening `Passlet.app` starts an optional menu bar app. It shows whether the service is ready, the locally recorded GitHub account, the Keychain setup state, and recent requests from the audit log. It can start at login. It never starts `passlet serve`, unlocks credentials, or approves requests; the launch agent and the native approval prompt keep those jobs. Quit it at any time.
+
+The menu checks GitHub Releases once a day (you can turn this off) and offers newer versions. An update must match the published size and SHA-256, pass a strict signature and Gatekeeper check, and be signed by the same Developer ID and team as the installed app. Passlet then replaces the whole app bundle, asking for an administrator password if the folder is not writable, restarts the login service if it is installed, and relaunches the menu.
 
 ## Status, diagnostics, and audit
 

@@ -25,13 +25,32 @@ class MetadataTests(unittest.TestCase):
             metadata = None
             if result.returncode == 0:
                 metadata = plistlib.loads((root / 'entitlements.plist').read_bytes())
+                self.menu_info = plistlib.loads((root / 'Passlet.app/Contents/Helpers/PassletMenu.app/Contents/Info.plist').read_bytes())
             return result.returncode, metadata
+
+    def test_preview_needs_no_profile_or_keychain_entitlements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / 'Passlet.app'
+            result = subprocess.run(['python3', str(SCRIPT), '-', str(app), '0.2.0', 'unsigned'], capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+            self.assertEqual(info['CFBundleIdentifier'], 'dev.passlet.preview')
+            self.assertFalse((root / 'entitlements.plist').exists())
+            self.assertFalse((app / 'Contents/embedded.provisionprofile').exists())
 
     def test_distribution_entitlements(self):
         code, entitlements = self.run_profile()
         self.assertEqual(code, 0)
         self.assertEqual(entitlements['keychain-access-groups'], ['TEAM.dev.passlet.app'])
         self.assertNotIn('get-task-allow', entitlements)
+
+    def test_menu_app_metadata(self):
+        self.assertEqual(self.run_profile()[0], 0)
+        self.assertEqual(self.menu_info['CFBundleIdentifier'], 'dev.passlet.app.menu')
+        self.assertEqual(self.menu_info['CFBundleExecutable'], 'PassletMenu')
+        self.assertEqual(self.menu_info['CFBundleShortVersionString'], '0.1.0')
+        self.assertTrue(self.menu_info['LSUIElement'])
 
     def test_release_rejects_device_bound_profile(self):
         self.assertNotEqual(self.run_profile({'ProvisionedDevices': ['device']})[0], 0)

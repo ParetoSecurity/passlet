@@ -7,8 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -29,48 +27,24 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: passlet serve | request | exec | import")
+		return errors.New("usage: passlet setup github | service | serve | request | exec | doctor | status | audit | import | version")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	switch os.Args[1] {
+	case "setup":
+		return setupCommand(ctx, os.Args[2:])
+	case "service":
+		return serviceCommand(ctx, os.Args[2:])
+	case "doctor", "status":
+		return diagnostics(ctx, os.Args[1], os.Args[2:])
+	case "audit":
+		return auditCommand(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("passlet", version)
 		return nil
 	case "serve":
-		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-		listen := fs.String("listen", "127.0.0.1:8484", "loopback PROXY-v2 listener")
-		helper := fs.String("helper", "", "absolute path to signed Passlet helper executable")
-		audit := fs.String("audit", "", "SQLite audit path")
-		if err := fs.Parse(os.Args[2:]); err != nil {
-			return err
-		}
-		if *helper == "" || !filepath.IsAbs(*helper) || *audit == "" {
-			return errors.New("--helper (absolute) and --audit are required")
-		}
-		host, _, err := net.SplitHostPort(*listen)
-		if err != nil || !net.ParseIP(host).IsLoopback() {
-			return errors.New("listener_must_be_loopback")
-		}
-		a, err := passlet.OpenAudit(*audit)
-		if err != nil {
-			return errors.New("audit_unavailable")
-		}
-		defer a.Close()
-		listener, err := net.Listen("tcp", *listen)
-		if err != nil {
-			return err
-		}
-		defer listener.Close()
-		handler := passlet.NewServer(passlet.NativeHelper{Path: *helper}, passlet.NewGitHub(), a)
-		server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 125 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, BaseContext: func(net.Listener) context.Context { return ctx }}
-		go func() { <-ctx.Done(); server.Close() }()
-		fmt.Fprintln(os.Stderr, "Passlet listening on", *listen, "(trusted local PROXY v2 required)")
-		err = server.Serve(&passlet.ProxyListener{Listener: listener})
-		if err == http.ErrServerClosed {
-			return nil
-		}
-		return err
+		return serve(ctx, os.Args[2:])
 	case "import":
 		fs := flag.NewFlagSet("import", flag.ContinueOnError)
 		helper := fs.String("helper", "", "signed helper executable")
@@ -89,7 +63,7 @@ func run() error {
 		return passlet.ImportCredentials(ctx, *helper, c)
 	case "request", "exec":
 		fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
-		endpoint := fs.String("endpoint", os.Getenv("PASSLET_ENDPOINT"), "Mac's Tailscale HTTPS origin")
+		endpoint := fs.String("endpoint", passlet.DefaultEndpoint(), "unix:///absolute/socket or Tailscale HTTPS origin")
 		repos := fs.String("repos", "", "comma-separated owner/repository list")
 		perms := fs.String("permissions", "", "comma-separated permission:read|write list")
 		out := fs.String("out", "", "write grant JSON to a new mode-0600 file (request only)")

@@ -10,31 +10,76 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 )
 
 func RequestGrant(ctx context.Context, endpoint string, r Request) (Grant, error) {
+	client, close, err := EndpointClient(endpoint)
+	if err != nil {
+		return Grant{}, err
+	}
+	defer close()
+	return requestGrant(ctx, endpoint, r, client)
+}
+
+func endpointURL(endpoint string) (*url.URL, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
+		return nil, errors.New("endpoint_must_be_https_origin_or_absolute_unix_socket")
+	}
+	if u.Scheme == "unix" && u.Host == "" && filepath.IsAbs(u.Path) && filepath.Clean(u.Path) == u.Path && len(u.Path) <= 103 && u.Path != "/" {
+		return u, nil
+	}
+	if u.Scheme == "https" && u.Host != "" && (u.Path == "" || u.Path == "/") {
+		return u, nil
+	}
+	return nil, errors.New("endpoint_must_be_https_origin_or_absolute_unix_socket")
+}
+
+// EndpointClient never uses ambient proxies, follows redirects, or falls back
+// from a Unix socket to a network endpoint.
+func EndpointClient(endpoint string) (*http.Client, func(), error) {
+	u, err := endpointURL(endpoint)
+	if err != nil {
+		return nil, nil, err
+	}
 	transport := &http.Transport{Proxy: nil, DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 		ctx, cancel := context.WithTimeout(ctx, ConnectDeadline)
 		defer cancel()
 		return (&tls.Dialer{NetDialer: &net.Dialer{Timeout: ConnectDeadline}}).DialContext(ctx, network, addr)
 	}, ResponseHeaderTimeout: ClientDeadline}
-	defer transport.CloseIdleConnections()
+	if u.Scheme == "unix" {
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: ConnectDeadline}).DialContext(ctx, "unix", u.Path)
+		}
+	}
 	client := &http.Client{Transport: transport, Timeout: ClientDeadline, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return requestGrant(ctx, endpoint, r, client)
+	return client, transport.CloseIdleConnections, nil
+}
+
+func EndpointURL(endpoint, path string) (string, error) {
+	u, err := endpointURL(endpoint)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme == "unix" {
+		u = &url.URL{Scheme: "http", Host: "passlet.local"}
+	}
+	u.Path = path
+	return u.String(), nil
 }
 
 func requestGrant(ctx context.Context, endpoint string, r Request, client *http.Client) (Grant, error) {
 	if err := r.Validate(); err != nil {
 		return Grant{}, err
 	}
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-		return Grant{}, errors.New("endpoint_must_be_https_origin")
+	target, err := EndpointURL(endpoint, "/v1/grants")
+	if err != nil {
+		return Grant{}, err
 	}
-	u.Path = "/v1/grants"
 	data, _ := json.Marshal(r)
-	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, "POST", target, bytes.NewReader(data))
 	if err != nil {
 		return Grant{}, errors.New("invalid_endpoint")
 	}
@@ -57,6 +102,10 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		}
 		if json.Unmarshal(payload, &problem) == nil {
 			switch problem.Error {
+			case "github_http_403":
+				return Grant{}, errors.New("github_access_denied_check_App_permissions_installation_approval_and_org_policy")
+			case "github_http_401":
+				return Grant{}, errors.New("reauthorization_required")
 			case "approval_denied", "approval_cancelled", "approval_timeout", "approver_busy", "identity_unavailable", "invalid_request", "credentials_missing", "repository_not_installed", "audit_unavailable", "reauthorization_required":
 				return Grant{}, errors.New(problem.Error)
 			}

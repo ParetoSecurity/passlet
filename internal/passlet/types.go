@@ -20,10 +20,11 @@ type Request struct {
 	Permissions  map[string]string `json:"permissions"`
 }
 type Caller struct {
-	NodeID string   `json:"node_id"`
-	Name   string   `json:"name"`
-	User   string   `json:"user,omitempty"`
-	Tags   []string `json:"tags,omitempty"`
+	Transport string   `json:"transport"`
+	NodeID    string   `json:"node_id"`
+	Name      string   `json:"name"`
+	User      string   `json:"user,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
 }
 type Grant struct {
 	ID           string            `json:"grant_id"`

@@ -17,8 +17,7 @@ uploads, or automatic dependency merging into this CLI project.
    publish development evidence, credentials, provisioning profiles, or builds.
 2. Require CI's Linux and macOS test jobs on main; require reviewed PRs. Disable
    force pushes and branch deletion. Enable secret scanning/push protection where
-   available. Use a `release` environment restricted to release tags (`v*`). Do not require an environment reviewer if
-   signing should start automatically when a release is published.
+   available. Use a `release` environment restricted to release tags (`v*`). Review the v0.2 [maintainer-policy settings proposal](REVIEW-POLICY.md) before enabling release signing. Repository settings have not been applied by this branch.
 3. Register an explicit production Apple App ID such as `dev.passlet.app` on the
    signing team. Create a Developer ID provisioning profile authorizing its
    Keychain access group. The existing Mac Development profile is not a release
@@ -39,18 +38,19 @@ uploads, or automatic dependency merging into this CLI project.
 ## Local checks
 
 `make check` runs module verification, formatting, vet, race tests and coverage.
-`make build` builds the local CLI and Linux amd64 CLI. Local Go uses pinned Nix;
-CI uses exactly Go 1.26.8. `PASSLET_GO_SYSTEM=1` permits that exact system Go.
+`make build` builds the local CLI and Linux amd64 CLI. Run these commands inside
+`nix-shell`; all CI and release commands use the same `nix/flake.lock`. Apple
+SDK, signing, and notarization tools come from the macOS runner.
 
 On macOS, `make macos` builds the development helper using
 `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`. The default keeps
 the existing prototype identity. The icon source is `assets/passlet.png`;
 `scripts/icon.sh` creates all required icon sizes and the icns bundle.
 
-## Prepare and validate v0.1
+## Prepare and validate a release
 
-After CI passes on main, publish a GitHub release tagged `v0.1.0`.
-The **Release** workflow checks out the release tag, repeats tests, builds
+After CI passes on main, publish a GitHub release tagged `vX.Y.Z`.
+The Release workflow verifies that the tag points to a commit on main and passes that exact SHA to the signing job. GitHub pauses the signing job for approval under the `release` environment rules before making its credentials available. After approval it repeats tests, builds
 universal arm64/x86_64 macOS binaries, verifies Developer ID signing, notarizes,
 staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums,
 and uploads the artifacts to that existing release. Uploads refuse to overwrite
@@ -62,6 +62,10 @@ and Linux archives. The CLI is inside the signed bundle at
 `/Applications/Passlet.app/Contents/MacOS/passlet`; place a symlink to it in your
 PATH. Use `/Applications/Passlet.app/Contents/MacOS/PassletHelper` for --helper.
 Do not move the helper executable outside its app bundle.
+`PassletHelper` stays the main executable because macOS accepts the Keychain
+entitlement and provisioning profile only there. The optional menu bar app is
+nested at `Contents/Helpers/PassletMenu.app` with no restricted entitlements.
+The build signs it before the outer bundle.
 
 On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
 approval/denial/cancellation flow. On Linux, verify `passlet version`, then the
@@ -75,12 +79,14 @@ run automatically, following the Pareto macOS distribution model. Keep
 GitHub parent credentials, refresh tokens, and app client secrets out of all CI
 secrets, artifacts, logs, and screenshots.
 
-## Current release gates
+## Release validation
 
-The workflow and scripts are preparatory until executed in GitHub Actions with
-real distribution credentials. A successful local build is not proof of
-notarization, Gatekeeper acceptance, or production Keychain behavior. Signing credential configuration, production profile,
-CI execution, real distribution tests, and publishing must be recorded separately.
+The v0.1.0 release workflow successfully built, signed, notarized, and attached
+artifacts using the configured distribution credentials:
+[successful release run](https://github.com/ParetoSecurity/passlet/actions/runs/41110201864).
+The devenv migration preserves that release trigger, environment, credentials,
+and Developer ID authority check. New toolchain changes still need validation
+in the release workflow; local checks do not establish production Keychain behavior.
 
 ## Local preparation results
 
@@ -96,9 +102,13 @@ CI execution, real distribution tests, and publishing must be recorded separatel
   verification with the existing development identity.
 - Linux arm64 CLI, macOS Intel CLI, and macOS Intel Swift helper cross-builds
   passed. They have not been runtime-tested on those architectures.
-- Developer ID signing, notarization and production Keychain tests remain release
-  gates. Local passing tests do not establish those outcomes.
+- Developer ID signing and notarization passed in the release run linked above.
+  Production Keychain interaction is a separate manual check.
 
 For the packaged Claude skill, configure `PASSLET_ENDPOINT` on the agent machine
 to the approving user's Mac before starting Claude. Existing installed personal
 skills are not modified by editing the release source.
+
+## v0.2 controls
+
+See [REVIEW-POLICY.md](REVIEW-POLICY.md) for built-in PR/release approval settings, protected paths, and remaining administrator limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its protected environment. Do not publish v0.2 until the manual [validation checklist](VALIDATION.md) and administrative settings review are complete. The historical v0.1 results above do not establish v0.2 validation.

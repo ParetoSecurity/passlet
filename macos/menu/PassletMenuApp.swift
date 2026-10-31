@@ -55,6 +55,7 @@ final class MenuModel: ObservableObject {
         terminateSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         terminateSignal?.setEventHandler { NSApp.terminate(nil) }
         terminateSignal?.resume()
+        DispatchQueue.main.async { [weak self] in self?.offerCLIInstallation() }
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -144,6 +145,32 @@ final class MenuModel: ObservableObject {
         }
     }
 
+    func offerCLIInstallation() {
+        guard let app = SelfUpdater.installedApp,
+              app.standardizedFileURL.path == CLIInstallation.appPath,
+              !UserDefaults.standard.bool(forKey: "cliInstallationOffered") else { return }
+        UserDefaults.standard.set(true, forKey: "cliInstallationOffered")
+        guard !CLIInstallation.available(app: app) else { return }
+        installCLI()
+    }
+
+    func installCLI() {
+        guard let app = SelfUpdater.installedApp else { return }
+        let alert = NSAlert()
+        alert.messageText = "Install the Passlet command line tool?"
+        alert.informativeText = "Agents use the passlet command to request credentials. This links /usr/local/bin/passlet to the app in /Applications. Administrator permission may be required. You can also manage the link with Home Manager."
+        alert.addButton(withTitle: "Install")
+        alert.addButton(withTitle: "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try CLIInstallation.install(app: app)
+            updateMessage = "CLI installed. Open a new terminal and run passlet version."
+        } catch {
+            updateMessage = error.localizedDescription
+        }
+    }
+
     func runDoctor() {
         guard let app = SelfUpdater.installedApp, !doctorRunning else { return }
         doctorRunning = true
@@ -206,6 +233,8 @@ struct MenuContent: View {
         Toggle("Start at Login", isOn: Binding(get: { model.startsAtLogin }, set: { _ in model.toggleStartAtLogin() }))
         Divider()
         Button(model.account == nil ? "Set Up GitHub…" : "Set Up GitHub Again…") { model.openGitHubSetup() }
+            .disabled(SelfUpdater.installedApp == nil)
+        Button("Install Command Line Tool…") { model.installCLI() }
             .disabled(SelfUpdater.installedApp == nil)
         Button(model.doctorRunning ? "Running Doctor…" : "Run Doctor") { model.runDoctor() }
             .disabled(SelfUpdater.installedApp == nil || model.doctorRunning)

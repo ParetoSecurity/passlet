@@ -57,3 +57,14 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 11. Run `passlet service uninstall` and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.
+
+## Command line tool installation
+
+Not yet manually validated: use a test Mac/account with the app in `/Applications`.
+Confirm first launch offers installation once; **Not Now** creates no link, and
+**Install Command Line Tool…** remains available. Test administrator approval
+and cancellation, existing-file refusal, and `passlet version` in a new terminal.
+With a Home Manager link already present, confirm no first-launch offer appears.
+Run Doctor from the menu and from a terminal: an installed CLI outside the GUI's
+PATH must be distinguished from a missing CLI. After an app update, verify the
+link still runs the updated CLI.

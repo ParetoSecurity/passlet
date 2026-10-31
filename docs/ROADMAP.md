@@ -112,14 +112,4 @@ weekly upstream-update workflow so advancing its pin refreshes the linked
 conventions on environment entry. Document this integration and verify that
 generated links are not committed or packaged as machine-specific store paths.
 
-Harden the release pipeline in v0.2: review workflow permissions, action pins,
-signing credential access, and release publishing permissions. Require agreement
-from two distinct maintainers from `zupo`, `dz0ny`, and `am-on` for release and
-security changes. A PR author who is one of these three counts toward the quorum
-and needs approval from one of the other two. A PR authored by anyone else needs
-approvals from two of the three. Protect the review policy itself, dismiss stale
-approvals after changes, and ensure release/tag paths cannot bypass reviewed
-code. Check GitHub's actual ruleset capabilities rather than assuming a list of
-three CODEOWNERS enforces a two-person quorum. Record any administrator bypass
-or rule-editing powers that remain; do not claim protection against account
-takeover where a single administrator can remove the controls.
+Harden the release pipeline in v0.2 using GitHub's built-in controls: require a pull request with code-owner approval, dismiss stale approvals after changes, and require passing CI. The release environment must require approval from one of `zupo`, `dz0ny`, or `am-on`, prevent the release initiator from approving their own run, and disable administrator bypass. Keep signing credentials scoped to that environment and release tags tied to exact commits on main. Do not maintain custom approval-counting workflows or an author-dependent quorum. Document remaining administrator rule-editing powers and distinguish configured settings from proposed ones.

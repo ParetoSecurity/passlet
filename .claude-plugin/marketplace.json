@@ -1,0 +1,16 @@
+{
+  "name": "passlet",
+  "owner": {
+    "name": "Pareto Security"
+  },
+  "plugins": [
+    {
+      "name": "passlet",
+      "source": "./",
+      "description": "Request scoped GitHub credentials with approval on your Mac."
+    }
+  ],
+  "metadata": {
+    "description": "Scoped credentials for your agents."
+  }
+}

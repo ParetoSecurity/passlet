@@ -161,7 +161,45 @@ not revoke its token. GitHub sets expiry, typically eight hours.
 
 ## Claude skill
 
-Copy [skills/passlet/SKILL.md](skills/passlet/SKILL.md) to
+Install the native plugin on each agent account. Both plugins use the same
+[Passlet skill](skills/passlet/SKILL.md).
+
+Claude Code:
+
+```sh
+claude plugin marketplace add ParetoSecurity/passlet
+claude plugin install passlet@passlet --scope user
+```
+
+Codex CLI:
+
+```sh
+codex plugin marketplace add ParetoSecurity/passlet
+codex plugin add passlet@passlet
+```
+
+Start a new agent session after installation. To update:
+
+```sh
+# Claude Code
+claude plugin marketplace update passlet
+claude plugin update passlet@passlet
+
+# Codex CLI
+codex plugin marketplace upgrade passlet
+codex plugin add passlet@passlet
+```
+
+Install the Passlet CLI separately and configure the transport first. Local Mac
+agents use the default socket; remote agents use their own `PASSLET_ENDPOINT`.
+Installing a plugin does not mint a token or bypass native approval. Remove any
+previous manually installed standalone Passlet skill to avoid duplicate skills.
+The skill is also included in release archives and the app's
+`Contents/Resources/skills`.
+
+Plugin versions are independent of app releases. When changing the bundled
+skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
+managers can identify the update.
 `~/.claude/skills/passlet/SKILL.md` on the agent machine. Set `PASSLET_ENDPOINT`
 before launching Claude. The skill teaches Claude to request minimum access,
 reuse approved grants, and handle unavailable Macs without credential fallbacks.

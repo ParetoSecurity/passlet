@@ -3,7 +3,6 @@ set -eu
 cd "$(dirname "$0")/.."
 mkdir -p build
 python3 scripts/test-app-metadata.py
-python3 scripts/test-review-quorum.py
 python3 scripts/test-agent-conventions.py
 ./scripts/go.sh mod verify
 unformatted=$(./scripts/go.sh fmt ./...)

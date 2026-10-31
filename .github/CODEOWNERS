@@ -1,3 +1,2 @@
-# Review routing only; GitHub treats multiple owners as alternatives.
-# Exact two-person quorum is evaluated by the trusted policy workflow.
+# GitHub requires one of these owners when code-owner review is enabled.
 * @zupo @dz0ny @am-on

@@ -50,7 +50,7 @@ the existing prototype identity. The icon source is `assets/passlet.png`;
 ## Prepare and validate a release
 
 After CI passes on main, publish a GitHub release tagged `vX.Y.Z`.
-The Release workflow first resolves the tag to a reviewed main merge commit and freshly verifies two-maintainer agreement (a maintainer author counts). It passes that exact commit SHA to the signing job, repeats tests, builds
+The Release workflow verifies that the tag points to a commit on main and passes that exact SHA to the signing job. GitHub pauses the signing job for approval under the `release` environment rules before making its credentials available. After approval it repeats tests, builds
 universal arm64/x86_64 macOS binaries, verifies Developer ID signing, notarizes,
 staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums,
 and uploads the artifacts to that existing release. Uploads refuse to overwrite
@@ -107,4 +107,4 @@ skills are not modified by editing the release source.
 
 ## v0.2 controls
 
-See [REVIEW-POLICY.md](REVIEW-POLICY.md) for the exact quorum, protected paths, proposed rulesets, and remaining bypass limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its environment and the independent quorum gate. Do not publish v0.2 until the manual [validation checklist](VALIDATION.md) and administrative settings review are complete. The historical v0.1 results above do not establish v0.2 validation.
+See [REVIEW-POLICY.md](REVIEW-POLICY.md) for built-in PR/release approval settings, protected paths, and remaining administrator limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its protected environment. Do not publish v0.2 until the manual [validation checklist](VALIDATION.md) and administrative settings review are complete. The historical v0.1 results above do not establish v0.2 validation.

@@ -227,9 +227,12 @@ Feature: Set up a personal GitHub App
     When I enter `alice` and press Enter
     Then the terminal shows:
       """
-      A GitHub App named passlet-alice already exists, but its credentials aren't saved in this Mac's Keychain.
+      A GitHub App named passlet-alice already exists, but its credentials aren't saved in this Mac's Keychain. Passlet cannot reconnect to an existing app.
 
-      If you own this app, review it at https://github.com/settings/apps/passlet-alice/advanced before continuing. It may still be in use on another Mac.
+      To create a replacement:
+      1. Open https://github.com/settings/apps/passlet-alice/advanced
+      2. Click "Delete GitHub App" and confirm. This deletes the app and its installations.
+      3. Run `passlet github setup` again to create the app and grant it access to your repositories.
       """
     And setup stops
     And no browser opens
@@ -275,7 +278,7 @@ Feature: Set up a personal GitHub App
       """
       GitHub credentials removed. Run `passlet github setup` to set up again.
 
-      Your previous GitHub App still exists. To remove it, open https://github.com/settings/apps/passlet-alice/advanced and click "Delete GitHub App".
+      Your GitHub App remains on GitHub: https://github.com/settings/apps/passlet-alice
       """
     And no browser opens
 

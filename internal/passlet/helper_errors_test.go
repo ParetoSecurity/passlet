@@ -27,7 +27,7 @@ func TestHelperStoreClosedPipe(t *testing.T) {
 	}
 }
 
-func TestResetRejectsInvalidIdentityAndDeletionFailure(t *testing.T) {
+func TestResetPropagatesDeletionFailureWithAnyIdentity(t *testing.T) {
 	for _, validIdentity := range []bool{false, true} {
 		c := Credentials{ClientID: "id", ClientSecret: "secret", AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)}
 		if validIdentity {
@@ -43,13 +43,31 @@ func TestResetRejectsInvalidIdentityAndDeletionFailure(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = (NativeHelper{Path: path}).Reset(context.Background())
-		want := "invalid_protected_account_identity"
-		if validIdentity {
-			want = "keychain_unavailable"
-		}
+		want := "keychain_unavailable"
 		if err == nil || err.Error() != want {
 			t.Fatalf("reset: want %s, got %v", want, err)
 		}
+	}
+}
+
+func TestResetDeletesCredentialsWithMissingAccountInfo(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "helper")
+	script := `#!/bin/sh
+read -r request
+printf '%s\n' '{"ok":true,"credentials":{"client_id":"test-id","client_secret":"test-secret","access_token":"test-access","refresh_token":"test-refresh","expires_at":"2026-01-01T00:00:00Z"}}'
+read -r request
+if [ "$request" = '{"op":"delete"}' ]; then
+  printf '%s\n' '{"ok":true}'
+else
+  printf '%s\n' '{"ok":false,"error":"unexpected_operation"}'
+fi
+`
+	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	account, err := (NativeHelper{Path: path}).Reset(context.Background())
+	if err != nil || account != (AccountInfo{}) {
+		t.Fatalf("reset with missing account: %v, %v", account, err)
 	}
 }
 

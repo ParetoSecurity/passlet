@@ -105,6 +105,9 @@ func TestSetupRejectsInvalidProtectedIdentity(t *testing.T) {
 	if err == nil || err.Error() != "invalid_protected_account_identity" {
 		t.Fatalf("invalid identity used: %v", err)
 	}
+	if !strings.Contains(f.output.String(), "passlet github reset") {
+		t.Fatal("missing account recovery guidance")
+	}
 }
 
 func TestSetupCancellationBeforeBrowser(t *testing.T) {

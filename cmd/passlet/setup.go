@@ -103,6 +103,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		account := credentials.Account
 		session.Close()
 		if err := account.Validate(); err != nil {
+			writeSetupText(deps.output, "The saved Passlet credentials have invalid or incomplete account information.\nRun `passlet github reset`, then `passlet github setup` to set up again. Reset removes only this Mac's saved credentials. Your GitHub App and its installations remain on GitHub.")
 			return err
 		}
 
@@ -156,8 +157,8 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		return err
 	}
 	if exists {
-		writeSetupText(deps.output, fmt.Sprintf("A GitHub App named %s already exists, but its credentials aren't saved in this Mac's Keychain.\n\nIf you own this app, review it at https://github.com/settings/apps/%s/advanced before continuing. It may still be in use on another Mac.", name, name))
-		return errors.New("github_app_name_taken")
+		writeSetupText(deps.output, fmt.Sprintf("A GitHub App named %s already exists, but its credentials aren't saved in this Mac's Keychain. Passlet cannot reconnect to an existing app.\n\nTo create a replacement:\n1. Open https://github.com/settings/apps/%s/advanced\n2. Click \"Delete GitHub App\" and confirm. This deletes the app and its installations.\n3. Run `passlet github setup` again to create the app and grant it access to your repositories.", name, name))
+		return errGitHubAppNameTaken
 	}
 	writeSetupIntroduction(deps.output)
 	if _, err := setupReadLine(deps, "", ""); err != nil {
@@ -253,6 +254,6 @@ func resetGitHub(ctx context.Context, helper string, deps setupDependencies) err
 	if err != nil {
 		return err
 	}
-	writeSetupText(deps.output, "GitHub credentials removed. Run `passlet github setup` to set up again.\n\nYour previous GitHub App still exists. To remove it, open "+passlet.GitHubAppSettingsURL(account.AppURL)+"/advanced and click \"Delete GitHub App\".")
+	writeSetupText(deps.output, "GitHub credentials removed. Run `passlet github setup` to set up again.\n\nYour GitHub App remains on GitHub: "+passlet.GitHubAppSettingsURL(account.AppURL))
 	return nil
 }

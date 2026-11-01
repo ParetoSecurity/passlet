@@ -18,12 +18,20 @@ import (
 )
 
 var version = "dev"
+var errGitHubAppNameTaken = errors.New("github_app_name_taken")
 
 func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "passlet:", err)
+		writeCommandError(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+func writeCommandError(out io.Writer, err error) {
+	if errors.Is(err, errGitHubAppNameTaken) {
+		_, _ = fmt.Fprintln(out)
+		return
+	}
+	_, _ = fmt.Fprintln(out, "passlet:", err)
 }
 func run() error {
 	if len(os.Args) < 2 {

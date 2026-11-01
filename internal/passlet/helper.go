@@ -168,9 +168,6 @@ func (h NativeHelper) Reset(ctx context.Context) (AccountInfo, error) {
 	defer session.Close()
 	s := session.(*helperSession)
 	account := s.Credentials().Account
-	if err := account.Validate(); err != nil {
-		return AccountInfo{}, err
-	}
 	if err := s.send(map[string]any{"op": "delete"}); err != nil { // coverage-ignore: Requires helper death between approval and delete; closed-pipe send handling is tested separately.
 		return AccountInfo{}, err
 	}

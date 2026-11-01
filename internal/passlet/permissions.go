@@ -19,7 +19,7 @@ var permissionCatalog = func() map[string]permissionSpec {
 	var catalog struct {
 		Permissions map[string]permissionSpec `json:"permissions"`
 	}
-	if err := json.Unmarshal(permissionJSON, &catalog); err != nil {
+	if err := json.Unmarshal(permissionJSON, &catalog); err != nil { // coverage-ignore: Immutable embedded catalog; invalid JSON aborts every test at package initialization.
 		panic(err)
 	}
 	return catalog.Permissions

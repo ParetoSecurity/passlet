@@ -11,15 +11,28 @@ import (
 )
 
 func TestMintChecksRepositoriesAndReturnedPermissions(t *testing.T) {
-	for _, mode := range []string{"ok", "not-installed", "broadened", "no-expiry", "wrong-user", "parent-token"} {
+	for _, mode := range []string{"ok", "not-installed", "broadened", "changed-permission", "no-expiry", "wrong-user", "parent-token", "missing-user", "no-installations", "user-error", "installations-error", "repositories-error", "mint-error"} {
 		t.Run(mode, func(t *testing.T) {
 			calls := 0
 			h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				failurePath := map[string]string{"user-error": "/user", "installations-error": "/user/installations", "repositories-error": "/user/installations/42/repositories", "mint-error": "/applications/client/token/scoped"}[mode]
+				if r.URL.Path == failurePath {
+					w.WriteHeader(503)
+					return
+				}
 				switch r.URL.Path {
 				case "/user":
+					if mode == "missing-user" {
+						w.Write([]byte(`{}`))
+						return
+					}
 					json.NewEncoder(w).Encode(map[string]any{"login": "zupo"})
 				case "/user/installations":
+					if mode == "no-installations" {
+						w.Write([]byte(`{"installations":[]}`))
+						return
+					}
 					json.NewEncoder(w).Encode(map[string]any{"installations": []any{map[string]any{"id": 42, "account": map[string]string{"login": "zupo"}}}})
 				case "/user/installations/42/repositories":
 					name := "zupo/test-a"
@@ -42,6 +55,9 @@ func TestMintChecksRepositoriesAndReturnedPermissions(t *testing.T) {
 						t.Error("request not ID-scoped")
 					}
 					perms := map[string]string{"contents": "read", "metadata": "read"}
+					if mode == "changed-permission" {
+						perms["contents"] = "write"
+					}
 					if mode == "broadened" {
 						perms["issues"] = "write"
 					}

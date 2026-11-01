@@ -4,13 +4,13 @@ Use the signed v0.2 bundle on each approving Mac and the matching CLI on the age
 
 ## GitHub onboarding
 
-Run `passlet setup github` on the Mac and enter your GitHub handle, or use `passlet setup github --github-user alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. If the name is already taken, choose another on GitHub. The loopback browser session expires after ten minutes. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
+Run `passlet github setup` on the Mac and enter your GitHub handle, or use `passlet github setup --github-user alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. Setup checks for an existing app with that name before opening the browser and stops with a settings link if found. GitHub still validates names during creation. The loopback listener runs until setup completes or the setup process stops. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
 
-After app creation, open the installation link in a new tab, select All repositories on GitHub, then return to Passlet's setup tab and select Continue to authorization. Passlet starts authorization with state and PKCE and verifies installation access before saving credentials. New apps have no Setup URL and do not request authorization during installation, so subsequent installations finish on GitHub without contacting the Mac. The temporary OAuth callback remains registered for the initial authorization; it is not a reusable sign-in endpoint. Fresh authorization of an existing app is not supported by this setup command.
+After app creation and authorization, GitHub's authorization callback redirects the same browser tab to the installation page. Choose **All repositories** for the account or organization. The full default permission set requires an organization owner to approve installation on an organization. GitHub redirects to `http://127.0.0.1:45821/github/installed`; Passlet verifies that installation's app, user, permissions, and accessible repositories before saving credentials and showing success. The listener exists only during setup. If the port is occupied, setup stops before opening the browser; it never silently changes ports. The predictable installation callback is a signal to verify access, not proof of authorization. Manifest conversion and OAuth retain separate random state values, session paths, and PKCE. If GitHub rejects saved authorization, setup directs you to reset and configure again.
 
-If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials and saved app metadata is available, setup reopens installation instructions for that app without replacing credentials. Resetting an account requires a separate deliberate credential replacement; protected items may not appear in Keychain Access.
+If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials, setup asks for Touch ID/password to read the configured app identity and opens GitHub’s installation page without replacing credentials. Use `passlet github reset` to deliberately remove local credentials before starting over; protected items may not appear in Keychain Access.
 
-The local `account.json` contains only the last verified login, app ID/URL, and verification time. It is informational; editing it cannot change authorization. `status` does not claim these details are currently verified with GitHub. If metadata cannot be saved after Keychain import, credentials remain protected; correct the local filesystem problem and reset deliberately rather than repeatedly running setup.
+App/account identity and tokens are stored together in one protected Keychain item. There is no separate metadata file. Noninteractive status checks do not unlock credentials or display account identity.
 
 
 ## Login startup
@@ -57,7 +57,7 @@ Use the Mac's actual `.ts.net` HTTPS hostname and port. WhoIs must be accessible
 
 ## Diagnostics
 
-`passlet doctor` checks the selected endpoint without minting a token. On the approving Mac's default endpoint it additionally checks directory permissions, helper availability, locally saved account metadata, and Keychain item status without allowing UI. A protected or unavailable result means the item cannot be confirmed without authentication; it is not proof of a working credential. A healthy socket only establishes that the approver is listening. GitHub authorization is verified during setup and real requests, not by an unattended diagnostic.
+`passlet doctor` checks the selected endpoint without minting a token. On the approving Mac's default endpoint it additionally checks directory permissions, helper availability and Keychain item status without allowing UI. A protected or unavailable result means the item cannot be confirmed without authentication; it is not proof of a working credential. A healthy socket only establishes that the approver is listening. GitHub authorization is verified during setup and real requests, not by an unattended diagnostic.
 
 Common failures:
 
@@ -66,7 +66,7 @@ Common failures:
 | Approver unavailable | Start the Mac login service; for SSH verify the tunnel and remote socket path; for HTTPS verify Serve and network policy. |
 | Directory is not private | Check ownership and set the socket directory to 0700. Do not share it between users. |
 | Helper unavailable | Use the signed app bundle and keep CLI/helper together. |
-| GitHub setup missing | Run `passlet setup github` on the approving Mac. |
+| GitHub setup missing | Run `passlet github setup` on the approving Mac. |
 | Repository unavailable | Check the app installation, pending organization approvals, and the user's repository access. |
 | GitHub denies permission | Confirm the operation and app's maximum permissions; request only the specific missing scope. |
 | Approver busy | Complete or cancel the existing request; do not poll or retry automatically. |
@@ -74,6 +74,10 @@ Common failures:
 | Authorization expired/invalid | Perform fresh GitHub authorization; do not fall back to a PAT. |
 
 `passlet audit --limit 20` reads recent structured records from the Mac. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. Use `--path /absolute/path/audit.sqlite` for another existing database; the command never creates one. Keep support excerpts limited to needed metadata, even though credentials are excluded.
+
+Corrupted entries are skipped with a warning on stderr; stdout remains JSON. The
+limit bounds the recent rows inspected, so corruption can result in fewer entries.
+An unreadable database still reports an error.
 
 ## Administrative access
 
@@ -83,4 +87,16 @@ Organization and account requests explicitly approve wide access plus metadata r
 
 `internal/passlet/github_permissions.json` is generated from GitHub's public `app-permissions` OpenAPI schema using `python3 scripts/github-permissions.py path/to/api.github.com.json`. Review the catalog diff and scope classifications before committing updates. The source hash is recorded. Metadata is overridden to read-only; single-file access needs a separate path design, and enterprise-only permissions are excluded. Account permissions are authorized by the user, not an installation's permission map. New organization/account scoped-token combinations require live GitHub validation; API fixtures alone do not establish provider support.
 
-GitHub’s token API schema and app registration accept different permission sets. `manifestExcludedPermissions` records known registration incompatibilities separately; `organization_packages` is omitted from setup and rejected if explicitly requested during setup. Schema generation must not remove these exclusions. The remaining broad defaults still require live registration validation.
+GitHub’s token API schema and app registration accept different permission sets. `manifestExcludedPermissions` records known registration incompatibilities separately; `organization_packages` is omitted from setup and rejected if explicitly requested during setup. Schema generation must not remove these exclusions. The broad defaults still require live registration validation.
+
+### Terminal-led onboarding
+
+`passlet github setup` suggests an editable handle from Git's `github.user`, then GitHub CLI account metadata if needed. It never obtains or uses a token from those tools. Press Enter to accept the handle, read the explanation, then press Enter to open GitHub. The terminal also prints a fallback URL. The local page automatically POSTs the manifest to GitHub; create and authorize the app, then install it for an account or organization. Installation verification and Keychain storage proceed automatically after GitHub's callback. Ctrl-C cancels setup and stops the localhost listener. No credentials are saved before verification.
+
+For an existing account, setup unlocks the protected credentials with native approval, starts the same temporary localhost listener, and opens the existing app’s installation page. It waits for GitHub’s callback and verifies the installation without replacing credentials. Recovery after installing while Passlet was stopped remains a separate follow-up scenario. The random OAuth callback is only for the original authorization.
+
+### Reset GitHub credentials
+
+Run `passlet github reset` to remove the protected GitHub credential item. Confirmation defaults to no. Confirming requires native approval before deletion. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
+
+Setup reserves localhost port 45821 before prompting for a handle or opening Keychain. If it is occupied, close the application using the port and retry. Denied authorization, an unexpected GitHub identity, and failed Keychain storage never report completion. Errors include recovery instructions without exposing credentials. Organization approval remains planned and is excluded from automated BDD execution until the live callback has been verified.

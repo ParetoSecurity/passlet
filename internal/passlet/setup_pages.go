@@ -6,7 +6,7 @@ import (
 	"html/template"
 )
 
-// Self-contained pages: no JavaScript, remote fonts, or external resources.
+// Self-contained pages: only the manifest form uses an inline, CSP-hashed script.
 const setupCSS = `
 :root{color-scheme:light;--paper:#f8f7f3;--ink:#193b30;--muted:#606e66;--line:#dce3da;--green:#20563f}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.6}
@@ -18,7 +18,8 @@ const setupCSS = `
 
 var setupContentSecurityPolicy = func() string {
 	sum := sha256.Sum256([]byte(setupCSS))
-	return "default-src 'none'; img-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; form-action https://github.com; frame-ancestors 'none'; base-uri 'none'"
+	scriptSum := sha256.Sum256([]byte(setupSubmitScript))
+	return "default-src 'none'; img-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; script-src 'sha256-" + base64.StdEncoding.EncodeToString(scriptSum[:]) + "'; form-action https://github.com; frame-ancestors 'none'; base-uri 'none'"
 }()
 
 const setupHead = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Passlet · GitHub setup</title><link rel="icon" type="image/png" href="/favicon.png"><style>` + setupCSS + `</style></head><body><div class="shell"><header class="brand"><span class="mark" aria-hidden="true">P</span>Passlet</header><main class="card">`
@@ -28,10 +29,10 @@ func setupTemplate(name, body string) *template.Template {
 	return template.Must(template.New(name).Parse(setupHead + body + setupFoot))
 }
 
-var setupPage = setupTemplate("setup", `<p class="eyebrow">Step 1 of 3 · Create</p><h1>Your Personal GitHub App</h1><p class="intro">Passlet can only create short-lived scoped tokens if it acts as a GitHub App. Let's create one for you!</p><h2>Your app. Your credentials.</h2><p>This personal GitHub App belongs to you. Its credentials are stored in your Mac’s Keychain, protected by Touch ID or your Mac password. They are never sent to the Passlet team.</p><h2>Only the access you approve</h2><p>The app requests broad permissions so it can handle different tasks. Your agents request only the subset they need, and you approve each request on your Mac. Agents receive a short-lived, scoped token—not the app’s credentials.</p><form method="post" action="{{.Action}}"><input type="hidden" name="manifest" value="{{.Manifest}}"><button type="submit">Create my GitHub App</button></form>`)
+const setupSubmitScript = `document.querySelector('form').submit();`
 
-var setupInstallPage = setupTemplate("install", `<p class="eyebrow">Step 2 of 3 · Install & authorize</p><h1>Connect your repositories</h1><p class="intro">Install your app on your account or organization, then authorize Passlet to act as you.</p><ol class="steps"><li><strong>Install on GitHub</strong><p>Do this step for every org you want your agents to have access to.</p><a href="{{.InstallURL}}" target="_blank" rel="noopener noreferrer" class="button secondary">Install app on GitHub ↗</a></li><li><strong>Return here after installation</strong><p>Continue to verify your account and repository access.</p><a href="{{.AuthorizeURL}}" class="button">Continue to authorization</a></li></ol><p class="note">You can come back to this page at any later time by running <code>passlet setup github</code>.</p><p class="note">Keep this tab open. Setup expires ten minutes after it starts.</p>`)
+var setupPage = setupTemplate("setup", `<h1>Opening GitHub…</h1><form method="post" action="{{.Action}}"><input type="hidden" name="manifest" value="{{.Manifest}}"><noscript><button type="submit">Create my GitHub App</button></noscript></form><script>`+setupSubmitScript+`</script>`)
 
-var setupCompletePage = setupTemplate("complete", `<p class="eyebrow success">Step 3 of 3 · Complete</p><h1>You’re ready.</h1><p class="intro">Your credentials are stored in your protected Mac Keychain. Return to the terminal to continue.</p>`)
+var setupCompletePage = setupTemplate("complete", `<h1>GitHub setup complete.</h1><p>You can close this tab and return to your terminal.</p>`)
 
-var setupManagePage = setupTemplate("manage", `<h1>Connect your repositories</h1><p>Do this step for every org you want your agents to have access to.</p><a href="{{.InstallURL}}" target="_blank" rel="noopener noreferrer" class="button">Install app on GitHub ↗</a><p class="note">Your existing credentials are unchanged. After installation, you can close this tab.</p><p class="note">You can come back to this page at any later time by running <code>passlet setup github</code>.</p>`)
+var setupFailurePage = template.Must(template.New("failure").Parse(setupHead + `{{range .}}<p>{{.}}</p>{{end}}` + setupFoot))

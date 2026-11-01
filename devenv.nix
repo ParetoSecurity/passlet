@@ -10,7 +10,8 @@
     actionlint
     shellcheck
     gitleaks
-  ];
+    golangci-lint
+  ] ++ [ (import ./nix/go-test-coverage.nix { inherit pkgs; }) ];
 
   env.PASSLET_DEVENV = "1";
 

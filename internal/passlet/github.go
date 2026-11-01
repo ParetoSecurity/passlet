@@ -50,7 +50,7 @@ func (g *GitHub) call(ctx context.Context, method, path, token string, basic *Cr
 	if err != nil {
 		return errors.New("github_unavailable")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("github_http_%d", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func (g *GitHub) Refresh(ctx context.Context, c Credentials) (Credentials, error
 	if err != nil {
 		return c, errors.New("refresh_failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var v struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`

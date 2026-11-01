@@ -37,18 +37,18 @@ func OpenAudit(path string) (*Audit, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Close()
-	if err = os.Chmod(path, 0600); err != nil {
+	_ = f.Close()
+	if err = os.Chmod(path, 0600); err != nil { // coverage-ignore: Requires external removal or permission changes after successfully opening the file.
 		return nil, err
 	}
 	db, err := sql.Open("sqlite", path)
-	if err != nil {
+	if err != nil { // coverage-ignore: Registered SQLite driver opens lazily; real storage failures occur at Exec and are tested.
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
 	_, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, at TEXT NOT NULL, request_id TEXT NOT NULL, outcome TEXT NOT NULL, data TEXT NOT NULL);`)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return &Audit{db}, nil

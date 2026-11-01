@@ -26,7 +26,7 @@ func readTailscaleListener(path string) (string, error) {
 	if err != nil {
 		return "", errors.New("cannot_read_serve_config")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, 4097))
 	if err != nil {
 		return "", errors.New("cannot_read_serve_config")

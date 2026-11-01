@@ -19,7 +19,7 @@ import (
 
 var version = "dev"
 
-func main() {
+func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "passlet:", err)
 		os.Exit(1)
@@ -27,13 +27,13 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: passlet setup github | serve | request | exec | doctor | status | audit | import | version")
+		return errors.New("usage: passlet github setup | github reset | serve | request | exec | doctor | status | audit | import | version")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	switch os.Args[1] {
-	case "setup":
-		return setupCommand(ctx, os.Args[2:])
+	case "github":
+		return githubCommand(ctx, os.Args[2:])
 	case "doctor", "status":
 		return diagnostics(ctx, os.Args[1], os.Args[2:])
 	case "audit":
@@ -80,7 +80,7 @@ func run() error {
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			if json.NewDecoder(io.LimitReader(f, 65536)).Decode(&grant) != nil || grant.Token == "" || !grant.ExpiresAt.After(time.Now()) {
 				return errors.New("grant_expired_or_invalid")
 			}
@@ -112,7 +112,7 @@ func run() error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				return json.NewEncoder(f).Encode(grant)
 			}
 			return json.NewEncoder(os.Stdout).Encode(grant)
@@ -130,14 +130,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(dir)
+		defer func() { _ = os.RemoveAll(dir) }()
 		self, err := os.Executable()
-		if err != nil {
+		if err != nil { // coverage-ignore: Requires the OS to lose the running executable identity.
 			return err
 		}
 		wrapper := filepath.Join(dir, "credential")
 		script := "#!/bin/sh\nexec '" + strings.ReplaceAll(self, "'", "'\\''") + "' git-credential \"$@\"\n"
-		if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil { // coverage-ignore: Requires disk failure or external interference inside a freshly created private directory.
 			return err
 		}
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)

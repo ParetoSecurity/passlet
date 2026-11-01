@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -136,8 +137,8 @@ func TestApprovalAndAudit(t *testing.T) {
 		t.Fatalf("unexpected audit: %+v", events)
 	}
 }
-func TestDenialTimeoutAndDisconnect(t *testing.T) {
-	for _, mode := range []string{"deny", "timeout", "disconnect"} {
+func TestDenialAndDisconnect(t *testing.T) {
+	for _, mode := range []string{"deny", "disconnect"} {
 		t.Run(mode, func(t *testing.T) {
 			a := &testApprover{err: errors.New("approval_denied")}
 			if mode != "deny" {
@@ -147,7 +148,6 @@ func TestDenialTimeoutAndDisconnect(t *testing.T) {
 			g := &testMinter{}
 			audit := &memoryAudit{}
 			s := testServer(a, g, audit)
-			s.Deadline = 15 * time.Millisecond
 			r := httptest.NewRequest("POST", "/v1/grants", strings.NewReader(validBody))
 			ctx, cancel := context.WithCancel(r.Context())
 			defer cancel()
@@ -157,13 +157,55 @@ func TestDenialTimeoutAndDisconnect(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			s.ServeHTTP(w, r)
-			expected := map[string]int{"deny": 403, "timeout": 504, "disconnect": 499}[mode]
+			expected := map[string]int{"deny": 403, "disconnect": 499}[mode]
 			if w.Code != expected || g.calls != 0 {
 				t.Fatalf("code=%d mints=%d", w.Code, g.calls)
 			}
 		})
 	}
 }
+func TestApprovalDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		approver := &testApprover{wait: true, entered: make(chan struct{}, 1)}
+		minter := &testMinter{}
+		audit := &memoryAudit{}
+		server := testServer(approver, minter, audit)
+		response := httptest.NewRecorder()
+		done := make(chan struct{})
+		go func() {
+			server.ServeHTTP(response, httptest.NewRequest("POST", "/v1/grants", strings.NewReader(validBody)))
+			close(done)
+		}()
+		<-approver.entered
+		synctest.Wait()
+
+		// Exercise the actual two-minute deadline without waiting in real time.
+		time.Sleep(ServerDeadline - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("approval expired before its deadline")
+		default:
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-done:
+		default:
+			t.Fatal("approval survived its deadline")
+		}
+		if response.Code != http.StatusGatewayTimeout || minter.calls != 0 {
+			t.Fatalf("status=%d, tokens minted=%d", response.Code, minter.calls)
+		}
+		if len(audit.events) != 2 || audit.events[1].Outcome != "approval_timeout" || audit.events[1].Decision != "cancelled" {
+			t.Fatalf("timeout was not audited: %+v", audit.events)
+		}
+		if len(server.busy) != 0 {
+			t.Fatal("expired approval retained the request slot")
+		}
+	})
+}
+
 func TestBusyDoesNotQueue(t *testing.T) {
 	a := &testApprover{wait: true, entered: make(chan struct{}, 1)}
 	g := &testMinter{}
@@ -253,7 +295,11 @@ func TestRealDisconnectCancelsApproval(t *testing.T) {
 	a := &testApprover{wait: true, entered: make(chan struct{}, 1)}
 	audit := &memoryAudit{}
 	s := testServer(a, &testMinter{}, audit)
-	h := httptest.NewServer(s)
+	handlerDone := make(chan struct{})
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.ServeHTTP(w, r)
+		close(handlerDone)
+	}))
 	defer h.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, "POST", h.URL+"/v1/grants", strings.NewReader(validBody))
@@ -268,17 +314,14 @@ func TestRealDisconnectCancelsApproval(t *testing.T) {
 	<-a.entered
 	cancel()
 	<-done
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		audit.mu.Lock()
-		cancelled := len(audit.events) > 1 && audit.events[len(audit.events)-1].Outcome == "request_cancelled"
-		audit.mu.Unlock()
-		if cancelled {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("TCP disconnect did not stop the request handler")
 	}
-	t.Fatal("TCP disconnect did not cancel pending approval")
+	if len(audit.events) < 2 || audit.events[len(audit.events)-1].Outcome != "request_cancelled" {
+		t.Fatal("TCP disconnect did not cancel pending approval")
+	}
 }
 
 func TestBodyDeadlineDoesNotCancelPendingApproval(t *testing.T) {

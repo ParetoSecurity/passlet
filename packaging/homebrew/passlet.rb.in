@@ -25,5 +25,5 @@ cask "passlet" do
     must_succeed: true,
   }
 
-  caveats "Run passlet setup github to configure your GitHub account."
+  caveats "Run passlet github setup to configure your GitHub account."
 end

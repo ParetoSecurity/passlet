@@ -26,7 +26,7 @@ Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The packag
 ```sh
 brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
 brew install --cask paretosecurity/passlet/passlet
-passlet setup github
+passlet github setup
 passlet doctor
 ```
 

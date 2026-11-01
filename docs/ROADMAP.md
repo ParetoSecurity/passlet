@@ -12,7 +12,7 @@ CI tests, dependency updates, and the Passlet icon.
 
 ## v0.2
 
-Guided `passlet setup github`: create a per-user GitHub App using GitHub's manifest
+Guided `passlet github setup`: create a per-user GitHub App using GitHub's manifest
 flow, guide installation and user authorization, store credentials directly in
 protected Keychain, discard the unused signing key without persisting it, and
 verify identity and scope. Browser confirmations and organization approvals stay

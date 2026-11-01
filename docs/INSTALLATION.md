@@ -9,7 +9,7 @@ The first CLI-only release's package metadata must be published before these com
 ```sh
 brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
 brew install --cask paretosecurity/passlet/passlet
-passlet setup github
+passlet github setup
 passlet doctor
 ```
 
@@ -51,7 +51,7 @@ programs.passlet.enable = true;
 
 On macOS this installs the signed release bundle and enables the user LaunchAgent. On Linux it installs the requesting CLI only. For a Mac used only as a requesting agent, set `programs.passlet.service.enable = false`.
 
-Activate your Home Manager configuration, then run `passlet setup github` and `passlet doctor` on the approving Mac. Update the pinned Passlet source and reactivate to upgrade. Set `programs.passlet.enable = false` and reactivate to remove the package and service; credentials and audit history remain.
+Activate your Home Manager configuration, then run `passlet github setup` and `passlet doctor` on the approving Mac. Update the pinned Passlet source and reactivate to upgrade. Set `programs.passlet.enable = false` and reactivate to remove the package and service; credentials and audit history remain.
 
 For CLI-only Nix profiles or NixOS hosts, use `pkgs.callPackage "${inputs.passlet}/packaging/nix/package.nix" { }`. An approving Mac must use the Home Manager module to manage its service.
 

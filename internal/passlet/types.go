@@ -39,11 +39,12 @@ type Grant struct {
 	User         string            `json:"user"`
 }
 type Credentials struct {
-	ClientID     string    `json:"client_id"`
-	ClientSecret string    `json:"client_secret"`
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Account      AccountInfo `json:"account"`
+	ClientID     string      `json:"client_id"`
+	ClientSecret string      `json:"client_secret"`
+	AccessToken  string      `json:"access_token"`
+	RefreshToken string      `json:"refresh_token"`
+	ExpiresAt    time.Time   `json:"expires_at"`
 }
 
 func (c Credentials) Validate() error {

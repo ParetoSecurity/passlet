@@ -67,7 +67,7 @@ func ListenUnix(path string) (net.Listener, error) {
 	ok := false
 	defer func() {
 		if !ok {
-			lock.Close()
+			_ = lock.Close()
 		}
 	}()
 	info, err := lock.Stat()
@@ -84,24 +84,24 @@ func ListenUnix(path string) (net.Listener, error) {
 		// Also protect live sockets belonging to servers that do not use our lock.
 		conn, dialErr := net.DialTimeout("unix", path, ConnectDeadline)
 		if dialErr == nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, errors.New("socket_already_in_use")
 		}
-		if !errors.Is(dialErr, syscall.ECONNREFUSED) {
+		if !errors.Is(dialErr, syscall.ECONNREFUSED) { // coverage-ignore: Requires OS/socket interference after verifying an owned socket in its private directory.
 			return nil, errors.New("socket_state_unknown")
 		}
-		if err := os.Remove(path); err != nil {
+		if err := os.Remove(path); err != nil { // coverage-ignore: Requires filesystem failure or external mutation after stale-socket validation.
 			return nil, err
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) { // coverage-ignore: Parent and ownership already validated; only external filesystem interference remains.
 		return nil, err
 	}
 	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
+	if err != nil { // coverage-ignore: Valid private path and held lock; failure requires resource exhaustion or external interference.
 		return nil, err
 	}
-	if err := os.Chmod(path, 0600); err != nil {
-		l.Close()
+	if err := os.Chmod(path, 0600); err != nil { // coverage-ignore: Requires filesystem failure or removal of the newly created owned socket.
+		_ = l.Close()
 		return nil, err
 	}
 	ok = true
@@ -116,6 +116,6 @@ type lockedListener struct {
 
 func (l *lockedListener) Close() error {
 	err := l.Listener.Close()
-	l.once.Do(func() { l.lock.Close() })
+	l.once.Do(func() { _ = l.lock.Close() })
 	return err
 }

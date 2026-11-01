@@ -29,13 +29,13 @@ func (p *ProxyListener) Accept() (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
 		peer, err := readProxy(c)
 		if err != nil {
-			c.Close()
+			_ = c.Close()
 			continue
 		}
-		c.SetReadDeadline(time.Time{})
+		_ = c.SetReadDeadline(time.Time{})
 		return &proxyConn{Conn: c, peer: peer}, nil
 	}
 }

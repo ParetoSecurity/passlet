@@ -91,7 +91,7 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		}
 		return Grant{}, errors.New("approver_unavailable_or_connection_lost")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
 	if err != nil || len(payload) > 65536 {
 		return Grant{}, errors.New("invalid_response")

@@ -19,7 +19,10 @@ func reply(_ value: [String: Any]) {
 }
 func credentialData(_ value: Any?) -> Data? {
     guard let c = value as? [String: Any],
-          ["client_id", "client_secret", "access_token", "refresh_token", "expires_at"].allSatisfy({ (c[$0] as? String)?.isEmpty == false }) else { return nil }
+          ["client_id", "client_secret", "access_token", "refresh_token", "expires_at"].allSatisfy({ (c[$0] as? String)?.isEmpty == false }),
+          let account = c["account"] as? [String: Any],
+          ["login", "app_url", "verified_at"].allSatisfy({ (account[$0] as? String)?.isEmpty == false }),
+          let appID = account["app_id"] as? Int, appID > 0 else { return nil }
     return try? JSONSerialization.data(withJSONObject: c)
 }
 if CommandLine.arguments.contains("--status") {
@@ -118,6 +121,18 @@ final class Helper: NSObject, NSApplicationDelegate {
                             reply(["ok": true, "credentials": credentials])
                         }
                     }
+                }
+            }
+        case "delete":
+            guard let ctx = context, state.consumeRotation() else { finish("invalid_request"); return }
+            DispatchQueue.global().async {
+                var q = query()
+                q[kSecUseAuthenticationContext as String] = ctx
+                let status = SecItemDelete(q as CFDictionary)
+                DispatchQueue.main.async {
+                    guard !self.state.finishing else { return }
+                    if status == errSecSuccess { reply(["ok": true]) }
+                    else { self.finish("keychain_unavailable") }
                 }
             }
         case "store":

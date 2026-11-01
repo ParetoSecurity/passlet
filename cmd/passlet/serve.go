@@ -16,11 +16,11 @@ import (
 
 func defaultHelper() string {
 	self, err := os.Executable()
-	if err != nil {
+	if err != nil { // coverage-ignore: Requires OS failure to locate the running executable.
 		return ""
 	}
 	self, err = filepath.EvalSymlinks(self)
-	if err != nil {
+	if err != nil { // coverage-ignore: Requires external removal of the running executable during path resolution.
 		return ""
 	}
 	return filepath.Join(filepath.Dir(self), "PassletHelper")
@@ -60,19 +60,19 @@ func serve(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	a, err := passlet.OpenAudit(*audit)
 	if err != nil {
 		return errors.New("audit_unavailable")
 	}
-	defer a.Close()
+	defer func() { _ = a.Close() }()
 	listeners := []net.Listener{l}
 	if *tcp != "" {
 		t, err := net.Listen("tcp", *tcp)
 		if err != nil {
 			return err
 		}
-		defer t.Close()
+		defer func() { _ = t.Close() }()
 		listeners = append(listeners, &passlet.ProxyListener{Listener: t})
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -88,12 +88,12 @@ func serve(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Tailscale PROXY v2 listener:", *tcp)
 	}
 	select {
-	case err = <-results:
+	case err = <-results: // coverage-ignore: Listeners are owned here; unexpected accept failure requires an OS fault.
 	case <-ctx.Done():
 	}
 	cancel()
-	server.Close()
-	if errors.Is(err, http.ErrServerClosed) {
+	_ = server.Close()
+	if errors.Is(err, http.ErrServerClosed) { // coverage-ignore: Defensive shutdown normalization; normal cancellation selects ctx.Done.
 		return nil
 	}
 	return err

@@ -34,3 +34,39 @@ func TestPackageServiceSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestConfiguredTailscaleListener(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got, err := configuredTailscaleListener(); err != nil || got != "" {
+		t.Fatalf("default should disable TCP: %q %v", got, err)
+	}
+	dir := filepath.Join(home, ".config", "passlet")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "serve.json"), []byte(`{"tailscale_listen":"127.0.0.1:8484"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := configuredTailscaleListener(); err != nil || got != "127.0.0.1:8484" {
+		t.Fatalf("configured listener: %q %v", got, err)
+	}
+	t.Setenv("HOME", "")
+	if _, err := configuredTailscaleListener(); err == nil {
+		t.Fatal("accepted unavailable home")
+	}
+}
+
+func TestServeConfigIOErrors(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := readTailscaleListener(dir); err == nil || err.Error() != "cannot_read_serve_config" {
+		t.Fatalf("directory read: %v", err)
+	}
+	loop := filepath.Join(dir, "loop")
+	if err := os.Symlink(loop, loop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTailscaleListener(loop); err == nil || err.Error() != "cannot_read_serve_config" {
+		t.Fatalf("symlink loop: %v", err)
+	}
+}

@@ -3,6 +3,7 @@ package passlet
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,78 @@ import (
 	"testing"
 	"time"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestClientResponseErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+		status           int
+	}{
+		{"oversized", strings.Repeat("x", 65537), "invalid_response", 200},
+		{"forbidden", `{"error":"github_http_403"}`, "github_access_denied_check_App_permissions_installation_approval_and_org_policy", 403},
+		{"expired authorization", `{"error":"github_http_401"}`, "reauthorization_required", 401},
+		{"denied approval", `{"error":"approval_denied"}`, "approval_denied", 403},
+		{"malformed error", "not JSON", "grant_failed", 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: tc.status, Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+			})}
+			_, err := requestGrant(context.Background(), "https://mac.example", Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}, client)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("want %s, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestClientRejectsEqualSizedScopeSubstitution(t *testing.T) {
+	for _, scope := range []string{"repository", "permission"} {
+		t.Run(scope, func(t *testing.T) {
+			grant := Grant{ID: "id", Token: "token", User: "alice", ExpiresAt: time.Now().Add(time.Hour), Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read", "metadata": "read"}}
+			if scope == "repository" {
+				grant.Repositories[0] = "alice/other"
+			} else {
+				grant.Permissions["contents"] = "write"
+			}
+			data, err := json.Marshal(grant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(data)))}, nil
+			})}
+			_, err = requestGrant(context.Background(), "https://mac.example", Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}, client)
+			if err == nil || err.Error() != "unexpected_grant_scope" {
+				t.Fatalf("scope substitution accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestClientValidatesBeforeSending(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("invalid input reached transport")
+		return nil, errors.New("unexpected request")
+	})}
+	valid := Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}
+	for _, tc := range []struct {
+		ctx      context.Context
+		endpoint string
+		request  Request
+	}{
+		{context.Background(), "https://mac.example", Request{}},
+		{context.Background(), "http://mac.example", valid},
+		{nil, "https://mac.example", valid},
+	} {
+		if _, err := requestGrant(tc.ctx, tc.endpoint, tc.request, client); err == nil {
+			t.Fatal("invalid request accepted")
+		}
+	}
+}
 
 func TestClientHTTPS(t *testing.T) {
 	for _, variant := range []string{"valid", "broader", "expired", "parent_field", "provider_secret", "redirect"} {
@@ -24,7 +97,7 @@ func TestClientHTTPS(t *testing.T) {
 					return
 				}
 				if variant == "redirect" {
-					http.Redirect(w, r, "https://elsewhere.invalid", 302)
+					http.Redirect(w, r, "https://elsewhere.invalid", http.StatusFound)
 					return
 				}
 				var requested Request

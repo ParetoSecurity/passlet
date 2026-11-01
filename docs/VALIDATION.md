@@ -2,6 +2,56 @@
 
 ## Automated checks
 
+In-process deadline tests use Go's `testing/synctest` fake clock. Socket and
+Swift-helper process tests retain real deadlines. HTTP fixtures use the standard
+`net/http/httptest` package.
+
+`make check` runs golangci-lint from the pinned Nix environment. Run it separately
+with `make lint-go`, or format Go code with `golangci-lint fmt ./assets/... ./cmd/... ./internal/...`.
+The standard analyzers are enabled; `errcheck` excludes test fixtures, while the
+other analyzers check both production and test code.
+
+`make check` enforces 100% Go statement coverage per file and overall on each CI
+platform. Cross-package coverage includes library code exercised by CLI tests;
+local programs under `build/` are excluded. The threshold lives in
+`.testcoverage.yml` and is enforced by `go-test-coverage`. This measures Go statements,
+not branches or Swift code. Inspect uncovered lines with:
+
+```sh
+go tool cover -html=build/coverage.txt
+```
+
+Coverage exclusions use `// coverage-ignore: explanation` on the opening line of
+a block or function. An explanation is required. These affect `go-test-coverage`'s
+report and threshold; Go's raw profile and HTML report retain the excluded code.
+Exclusions are limited to native terminal/browser adapters, process-exit wiring,
+and defensive OS/resource-failure paths that cannot be induced deterministically
+without disrupting the test process. Each exclusion explains its reason beside
+the code. These paths remain in the raw report; 100% here means all non-excluded
+statements, not every possible execution path or native UI behavior.
+
+GitHub setup scenarios live in `cmd/passlet/features/*.feature`. Godog runs the
+implemented scenarios against the real Go CLI, with test-only GitHub, browser,
+and Swift-helper fixtures. Run them with:
+
+```sh
+go test -v -run '^TestGitHubSetupFeatures$' ./cmd/passlet
+```
+
+They also run in `make check` and CI. Scenarios tagged `@planned` describe the
+organization-approval flow awaiting live verification; they are excluded from the
+default suite, not counted as passing. To include them and see undefined steps
+fail strictly, run:
+
+```sh
+PASSLET_TEST_PLANNED=1 go test -v -run '^TestGitHubSetupFeatures$' ./cmd/passlet
+```
+
+When implementing a planned scenario, bind its steps to real behavior and remove
+its `@planned` tag (split it into a separate feature if needed). Never replace a
+missing implementation with a passing placeholder. These fixtures do not test
+real Touch ID or macOS Keychain protection.
+
 Inside `nix-shell`, run `make check-all`. On macOS also run `make check-macos`. The latter compiles the native helper, runs its lifecycle/cancellation/rotation state tests, and builds the UI smoke runner. Go tests cover prompt/scoping logic, provider responses, browser setup state and PKCE, identity, Unix sockets, cancellation, diagnostics, and credential handling.
 
 Run `make integration` on a Linux KVM machine. On Apple Silicon with the configured aarch64 Linux KVM builder:
@@ -33,7 +83,7 @@ From this checkout, enter `nix-shell`, set `PASSLET_PROVISIONING_PROFILE` to you
 make macos
 export PATH="$PWD/build/Passlet.app/Contents/MacOS:$PATH"
 passlet version
-passlet setup github
+passlet github setup
 passlet doctor
 ```
 
@@ -44,7 +94,7 @@ Run onboarding in a dedicated Mac test account if the existing Keychain identity
 Use disposable GitHub repositories only for mutation tests. Record each item as pass, fail, or not run, with the OS/app version. Do not paste grant contents or credentials into the report.
 
 1. Build a development-signed v0.2 app with its explicit profile, or use the reviewed signed release candidate. Verify codesign and the expected Keychain identity. Use a dedicated macOS test account for fresh onboarding so the existing production authorization is not overwritten.
-2. Run `passlet setup github`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm `passlet status` reports that locally recorded user. Confirm no private signing key or credential file was saved by setup. Check incomplete/pending organization approval produces an actionable error.
+2. Run `passlet github setup`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm setup reports the verified user and `passlet status` checks Keychain without displaying protected account identity. Confirm no private signing key or credential file was saved by setup. Organization approval handling is planned; do not count it as implemented.
 3. Install through Homebrew or enable the Home Manager module, then run `passlet doctor`. Confirm no default TCP listener. Log out and back in; confirm service startup and no unsolicited credential prompt. Kill only this test service's Go process and confirm launchd restarts it and the socket works again.
 4. Start a request with explicit repositories and permissions and a private `--out` path. Verify the native prompt shows the honest socket caller, complete repositories/permissions, and approximate provider expiry. Approve with Touch ID: exactly one prompt must release the protected credential and produce a scoped token. Repeat using password, then denial. Denial must create no grant.
 5. Leave a request unapproved for the 120-second server deadline. Confirm the native prompt disappears and no grant is delivered. Repeat by cancelling the requesting CLI or closing its SSH tunnel. A late interaction must never produce a grant for a cancelled request.
@@ -61,12 +111,14 @@ Signing/notarization of the final v0.2 release and its production Keychain behav
 
 2026-10-31: live browser testing completed personal app creation, manifest permission verification, OAuth authorization, installation/identity verification, and replacement of existing credentials through the installed signed helper after native approval. Replacement used an ignored local test harness; production fresh import and later scoped-token use remain separate checks.
 
-Pending live validation: in a disposable Mac account, run `passlet setup github`, create a test app, open Install app in a new tab, and select a disposable repository. Return to the setup tab and Continue to authorization. Confirm Keychain import succeeds. Verify App settings have no Setup URL and Request user authorization during installation is disabled. Repeat with authorization denied and confirm no credentials are saved.
+Pending live validation: run `passlet github setup` from an interactive terminal with no Passlet credentials saved. Check the prefilled handle is editable. Accept it, read the introduction, and confirm the browser remains closed until Enter. Create and authorize the app, then install it for a test organization with All repositories selected. Verify automatic return to localhost, the installation verification message, Keychain import, and browser/terminal success. Check the fixed Setup URL in GitHub App settings. Deny authorization in a separate run and confirm no credentials are saved. Automated fixtures inspect the auto-submit form/script; actual browser execution and native Keychain protection still require this manual walkthrough.
 
-After setup exits, install the same app in a second test organization or change its selected repositories. Confirm GitHub finishes without redirecting to localhost. Verify a scoped request on an installed disposable repository still requires native approval. The OAuth callback remains registered, but installations do not use it. Automated fixtures do not substitute for these live browser and Keychain checks.
+After setup exits, install the same app in a second test organization or change its selected repositories. GitHub should redirect to the saved localhost Setup URL; when setup is not running, that redirect will fail even though installation succeeds. Verify a scoped request on an installed disposable repository still requires native approval. The failed redirect does not undo the GitHub installation. Automated fixtures do not substitute for these live browser and Keychain checks.
 
 ## Package lifecycle
 
 Use a disposable Mac account for both package managers separately. Install a signed release, confirm the CLI is on PATH and the service runs before provider setup, then complete setup with disposable repositories. Confirm one native approval unlocks Keychain. Upgrade through the package manager and verify the running process uses the new version. Log out/in and test crash recovery. Uninstall and verify the LaunchAgent and process are gone while credentials and audit history remain. Repeat after a failed installation and verify errors are actionable. Attempt to enable both managers and verify an ownership conflict is reported.
 
 Automated fixture tests and Home Manager evaluation do not substitute for this signed-release lifecycle test. Record unperformed checks as not run.
+
+For the CLI setup changes, use a disposable app and Keychain item to check `passlet github reset`: Enter cancels, `y` followed by native approval deletes only Passlet’s credentials, and a second reset exits without prompting. Denying native approval must retain the item. Run setup again after reset and verify the existing app name is detected before the browser opens. These native checks have not been performed by the automated BDD suite.

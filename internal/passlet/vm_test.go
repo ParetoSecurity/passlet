@@ -103,22 +103,23 @@ func runVMGitHub(t *testing.T, ctx context.Context) {
 				Permissions map[string]string `json:"permissions"`
 			}
 			if !ok || id != "fixture" || secret != "fixture-client-secret" || json.NewDecoder(r.Body).Decode(&request) != nil || request.Target != "acme" {
-				http.Error(w, "forbidden", 403)
+				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
 			user := strings.TrimPrefix(request.Access, "parent-")
 			if user != "alice" && user != "bob" {
-				http.Error(w, "forbidden", 403)
+				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
 			repos := []string{}
 			for _, id := range request.IDs {
-				if id == 1 {
+				switch id {
+				case 1:
 					repos = append(repos, "acme/test-a")
-				} else if id == 2 {
+				case 2:
 					repos = append(repos, "acme/test-b")
-				} else {
-					http.Error(w, "bad repo", 422)
+				default:
+					http.Error(w, "bad repo", http.StatusUnprocessableEntity)
 					return
 				}
 			}
@@ -152,7 +153,7 @@ func runVMGitHub(t *testing.T, ctx context.Context) {
 		mu.Unlock()
 		if !ok || !grant.ExpiresAt.After(time.Now()) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="fixture"`)
-			http.Error(w, "authentication required", 401)
+			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
 		repo := ""
@@ -162,7 +163,7 @@ func runVMGitHub(t *testing.T, ctx context.Context) {
 			}
 		}
 		if repo == "" {
-			http.Error(w, "repository outside grant", 403)
+			http.Error(w, "repository outside grant", http.StatusForbidden)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/repos/") {
@@ -171,11 +172,11 @@ func runVMGitHub(t *testing.T, ctx context.Context) {
 		}
 		write := strings.Contains(r.URL.Path, "git-receive-pack") || r.URL.Query().Get("service") == "git-receive-pack"
 		if write && grant.Permissions["contents"] != "write" {
-			http.Error(w, "write outside grant", 403)
+			http.Error(w, "write outside grant", http.StatusForbidden)
 			return
 		}
 		if grant.Permissions["contents"] == "" {
-			http.Error(w, "contents outside grant", 403)
+			http.Error(w, "contents outside grant", http.StatusForbidden)
 			return
 		}
 		backend.ServeHTTP(w, r)

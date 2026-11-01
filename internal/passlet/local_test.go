@@ -170,3 +170,59 @@ func TestUnixNoFallbackAndDefault(t *testing.T) {
 		t.Fatal("missing socket accepted")
 	}
 }
+
+func TestPrivateDirectoryErrors(t *testing.T) {
+	if err := PrivateDir("relative"); err == nil {
+		t.Fatal("accepted relative directory")
+	}
+	missing := filepath.Join(t.TempDir(), "missing")
+	if err := CheckPrivateDir(missing); !os.IsNotExist(err) {
+		t.Fatalf("missing directory: %v", err)
+	}
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := PrivateDir(filepath.Join(file, "child")); err == nil {
+		t.Fatal("created directory inside file")
+	}
+	t.Setenv("PASSLET_ENDPOINT", "https://mac.example")
+	if got := DefaultEndpoint(); got != "https://mac.example" {
+		t.Fatalf("ignored endpoint override: %s", got)
+	}
+}
+
+func TestSocketRejectsSharedLockAndLiveUnmanagedSocket(t *testing.T) {
+	t.Run("shared lock", func(t *testing.T) {
+		path := socketPath(t)
+		if err := os.WriteFile(path+".lock", nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path+".lock", 0644); err != nil {
+			t.Fatal(err)
+		}
+		if l, err := ListenUnix(path); err == nil {
+			l.Close()
+			t.Fatal("accepted shared lock")
+		} else if err.Error() != "socket_lock_unsafe" {
+			t.Fatal(err)
+		}
+	})
+	t.Run("unmanaged listener", func(t *testing.T) {
+		path := socketPath(t)
+		l, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		if second, err := ListenUnix(path); err == nil {
+			second.Close()
+			t.Fatal("replaced live socket")
+		} else if err.Error() != "socket_already_in_use" {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("live socket removed:", err)
+		}
+	})
+}

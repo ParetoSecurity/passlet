@@ -43,6 +43,8 @@ We're hoping to do these next:
 
 Approving requests requires macOS 14 or later and a logged-in graphical session.
 
+Install [Passlet Conductor on your Mac](docs/INSTALLATION.md#install-conductor-on-macos) to hold credentials and approve requests. Passlet Agent is included for local coding tools. The guide starts with Nix/Home Manager.
+
 Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 
 ```sh

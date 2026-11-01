@@ -24,6 +24,8 @@ The service script rejects a plist owned by another installer rather than overwr
 
 ## Nix / Home Manager
 
+The root flake exposes `packages.<system>.default` (also named `passlet`) for macOS and Linux on ARM64 and x86_64, plus `homeManagerModules.default` (also named `passlet`). Its `flake.lock` pins stable nixpkgs independently of the development environment in `nix/`. Consumers can follow their own nixpkgs input. Keep both lock files updated when refreshing dependencies.
+
 `nix/package.nix` unpacks pinned release archives. It performs no stripping, patching or wrapping of the signed macOS executables. The CLI symlink resolves into the original app bundle so it can locate the helper. Linux installs only the standalone CLI.
 
 `nix/home-manager.nix` installs the package and, on macOS, declares the per-user LaunchAgent through Home Manager's launchd module. A package change changes the agent's executable path, so activation reloads it. Removing the module's configuration removes the agent. The package never runs setup or creates credentials during a Nix build or activation.

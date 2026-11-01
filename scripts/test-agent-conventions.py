@@ -11,21 +11,29 @@ spec.loader.exec_module(module)
 
 
 class ConventionsTest(unittest.TestCase):
-    def test_pin_updates_and_local_skill_wins(self):
+    def test_pin_updates_and_local_skills_win(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             project = root / "project"
             (project / "skills" / "passlet").mkdir(parents=True)
+            (project / ".agents" / "skills" / "release-passlet").mkdir(parents=True)
+            (project / ".claude").symlink_to(".agents", target_is_directory=True)
             for version in ("old", "new"):
                 upstream = root / version
-                (upstream / "rules").mkdir(parents=True)
-                (upstream / "skills" / "passlet").mkdir(parents=True)
-                (upstream / "skills" / "review").mkdir(parents=True)
+                for name in ("pkgs", "rules", "commands", "skills/passlet", "skills/review"):
+                    (upstream / name).mkdir(parents=True)
+                if version == "old":
+                    (upstream / "skills" / "retired").mkdir()
                 with patch.object(module, "STORE_PREFIX", str(root) + "/"):
                     module.sync(upstream, project)
-                self.assertEqual((project / ".claude/rules").resolve(), upstream / "rules")
+                self.assertEqual((project / ".agents/rules").resolve(), upstream / "rules")
+                self.assertEqual((project / ".agents/commands").resolve(), upstream / "commands")
                 self.assertEqual((project / ".claude/skills/review").resolve(), upstream / "skills/review")
                 self.assertEqual((project / ".claude/skills/passlet").resolve(), project / "skills/passlet")
+                self.assertTrue((project / ".agents/skills/release-passlet").is_dir())
+                self.assertFalse((project / ".agents/skills/release-passlet").is_symlink())
+                self.assertFalse((project / ".agents/pkgs").exists())
+            self.assertFalse((project / ".agents/skills/retired").is_symlink())
 
     def test_preserve_project_owned_paths(self):
         with tempfile.TemporaryDirectory() as directory:

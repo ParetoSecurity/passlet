@@ -45,6 +45,7 @@ let
   };
 in pkgs.testers.runNixOSTest {
   name = "passlet-ssh-multi-user";
+  globalTimeout = 900;
   nodes = {
     alice = approver "alice";
     bob = approver "bob";
@@ -87,10 +88,6 @@ in pkgs.testers.runNixOSTest {
     import shlex
 
     start_all()
-    # Nested KVM on Apple Silicon can boot more slowly than the driver's
-    # fixed five-minute connect limit. Wait for readiness, never a fixed sleep.
-    for machine in (alice, bob, cruncher):
-        machine.wait_for_console_text("connecting to host", timeout=900)
     cruncher.wait_for_unit("sshd.service")
     cruncher.wait_for_open_port(443)
     for machine in (alice, bob):

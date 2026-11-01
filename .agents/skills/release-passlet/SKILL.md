@@ -42,6 +42,14 @@ The current release workflow accepts `vX.Y.Z` tags whose commits are ancestors o
 - [ ] Verify these exact assets exist for the selected version: `passlet_X.Y.Z_macos_universal.zip`, `passlet_X.Y.Z_linux_amd64.tar.gz`, `passlet_X.Y.Z_linux_arm64.tar.gz`, and `passlet_X.Y.Z_SHA256SUMS`.
 - [ ] Download the artifacts to a private task directory and verify their SHA-256 checksums. On macOS, extract the bundle and verify its signature and stapled ticket. Complete the applicable production validation before announcing the release.
 
+Apple's `stapler` attaches and validates notarization tickets so Gatekeeper can verify notarization offline. A Nix shell can set `DEVELOPER_DIR` to an SDK that lacks this tool, making `xcrun stapler` report it missing even when Apple Command Line Tools are installed. Check `/Library/Developer/CommandLineTools/usr/bin/stapler` before installing anything. If present, validate the downloaded bundle directly:
+
+```sh
+/Library/Developer/CommandLineTools/usr/bin/stapler validate /absolute/path/to/Passlet.app
+```
+
+Alternatively, use `env -u DEVELOPER_DIR /usr/bin/xcrun stapler validate /absolute/path/to/Passlet.app` to use the system-selected developer tools. Keep the Nix SDK configuration unchanged. If neither route finds the tool, report local ticket validation as not run and distinguish it from successful CI validation and local `codesign`/Gatekeeper checks.
+
 For a failed run, report the failing stage and any draft or published assets. If the release is already immutable, use a newly authorized version; do not disable immutability or try to reuse the tag. Stop before destructive recovery. Uploads intentionally refuse overwrites, so rerunning a partially uploaded release may fail again. Do not delete assets, retag, or loop retries without an explicit recovery decision.
 
 ## 3. Publish package metadata

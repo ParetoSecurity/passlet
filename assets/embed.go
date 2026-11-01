@@ -3,5 +3,5 @@ package assets
 
 import _ "embed"
 
-//go:embed github-app-logo.png
-var LogoPNG []byte
+//go:embed favicon.png
+var FaviconPNG []byte

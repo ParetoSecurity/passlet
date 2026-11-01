@@ -300,7 +300,7 @@ func (s *SetupFlow) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/favicon.png" {
 		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(assets.LogoPNG)
+		_, _ = w.Write(assets.FaviconPNG)
 		return
 	}
 	s.mu.Lock()

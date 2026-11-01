@@ -43,6 +43,8 @@ We're hoping to do these next:
 
 Approving requests requires macOS 14 or later and a logged-in graphical session.
 
+For Nix, follow the [Home Manager installation guide](docs/INSTALLATION.md#nix--home-manager). It covers standalone Home Manager, nix-darwin, NixOS, and agent-only installs.
+
 Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 
 ```sh

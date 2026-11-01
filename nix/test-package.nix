@@ -7,9 +7,10 @@
     fileset = pkgs.lib.fileset.unions [
       (source + "/go.mod") (source + "/go.sum")
       (source + "/cmd") (source + "/internal")
+      (source + "/assets")
     ];
   };
-  vendorHash = "sha256-AQCVyh83+7eFuhQmSqCyUjp684DdgOSIapfVwbUFnbY=";
+  vendorHash = "sha256-nyzNDq69gvnpqgsGCFEFsGuHBsGA77E5+6XnVVg19/k=";
   subPackages = [ "cmd/passlet" ];
   doCheck = false; # Tests run separately; the VM driver runs the fixture binary.
   postBuild = ''

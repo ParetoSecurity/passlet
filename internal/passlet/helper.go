@@ -39,11 +39,11 @@ type helperReply struct {
 func (h NativeHelper) Approve(ctx context.Context, prompt string) (CredentialSession, error) {
 	cmd := exec.Command(h.Path)
 	in, err := cmd.StdinPipe()
-	if err != nil {
+	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return nil, errors.New("helper_unavailable")
 	}
 	out, err := cmd.StdoutPipe()
-	if err != nil {
+	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return nil, errors.New("helper_unavailable")
 	}
 	if err = cmd.Start(); err != nil {
@@ -58,7 +58,7 @@ func (h NativeHelper) Approve(ctx context.Context, prompt string) (CredentialSes
 		case <-s.done:
 		}
 	}()
-	if err = s.send(map[string]any{"op": "approve", "prompt": prompt}); err != nil {
+	if err = s.send(map[string]any{"op": "approve", "prompt": prompt}); err != nil { // coverage-ignore: Helper must die during the first pipe write; deterministic closed-pipe send failure is tested separately.
 		s.Close()
 		return nil, err
 	}
@@ -110,40 +110,43 @@ func (s *helperSession) Close() {
 	s.once.Do(func() {
 		// EOF tells the helper to invalidate its LAContext immediately. Kill is a
 		// fallback if the GUI session or helper is unresponsive.
-		s.in.Close()
+		_ = s.in.Close()
 		exited := make(chan struct{})
-		go func() { s.cmd.Wait(); close(exited) }()
+		go func() { _ = s.cmd.Wait(); close(exited) }()
 		select {
 		case <-exited:
 		case <-time.After(time.Second):
-			s.cmd.Process.Kill()
+			_ = s.cmd.Process.Kill()
 			<-exited
 		}
 		close(s.done)
 	})
 }
 func ImportCredentials(ctx context.Context, path string, c Credentials) error {
+	if err := c.Account.Validate(); err != nil {
+		return err
+	}
 	if err := c.Validate(); err != nil {
 		return err
 	}
 	cmd := exec.CommandContext(ctx, path, "--import")
 	in, err := cmd.StdinPipe()
-	if err != nil {
+	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return err
 	}
 	out, err := cmd.StdoutPipe()
-	if err != nil {
+	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return err
 	}
 	if err = cmd.Start(); err != nil {
 		return errors.New("helper_unavailable")
 	}
 	if err = json.NewEncoder(in).Encode(map[string]any{"credentials": c}); err != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
 		return errors.New("helper_unavailable")
 	}
-	in.Close()
+	_ = in.Close()
 	var reply helperReply
 	err = json.NewDecoder(io.LimitReader(out, 65536)).Decode(&reply)
 	wait := cmd.Wait()
@@ -154,4 +157,25 @@ func ImportCredentials(ctx context.Context, path string, c Credentials) error {
 		return errors.New("keychain_import_failed")
 	}
 	return nil
+}
+
+// Reset requires native approval and deletes only Passlet's own credential item.
+func (h NativeHelper) Reset(ctx context.Context) (AccountInfo, error) {
+	session, err := h.Approve(ctx, "remove your Passlet GitHub credentials")
+	if err != nil {
+		return AccountInfo{}, err
+	}
+	defer session.Close()
+	s := session.(*helperSession)
+	account := s.Credentials().Account
+	if err := account.Validate(); err != nil {
+		return AccountInfo{}, err
+	}
+	if err := s.send(map[string]any{"op": "delete"}); err != nil { // coverage-ignore: Requires helper death between approval and delete; closed-pipe send handling is tested separately.
+		return AccountInfo{}, err
+	}
+	if _, err := s.reply(); err != nil {
+		return AccountInfo{}, err
+	}
+	return account, nil
 }

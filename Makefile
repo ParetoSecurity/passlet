@@ -20,3 +20,7 @@ integration:
 	nix-build nix/tests.nix --no-out-link
 check-macos:
 	./scripts/check-macos.sh
+
+.PHONY: lint-go
+lint-go:
+	golangci-lint run ./assets/... ./cmd/... ./internal/...

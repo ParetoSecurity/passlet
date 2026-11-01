@@ -8,55 +8,25 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 )
 
-// AccountInfo is informational, not an authorization source. It never contains
-// credentials and status explicitly labels it as locally recorded metadata.
+// AccountInfo is stored with credentials in the protected Keychain item.
 type AccountInfo struct {
-	Login      string    `json:"login"`
-	AppID      int64     `json:"app_id"`
-	AppURL     string    `json:"app_url"`
-	VerifiedAt time.Time `json:"verified_at"`
+	InstallationOwner string    `json:"installation_owner,omitempty"`
+	Login             string    `json:"login"`
+	AppID             int64     `json:"app_id"`
+	AppURL            string    `json:"app_url"`
+	VerifiedAt        time.Time `json:"verified_at"`
 }
 
-func SaveAccount(path string, account AccountInfo) error {
-	if err := PrivateDir(filepath.Dir(path)); err != nil {
-		return err
+func (a AccountInfo) Validate() error {
+	if !component.MatchString(a.Login) || a.AppID <= 0 || a.VerifiedAt.IsZero() || GitHubAppSettingsURL(a.AppURL) == "https://github.com/settings/apps" {
+		return errors.New("invalid_protected_account_identity")
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".account-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if err := json.NewEncoder(f).Encode(account); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
-}
-
-func LoadAccount(path string) (*AccountInfo, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var account AccountInfo
-	if json.NewDecoder(io.LimitReader(f, 8192)).Decode(&account) != nil || !component.MatchString(account.Login) || account.AppID <= 0 {
-		return nil, errors.New("account_metadata_invalid")
-	}
-	return &account, nil
+	return nil
 }
 
 func Health(ctx context.Context, endpoint string) error {
@@ -73,7 +43,7 @@ func Health(ctx context.Context, endpoint string) error {
 	if err != nil {
 		return errors.New("approver_unavailable_check_service_or_SSH_tunnel")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var health struct {
 		Status string `json:"status"`
 	}
@@ -88,7 +58,7 @@ func KeychainStatus(ctx context.Context, helper string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, helper, "--status")
 	pipe, err := cmd.StdoutPipe()
-	if err != nil {
+	if err != nil { // coverage-ignore: Fresh command; only process-wide file-descriptor exhaustion can fail pipe creation.
 		return "", errors.New("helper_unavailable")
 	}
 	if err := cmd.Start(); err != nil {
@@ -115,29 +85,31 @@ type AuditEntry struct {
 	Event Event  `json:"event"`
 }
 
-func ReadAudit(path string, limit int) ([]AuditEntry, error) {
+func ReadAudit(path string, limit int) ([]AuditEntry, int, error) {
 	if limit < 1 || limit > 1000 || !filepath.IsAbs(path) {
-		return nil, errors.New("audit_requires_absolute_path_and_limit_1_to_1000")
+		return nil, 0, errors.New("audit_requires_absolute_path_and_limit_1_to_1000")
 	}
 	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
 	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return nil, errors.New("audit_unavailable")
+	if err != nil { // coverage-ignore: Registered SQLite driver opens lazily; unavailable databases fail the tested query path.
+		return nil, 0, errors.New("audit_unavailable")
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	rows, err := db.Query("SELECT at,data FROM events ORDER BY id DESC LIMIT ?", limit)
 	if err != nil {
-		return nil, errors.New("audit_unavailable")
+		return nil, 0, errors.New("audit_unavailable")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	entries := []AuditEntry{}
+	skipped := 0
 	for rows.Next() {
 		var e AuditEntry
 		var data string
 		if rows.Scan(&e.At, &data) != nil || json.Unmarshal([]byte(data), &e.Event) != nil {
-			return nil, errors.New("audit_invalid")
+			skipped++
+			continue
 		}
 		entries = append(entries, e)
 	}
-	return entries, rows.Err()
+	return entries, skipped, rows.Err()
 }

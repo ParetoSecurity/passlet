@@ -49,7 +49,7 @@ func apiError(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": code})
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -63,7 +63,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"status":"ready"}`)
+		_, _ = io.WriteString(w, `{"status":"ready"}`)
 		return
 	}
 	if r.URL.Path != "/v1/grants" {
@@ -88,14 +88,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Body deadline must not become an approval deadline through net/http
 	// background disconnect detection after the request body is consumed.
-	http.NewResponseController(w).SetReadDeadline(time.Time{})
+	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
 	var requested Request
 	if strictJSON(data, &requested) != nil || requested.Validate() != nil {
 		apiError(w, 400, "invalid_request")
 		return
 	}
 	id := make([]byte, 16)
-	if _, err = rand.Read(id); err != nil {
+	if _, err = rand.Read(id); err != nil { // coverage-ignore: crypto/rand.Read never returns an error on the pinned Go version; entropy failure terminates the process.
 		apiError(w, 500, "internal_error")
 		return
 	}
@@ -109,7 +109,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer func() { <-s.busy }()
 	default:
 		event.Outcome = "busy"
-		s.Audit.Record(event)
+		_ = s.Audit.Record(event)
 		apiError(w, 409, "approver_busy")
 		return
 	}
@@ -132,7 +132,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		event.Outcome = code
-		s.Audit.Record(event)
+		_ = s.Audit.Record(event)
 		apiError(w, status, code)
 	}
 	session, err := s.Approval.Approve(ctx, requested.Prompt(caller))
@@ -171,6 +171,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	grant.ID = event.RequestID
 	event.ExpiresAt = &grant.ExpiresAt
+	event.GrantedOrganization = grant.Organization
+	event.GrantedAccount = grant.Account
 	event.GrantedPermissions = grant.Permissions
 	event.GrantedRepositories = grant.Repositories
 	event.GitHubUser = grant.User

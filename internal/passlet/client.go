@@ -91,7 +91,7 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		}
 		return Grant{}, errors.New("approver_unavailable_or_connection_lost")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
 	if err != nil || len(payload) > 65536 {
 		return Grant{}, errors.New("invalid_response")
@@ -116,7 +116,7 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 	if strictJSON(payload, &grant) != nil || grant.Token == "" || grant.ID == "" || grant.User == "" || !grant.ExpiresAt.After(time.Now()) || time.Until(grant.ExpiresAt) > 8*time.Hour+time.Minute {
 		return Grant{}, errors.New("invalid_grant")
 	}
-	if len(grant.Repositories) != len(r.Repositories) || len(grant.Permissions) != len(r.Permissions) {
+	if grant.Organization != r.Organization || grant.Account != r.Account || len(grant.Repositories) != len(r.Repositories) || len(grant.Permissions) != len(r.Permissions) {
 		return Grant{}, errors.New("unexpected_grant_scope")
 	}
 	for i, repo := range r.Repositories {

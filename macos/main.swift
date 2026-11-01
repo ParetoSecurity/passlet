@@ -19,7 +19,10 @@ func reply(_ value: [String: Any]) {
 }
 func credentialData(_ value: Any?) -> Data? {
     guard let c = value as? [String: Any],
-          ["client_id", "client_secret", "access_token", "refresh_token", "expires_at"].allSatisfy({ (c[$0] as? String)?.isEmpty == false }) else { return nil }
+          ["client_id", "client_secret", "access_token", "refresh_token", "expires_at"].allSatisfy({ (c[$0] as? String)?.isEmpty == false }),
+          let account = c["account"] as? [String: Any],
+          ["login", "app_url", "verified_at"].allSatisfy({ (account[$0] as? String)?.isEmpty == false }),
+          let appID = account["app_id"] as? Int, appID > 0 else { return nil }
     return try? JSONSerialization.data(withJSONObject: c)
 }
 if CommandLine.arguments.contains("--status") {
@@ -53,16 +56,12 @@ if CommandLine.arguments.contains("--import") {
     else { reply(["ok": false, "error": status == errSecDuplicateItem ? "credentials_already_exist" : "keychain_import_failed", "status": status]) }
     exit(status == errSecSuccess ? 0 : 1)
 }
-// Finder and `open` start the app with no arguments and no request pipe.
-// Open the optional menu bar app and exit. Approvals always come through a pipe.
+// Approval requests arrive through private pipes, never an interactive launch.
 var stdinInfo = stat()
-if CommandLine.arguments.count == 1, fstat(STDIN_FILENO, &stdinInfo) == 0,
-   (stdinInfo.st_mode & S_IFMT) != S_IFIFO, (stdinInfo.st_mode & S_IFMT) != S_IFSOCK {
-    let menu = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/PassletMenu.app")
-    let done = DispatchSemaphore(value: 0)
-    NSWorkspace.shared.openApplication(at: menu, configuration: NSWorkspace.OpenConfiguration()) { _, _ in done.signal() }
-    _ = done.wait(timeout: .now() + 10)
-    exit(0)
+if fstat(STDIN_FILENO, &stdinInfo) != 0 ||
+   ((stdinInfo.st_mode & S_IFMT) != S_IFIFO && (stdinInfo.st_mode & S_IFMT) != S_IFSOCK) {
+    fputs("Use the passlet CLI for setup and service management.\n", stderr)
+    exit(1)
 }
 
 final class Helper: NSObject, NSApplicationDelegate {
@@ -122,6 +121,18 @@ final class Helper: NSObject, NSApplicationDelegate {
                             reply(["ok": true, "credentials": credentials])
                         }
                     }
+                }
+            }
+        case "delete":
+            guard let ctx = context, state.consumeRotation() else { finish("invalid_request"); return }
+            DispatchQueue.global().async {
+                var q = query()
+                q[kSecUseAuthenticationContext as String] = ctx
+                let status = SecItemDelete(q as CFDictionary)
+                DispatchQueue.main.async {
+                    guard !self.state.finishing else { return }
+                    if status == errSecSuccess { reply(["ok": true]) }
+                    else { self.finish("keychain_unavailable") }
                 }
             }
         case "store":

@@ -14,32 +14,29 @@ Approve each request on your Mac with one native Touch ID/password prompt. Passl
 
 This branch implements v0.2; v0.1.0 is already released. Follow these instructions with the v0.2 build. There are no compatibility aliases or migrations before v1.0.
 
-- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. Run the service from the menu bar app or as a login service.
+- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. Run the service with the CLI or as a login service.
 - Agent: macOS or Linux, Passlet on PATH, and Git and/or GitHub CLI.
 - Remote agents: OpenSSH with Unix socket forwarding, or opt-in Tailscale HTTPS.
 - Each person owns and authorizes their own GitHub App. Organization installation may require an organization administrator.
 
 ## Install and set up your Mac
 
-Download the matching release archive and verify its checksum against `SHA256SUMS`. Extract `Passlet.app` into `/Applications`. Keep the CLI and helper together inside the signed bundle:
+Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 
 ```sh
-mkdir -p "$HOME/.local/bin"
-ln -s /Applications/Passlet.app/Contents/MacOS/passlet "$HOME/.local/bin/passlet"
-export PATH="$HOME/.local/bin:$PATH"
-passlet version
-passlet setup github
-passlet service install
+brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
+brew install --cask paretosecurity/passlet/passlet
+passlet github setup
 passlet doctor
 ```
 
-Or open `Passlet.app`: the menu bar app runs the service and has **Set Up GitHub…** and **Run Doctor** items. Turn on **Start at Login** in its menu instead of `passlet service install`.
+The first CLI-only release must publish package metadata before these installation commands are available.
 
-`setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum includes Contents, Pull requests, Issues and Workflows write, plus Actions read. Override it with `--permissions contents:read,pull_requests:read` if you want a read-only app. Each later agent request must still name its exact repositories and permissions, within that maximum.
+`setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum requests the highest supported level for the repository, organization, and account permissions in the checked-in GitHub API catalog, including administration, secrets, and account keys. Metadata remains read-only. Enterprise-only and single-file permissions are excluded. Select All repositories during installation; each agent token remains scoped to explicitly approved repositories. Override it with `--permissions contents:read,pull_requests:read` if you want a read-only app. Each later agent request must still name its exact repositories and permissions, within that maximum.
 
 Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
-`service install` creates a per-user launch agent that starts at graphical login and restarts after a crash. It does not unlock credentials. When the login service is installed, the menu bar app leaves the service to it. For foreground troubleshooting, stop the login service first, then run `passlet serve`. See [setup and troubleshooting](docs/SETUP.md).
+The package-managed LaunchAgent starts at graphical login and restarts after a crash. It never unlocks credentials. Setup configures providers only. See [setup and troubleshooting](docs/SETUP.md).
 
 ## Local agents
 
@@ -99,7 +96,9 @@ Use HTTPS Git remotes. `exec --grant` uses the delivered token without contactin
 The default service opens no TCP port. To enable Tailscale alongside the local socket, install the service with `--tailscale-listen 127.0.0.1:8484` (uninstall an existing login service before changing its arguments), then expose only that loopback backend:
 
 ```sh
-passlet service install --tailscale-listen 127.0.0.1:8484
+# Home Manager: programs.passlet.service.tailscaleListen = "127.0.0.1:8484";
+# Homebrew: configure tailscale_listen in ~/.config/passlet/serve.json,
+# then brew reinstall --cask paretosecurity/passlet/passlet.
 tailscale serve --proxy-protocol=2 --tls-terminated-tcp=8443 tcp://127.0.0.1:8484
 ```
 
@@ -147,13 +146,9 @@ Plugin versions are independent of app releases. When changing the bundled
 skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
 managers can identify the update.
 
-## Menu bar app
+## Updating
 
-Opening `Passlet.app` starts the menu bar app. If the login service is not installed, it runs `passlet serve` while it is open, restarts it after a crash, and stops it when you quit. The service log is `~/.local/share/passlet/menu-service.log`. If the login service is installed, launchd keeps the service and the menu only shows status. The socket lock prevents two services from running at once.
-
-The menu shows whether the service is ready, the locally recorded GitHub account, the Keychain setup state, and recent requests from the audit log. **Set Up GitHub…** opens `passlet setup github` in Terminal, because it waits for the browser flow. **Run Doctor** shows the `passlet doctor` report. **Start at Login** opens the menu, and so the service, at login. The menu never unlocks credentials or approves requests; the native approval prompt keeps that job.
-
-The menu checks GitHub Releases once a day (you can turn this off) and offers newer versions. An update must match the published size and SHA-256, pass a strict signature and Gatekeeper check, and be signed by the same Developer ID and team as the installed app. Passlet then replaces the whole app bundle, asking for an administrator password if the folder is not writable, restarts the login service if it is installed, and relaunches the menu.
+Use `brew upgrade --cask paretosecurity/passlet/passlet`, or update your pinned Passlet Nix source and activate Home Manager. The package manager restarts the service. Uninstall through the same manager. Credentials and audit history remain in place.
 
 ## Status, diagnostics, and audit
 
@@ -161,7 +156,6 @@ The menu checks GitHub Releases once a day (you can turn this off) and offers ne
 passlet status
 passlet doctor
 passlet audit --limit 20
-passlet service status
 ```
 
 Diagnostics never mint tokens or trigger authentication. They distinguish locally recorded GitHub identity from current GitHub state; protected Keychain availability can remain unknown without authentication. `doctor` returns nonzero for detected faults and suggests repairs. `audit` reads an existing local SQLite database without creating one and emits structured events: caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
@@ -201,6 +195,6 @@ GNU General Public License v3.0 (GPL-3.0-only). See [LICENSE](LICENSE).
 
 The macOS CI job builds and uploads a universal app before running its tests. Linux checks and NixOS integration run in parallel. Open the [CI runs](https://github.com/ParetoSecurity/passlet/actions/workflows/ci.yml), select the commit or PR, and download `Passlet-macOS-preview.zip` from Artifacts once the build job finishes. Extract the ZIP once to obtain `Passlet.app`. Tests may still be running, so check the complete run before trusting a change. After CI finishes, a bot updates one PR comment with the preview download link, build-job link, and protected-Keychain limitation. The commenting workflow activates after it is merged into the default branch.
 
-Preview builds use ad-hoc signatures without an Apple signing identity, provisioning profile, or notarization. They have a separate `dev.passlet.preview` bundle identifier and cannot exercise the production protected-Keychain flow. Use them to inspect the menu and other non-credential features. Keep the released app installed for real credentials, and quit one app before launching the other because they share the local service configuration. macOS may require allowing the downloaded preview in System Settings → Privacy & Security. Only run artifacts from code you trust, including when downloading PR builds.
+Preview builds use ad-hoc signatures without an Apple signing identity, provisioning profile, or notarization. They have a separate `dev.passlet.preview` bundle identifier and cannot exercise the production protected-Keychain flow. Use them to test CLI features that do not require credentials. Keep the released app installed for real credentials. Do not run preview and release services simultaneously because they share the local service configuration. macOS may require allowing the downloaded preview in System Settings → Privacy & Security. Only run artifacts from code you trust, including when downloading PR builds.
 
 Developer ID signing and notarization remain exclusive to approved releases. To reproduce the preview locally, run `PASSLET_BUILD_MODE=unsigned ./scripts/build-macos.sh` inside devenv.

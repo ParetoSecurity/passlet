@@ -3,12 +3,10 @@ set -eu
 cd "$(dirname "$0")/.."
 mkdir -p build
 python3 scripts/test-app-metadata.py
+python3 scripts/test-packaging.py
 python3 scripts/test-agent-conventions.py
 ./scripts/go.sh mod verify
-unformatted=$(./scripts/go.sh fmt ./...)
-if [ -n "$unformatted" ]; then
-    printf 'Go files needed formatting:\n%s\n' "$unformatted" >&2
-    exit 1
-fi
-./scripts/go.sh vet ./...
-./scripts/go.sh test -race -coverprofile=build/coverage.txt ./...
+golangci-lint run ./assets/... ./cmd/... ./internal/...
+# Count library code exercised by CLI tests; exclude local programs under build/.
+./scripts/go.sh test -race -coverpkg=./assets/...,./cmd/...,./internal/... -coverprofile=build/coverage.txt ./assets/... ./cmd/... ./internal/...
+go-test-coverage --config=.testcoverage.yml

@@ -4,15 +4,78 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func proxyHeader(family byte, data []byte) []byte {
 	h := append([]byte("\r\n\r\n\x00\r\nQUIT\n"), 0x21, family, 0, 0)
 	binary.BigEndian.PutUint16(h[14:], uint16(len(data)))
 	return append(h, data...)
+}
+
+func TestProxyListenerRejectsMalformedConnectionAndPreservesPayload(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	done := make(chan error, 1)
+	go func() {
+		c, err := (&ProxyListener{Listener: l}).Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer c.Close()
+		if c.RemoteAddr().String() != "100.72.70.9:4660" {
+			t.Errorf("wrong peer: %v", c.RemoteAddr())
+		}
+		c.SetReadDeadline(time.Now().Add(time.Second))
+		payload, err := io.ReadAll(c)
+		if string(payload) != "payload" {
+			t.Errorf("payload consumed by header parser: %q", payload)
+		}
+		done <- err
+	}()
+	for _, packet := range [][]byte{
+		[]byte("invalid header\r\n"),
+		append(proxyHeader(0x11, []byte{100, 72, 70, 9, 100, 106, 66, 11, 0x12, 0x34, 0x20, 0xfb}), []byte("payload")...),
+	} {
+		c, err := net.DialTimeout("tcp", l.Addr().String(), time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Write(packet); err != nil {
+			t.Fatal(err)
+		}
+		c.Close()
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("listener failed to accept valid connection after malformed peer")
+	}
+	l.Close()
+	if _, err := (&ProxyListener{Listener: l}).Accept(); err == nil {
+		t.Fatal("closed listener accepted connection")
+	}
+}
+
+func TestProxyTruncatedInput(t *testing.T) {
+	packet := proxyHeader(0x11, make([]byte, 12))
+	for _, length := range []int{0, 15, 16, len(packet) - 1} {
+		if _, err := readProxy(bytes.NewReader(packet[:length])); err == nil {
+			t.Fatalf("accepted %d-byte truncated header", length)
+		}
+	}
 }
 func TestProxyProtocol(t *testing.T) {
 	data := []byte{100, 72, 70, 9, 100, 106, 66, 11, 0x12, 0x34, 0x20, 0xfb}

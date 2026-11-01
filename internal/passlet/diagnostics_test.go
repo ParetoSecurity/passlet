@@ -2,13 +2,88 @@ package passlet
 
 import (
 	"context"
-	"encoding/xml"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
+
+func TestHealthRejectsUnavailableAndInvalidEndpoints(t *testing.T) {
+	for _, endpoint := range []string{"http://invalid", "unix://" + socketPath(t)} {
+		if err := Health(context.Background(), endpoint); err == nil {
+			t.Fatalf("reported healthy: %s", endpoint)
+		}
+	}
+	l, err := ListenUnix(socketPath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"not ready"}`)) }))
+	server.Listener.Close()
+	server.Listener = l
+	server.Start()
+	defer server.Close()
+	if err := Health(context.Background(), "unix://"+l.Addr().String()); err == nil || err.Error() != "approver_health_check_failed" {
+		t.Fatalf("invalid health response: %v", err)
+	}
+}
+
+func TestKeychainStatusFailures(t *testing.T) {
+	for _, tc := range []struct{ name, script, want string }{
+		{"missing helper", "", "helper_unavailable"},
+		{"invalid JSON", "printf 'not json'", "helper_status_unavailable"},
+		{"failed helper", "exit 1", "helper_status_unavailable"},
+		{"unknown status", `printf '%s' '{"status":"unexpected"}'`, "helper_status_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "helper")
+			if tc.script != "" {
+				if err := os.WriteFile(path, []byte("#!/bin/sh\n"+tc.script+"\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := KeychainStatus(context.Background(), path); err == nil || err.Error() != tc.want {
+				t.Fatalf("want %s, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestAuditSkipsCorruptRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.sqlite")
+	a, err := OpenAudit(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if err := a.Record(Event{RequestID: "older", Outcome: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO events(at,request_id,outcome,data) VALUES('now','one','approved','not json')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Record(Event{RequestID: "newer", Outcome: "denied"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, skipped, err := ReadAudit(path, 20)
+	if err != nil || skipped != 1 || len(entries) != 2 || entries[0].Event.RequestID != "newer" || entries[1].Event.RequestID != "older" {
+		t.Fatalf("valid records around corruption lost: %+v, %v", entries, err)
+	}
+	// The limit still bounds the recent rows inspected, including corrupt rows.
+	entries, skipped, err = ReadAudit(path, 2)
+	if err != nil || skipped != 1 || len(entries) != 1 || entries[0].Event.RequestID != "newer" {
+		t.Fatalf("recent-row limit ignored: %+v, %v", entries, err)
+	}
+	if _, err := a.db.Exec(`DELETE FROM events WHERE data != 'not json'`); err != nil {
+		t.Fatal(err)
+	}
+	entries, skipped, err = ReadAudit(path, 20)
+	if err != nil || skipped != 1 || entries == nil || len(entries) != 0 {
+		t.Fatalf("all-corrupt log should produce an empty list: %+v, %v", entries, err)
+	}
+}
 
 func TestDiagnosticsDoNotApprove(t *testing.T) {
 	s := NewServer(&testApprover{err: context.Canceled}, &testMinter{}, &memoryAudit{})
@@ -26,7 +101,7 @@ func TestDiagnosticsDoNotApprove(t *testing.T) {
 
 func TestAuditReadIsReadOnlyAndBounded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.sqlite")
-	if _, err := ReadAudit(path, 20); err == nil {
+	if _, _, err := ReadAudit(path, 20); err == nil {
 		t.Fatal("missing audit accepted")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -39,40 +114,22 @@ func TestAuditReadIsReadOnlyAndBounded(t *testing.T) {
 	a.Record(Event{RequestID: "one", Outcome: "approved"})
 	a.Record(Event{RequestID: "two", Outcome: "delivery_failed"})
 	a.Close()
-	entries, err := ReadAudit(path, 1)
-	if err != nil || len(entries) != 1 || entries[0].Event.RequestID != "two" {
+	entries, skipped, err := ReadAudit(path, 1)
+	if err != nil || skipped != 0 || len(entries) != 1 || entries[0].Event.RequestID != "two" {
 		t.Fatal("incorrect recent audit", err)
 	}
-	if _, err := ReadAudit(path, 1001); err == nil {
+	if _, _, err := ReadAudit(path, 1001); err == nil {
 		t.Fatal("unbounded audit query")
 	}
 }
 
-func TestAccountMetadataAndLaunchAgent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "private", "account.json")
-	want := AccountInfo{Login: "alice", AppID: 123, VerifiedAt: time.Now().UTC()}
-	if err := SaveAccount(path, want); err != nil {
+func TestProtectedAccountIdentity(t *testing.T) {
+	account := AccountInfo{Login: "alice", AppID: 123, AppURL: "https://github.com/apps/passlet-alice", VerifiedAt: time.Now()}
+	if err := account.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	got, err := LoadAccount(path)
-	if err != nil || got.Login != want.Login {
-		t.Fatal(err)
-	}
-	data, err := LaunchAgent("/Applications/Passlet & Test.app/passlet", "/Applications/Passlet & Test.app/helper", "/Users/alice/.local/share/passlet/s", "/Users/alice/audit", "/Users/alice/log", "", "/usr/bin:/bin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := xml.NewDecoder(strings.NewReader(string(data)))
-	for {
-		_, err := d.Token()
-		if err != nil {
-			if err.Error() != "EOF" {
-				t.Fatal(err)
-			}
-			break
-		}
-	}
-	if strings.Contains(string(data), "--tailscale-listen") || !strings.Contains(string(data), "&amp;") || !strings.Contains(string(data), "SuccessfulExit") || !strings.Contains(string(data), "Aqua") {
-		t.Fatal("unsafe launch agent")
+	account.AppURL = "https://attacker.invalid/apps/passlet-alice"
+	if account.Validate() == nil {
+		t.Fatal("accepted invalid app identity")
 	}
 }

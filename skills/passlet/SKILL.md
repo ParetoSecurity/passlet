@@ -22,6 +22,8 @@ Choose explicit `owner/repository` names and the minimum permissions needed:
 | Read or update issues | `issues:read` or `issues:write` |
 | Inspect Actions runs | `actions:read` |
 
+For administrative work, use `administration:write` with `--repos` for a repository. Organization permissions use `--org NAME` (for example `members:write`); account permissions use `--account HANDLE` (for example `git_ssh_keys:write`). These scope selectors are mutually exclusive. Organization/account grants are explicitly wider than a repository grant and include metadata read access to all installed repositories for that target. Never substitute an organization or account grant for a repository grant without explaining and obtaining approval for the wider scope. Use `--out` and reuse grants as below for every scope.
+
 Request additional permissions only when the task needs their specific operations. Passlet includes intrinsic `metadata:read`. The MVP accepts one owner per request, up to three repositories, and bounded prompt length. It accepts no caller description or requested TTL.
 
 Tell the user which repositories and permissions you are requesting, then make one request. Allow the command at least 130 seconds so the user has time to approve. Never put this request in a retry loop.
@@ -38,7 +40,7 @@ printf 'Grant path: %s\n' "$passlet_dir/grant.json"
 
 Replace the example repository and permissions with the task's actual scope. Check that the request succeeded before using the file. `--out` creates a new mode-0600 file and refuses overwrites. Never omit `--out`: otherwise the token JSON goes to stdout and into your transcript.
 
-Keep the concrete grant path and scope in your session context. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
+Keep the concrete grant path, approved scope, and expiry in your session context and handoff summaries so later prompts can reuse it. Check for a suitable retained grant before requesting another. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
 
 Run each authenticated command through the grant:
 
@@ -52,7 +54,7 @@ passlet exec --grant /concrete/private/path/grant.json -- \
 
 Reuse the same grant for operations within its approved scope until expiry. `exec --grant` does not contact the Mac. It supplies the scoped credentials to Git and gh and disables global/system Git configuration and ambient credential helpers for that child. Use HTTPS remotes. If needed, configure commit author identity locally in the checkout.
 
-Once the task is finished, delete only the grant file and private temporary directory you created. A token usually expires after about eight hours, as reported by GitHub; deleting its file does not revoke it.
+Retain the grant file and its private directory after each command, task, and prompt for later reuse. Do not actively delete grants, including expired ones, unless the user asks. Keep the directory mode 0700 and grant mode 0600. Retention does not extend a grant's expiry or scope: use it only while valid and for authorized operations within its approved scope. Deleting a grant file does not revoke its token.
 
 ## Failures and new access
 

@@ -1,0 +1,5 @@
+profile: build/coverage.txt
+threshold:
+  file: 100
+  total: 100
+force-annotation-comment: true

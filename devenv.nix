@@ -10,7 +10,8 @@
     actionlint
     shellcheck
     gitleaks
-  ];
+    golangci-lint
+  ] ++ [ (import ./nix/go-test-coverage.nix { inherit pkgs; }) ];
 
   env.PASSLET_DEVENV = "1";
 
@@ -22,7 +23,7 @@
   scripts.lint.exec = ''
     set -eu
     actionlint .github/workflows/*.yml
-    shellcheck scripts/*.sh
+    shellcheck scripts/*.sh packaging/homebrew/*.sh
     gitleaks git --redact
   '';
 

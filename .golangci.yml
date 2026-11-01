@@ -1,0 +1,16 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  exclusions:
+    rules:
+      # Fixtures intentionally ignore cleanup/response-write errors. Assertions
+      # and production error handling remain covered by the other analyzers.
+      - path: _test\.go$
+        linters: [errcheck]
+formatters:
+  enable: [gofmt]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

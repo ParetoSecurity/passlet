@@ -50,7 +50,7 @@ func (g *GitHub) call(ctx context.Context, method, path, token string, basic *Cr
 	if err != nil {
 		return errors.New("github_unavailable")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("github_http_%d", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func (g *GitHub) Refresh(ctx context.Context, c Credentials) (Credentials, error
 	if err != nil {
 		return c, errors.New("refresh_failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var v struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
@@ -95,7 +95,13 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 	if err := r.Validate(); err != nil {
 		return Grant{}, err
 	}
-	owner := strings.Split(r.Repositories[0], "/")[0]
+	owner := r.Organization
+	if r.Account != "" {
+		owner = r.Account
+	}
+	if len(r.Repositories) > 0 {
+		owner = strings.Split(r.Repositories[0], "/")[0]
+	}
 	var user struct {
 		Login string `json:"login"`
 	}
@@ -104,6 +110,9 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 	}
 	if user.Login == "" {
 		return Grant{}, errors.New("unexpected_user")
+	}
+	if r.Account != "" && !strings.EqualFold(user.Login, r.Account) {
+		return Grant{}, errors.New("account_must_match_authenticated_user")
 	}
 	// Reject repositories absent from the installation before calling the scoping
 	// endpoint: GitHub can ignore invalid repository selectors in some token flows.
@@ -114,6 +123,7 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 				ID      int64 `json:"id"`
 				Account struct {
 					Login string `json:"login"`
+					Type  string `json:"type"`
 				} `json:"account"`
 			} `json:"installations"`
 		}
@@ -122,6 +132,12 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 		}
 		for _, i := range installations.Items {
 			if strings.EqualFold(i.Account.Login, owner) {
+				if r.Organization != "" && i.Account.Type != "Organization" {
+					return Grant{}, errors.New("target_is_not_an_organization")
+				}
+				if r.Account != "" && i.Account.Type != "User" {
+					return Grant{}, errors.New("target_is_not_a_user")
+				}
 				installationID = i.ID
 			}
 		}
@@ -136,7 +152,7 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 	for _, repo := range r.Repositories {
 		wanted[repo] = 0
 	}
-	for page := 1; page <= 100; page++ {
+	for page := 1; len(r.Repositories) > 0 && page <= 100; page++ {
 		var repos struct {
 			Items []struct {
 				ID   int64  `json:"id"`
@@ -178,11 +194,16 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 			} `json:"account"`
 		} `json:"installation"`
 	}
-	body := map[string]any{"access_token": c.AccessToken, "target": owner, "repository_ids": ids, "permissions": r.Permissions}
+	body := map[string]any{"access_token": c.AccessToken, "target": owner, "permissions": r.Permissions}
+	selection := "all"
+	if len(r.Repositories) > 0 {
+		body["repository_ids"] = ids
+		selection = "selected"
+	}
 	if err := g.call(ctx, "POST", "/applications/"+url.PathEscape(c.ClientID)+"/token/scoped", "", &c, body, &minted); err != nil {
 		return Grant{}, err
 	}
-	if minted.Token == "" || minted.Token == c.AccessToken || minted.Token == c.RefreshToken || minted.Token == c.ClientSecret || minted.User.Login != user.Login || minted.Installation.Selection != "selected" || !strings.EqualFold(minted.Installation.Account.Login, owner) {
+	if minted.Token == "" || minted.Token == c.AccessToken || minted.Token == c.RefreshToken || minted.Token == c.ClientSecret || minted.User.Login != user.Login || minted.Installation.Selection != selection || !strings.EqualFold(minted.Installation.Account.Login, owner) {
 		return Grant{}, errors.New("unexpected_grant")
 	}
 	if len(minted.Installation.Permissions) != len(r.Permissions) {
@@ -196,5 +217,5 @@ func (g *GitHub) Mint(ctx context.Context, c Credentials, r Request) (Grant, err
 	if !minted.ExpiresAt.After(time.Now()) || time.Until(minted.ExpiresAt) > 8*time.Hour+time.Minute {
 		return Grant{}, errors.New("unexpected_expiry")
 	}
-	return Grant{Token: minted.Token, ExpiresAt: minted.ExpiresAt, Repositories: r.Repositories, Permissions: minted.Installation.Permissions, User: user.Login}, nil
+	return Grant{Organization: r.Organization, Account: r.Account, Token: minted.Token, ExpiresAt: minted.ExpiresAt, Repositories: r.Repositories, Permissions: minted.Installation.Permissions, User: user.Login}, nil
 }

@@ -56,16 +56,13 @@ staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums
 and uploads the artifacts to that existing release. Uploads refuse to overwrite
 existing assets. The release will be visible before its assets finish building.
 
-Download the release artifacts and verify checksums. Extract the macOS archive and
-move Passlet.app to /Applications. The license, README and Claude skill are included in the signed app resources
-and Linux archives. The CLI is inside the signed bundle at
-`/Applications/Passlet.app/Contents/MacOS/passlet`; place a symlink to it in your
-PATH. Use `/Applications/Passlet.app/Contents/MacOS/PassletHelper` for --helper.
-Do not move the helper executable outside its app bundle.
+Verify the uploaded release artifacts and checksums, then
+publish the generated Homebrew/Nix package metadata in a reviewed PR after verifying the assets are available. The release workflow uploads the `passlet-package-updates` artifact for this purpose. See [package maintenance](../packaging/README.md). End users install through Homebrew or Nix/Home Manager, not by extracting archives manually.
+
+Keep the CLI and helper together inside the signed bundle.
 `PassletHelper` stays the main executable because macOS accepts the Keychain
-entitlement and provisioning profile only there. The optional menu bar app is
-nested at `Contents/Helpers/PassletMenu.app` with no restricted entitlements.
-The build signs it before the outer bundle.
+entitlement and provisioning profile only there. The bundle contains the CLI and approval helper only.
+The build signs the CLI before the outer helper bundle.
 
 On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
 approval/denial/cancellation flow. On Linux, verify `passlet version`, then the

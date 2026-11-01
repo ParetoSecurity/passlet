@@ -26,8 +26,8 @@ else
     architectures=arm64
 fi
 mkdir -p "$(dirname "$APP")" build/swift-cache
+rm -rf "$APP"
 if [ "$mode" = unsigned ]; then
-    rm -rf "$APP"
     python3 scripts/app-metadata.py - "$APP" "$version" "$mode"
 else
     /usr/bin/security cms -D -i "$PASSLET_PROVISIONING_PROFILE" > "$(dirname "$APP")/profile.plist"
@@ -37,19 +37,16 @@ fi
 ./scripts/icon.sh
 cp build/Passlet.icns "$APP/Contents/Resources/Passlet.icns"
 cp LICENSE README.md "$APP/Contents/Resources/"
+cp packaging/homebrew/service.sh "$APP/Contents/Resources/homebrew-service.sh"
 mkdir -p "$APP/Contents/Resources/docs"
 cp docs/*.md "$APP/Contents/Resources/docs/"
 mkdir -p "$APP/Contents/Resources/skills/passlet"
 cp skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
 for arch in $architectures; do
     /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/main.swift -o "$(dirname "$APP")/helper-$arch" -framework AppKit -framework Security -framework LocalAuthentication
-    /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -parse-as-library -module-cache-path "$PWD/build/swift-cache" macos/UpdateCheck.swift macos/menu/*.swift -o "$(dirname "$APP")/menu-$arch" -framework AppKit -framework SwiftUI -framework ServiceManagement
 done
-MENU="$APP/Contents/Helpers/PassletMenu.app"
-cp build/Passlet.icns "$MENU/Contents/Resources/Passlet.icns"
 if [ "$mode" != development ]; then
     /usr/bin/lipo -create "$(dirname "$APP")"/helper-arm64 "$(dirname "$APP")"/helper-x86_64 -output "$APP/Contents/MacOS/PassletHelper"
-    /usr/bin/lipo -create "$(dirname "$APP")"/menu-arm64 "$(dirname "$APP")"/menu-x86_64 -output "$MENU/Contents/MacOS/PassletMenu"
     for arch in arm64 amd64; do
         GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-s -w -X main.version=$version" -o "$(dirname "$APP")/cli-$arch" ./cmd/passlet
     done
@@ -57,21 +54,16 @@ if [ "$mode" != development ]; then
     if [ "$mode" = unsigned ]; then
         # Ad-hoc signatures allow local execution without a signing identity.
         /usr/bin/codesign --force --sign - "$APP/Contents/MacOS/passlet"
-        /usr/bin/codesign --force --sign - "$MENU"
         /usr/bin/codesign --force --sign - "$APP"
     else
         /usr/bin/codesign --force --timestamp --options runtime --sign "$PASSLET_SIGNING_IDENTITY" "$APP/Contents/MacOS/passlet"
-        # Nested code is signed first. The menu has no restricted entitlements.
-        /usr/bin/codesign --force --timestamp --options runtime --sign "$PASSLET_SIGNING_IDENTITY" "$MENU"
         /usr/bin/codesign --force --timestamp --options runtime --sign "$PASSLET_SIGNING_IDENTITY" --entitlements build/release/entitlements.plist "$APP"
         /usr/bin/codesign -dvv "$APP" 2>&1 | /usr/bin/grep -q 'Authority=Developer ID Application:' || { echo 'Release requires Developer ID Application signing' >&2; exit 1; }
     fi
 else
     cp build/helper-arm64 "$APP/Contents/MacOS/PassletHelper"
-    cp build/menu-arm64 "$MENU/Contents/MacOS/PassletMenu"
     GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-X main.version=$version" -o "$APP/Contents/MacOS/passlet" ./cmd/passlet
     /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" "$APP/Contents/MacOS/passlet"
-    /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" "$MENU"
     /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" --entitlements build/entitlements.plist "$APP"
 fi
 /usr/bin/codesign --verify --deep --strict "$APP"

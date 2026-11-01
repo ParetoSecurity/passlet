@@ -11,15 +11,28 @@ import (
 )
 
 func TestMintChecksRepositoriesAndReturnedPermissions(t *testing.T) {
-	for _, mode := range []string{"ok", "not-installed", "broadened", "no-expiry", "wrong-user", "parent-token"} {
+	for _, mode := range []string{"ok", "not-installed", "broadened", "changed-permission", "no-expiry", "wrong-user", "parent-token", "missing-user", "no-installations", "user-error", "installations-error", "repositories-error", "mint-error"} {
 		t.Run(mode, func(t *testing.T) {
 			calls := 0
 			h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				failurePath := map[string]string{"user-error": "/user", "installations-error": "/user/installations", "repositories-error": "/user/installations/42/repositories", "mint-error": "/applications/client/token/scoped"}[mode]
+				if r.URL.Path == failurePath {
+					w.WriteHeader(503)
+					return
+				}
 				switch r.URL.Path {
 				case "/user":
+					if mode == "missing-user" {
+						w.Write([]byte(`{}`))
+						return
+					}
 					json.NewEncoder(w).Encode(map[string]any{"login": "zupo"})
 				case "/user/installations":
+					if mode == "no-installations" {
+						w.Write([]byte(`{"installations":[]}`))
+						return
+					}
 					json.NewEncoder(w).Encode(map[string]any{"installations": []any{map[string]any{"id": 42, "account": map[string]string{"login": "zupo"}}}})
 				case "/user/installations/42/repositories":
 					name := "zupo/test-a"
@@ -42,6 +55,9 @@ func TestMintChecksRepositoriesAndReturnedPermissions(t *testing.T) {
 						t.Error("request not ID-scoped")
 					}
 					perms := map[string]string{"contents": "read", "metadata": "read"}
+					if mode == "changed-permission" {
+						perms["contents"] = "write"
+					}
 					if mode == "broadened" {
 						perms["issues"] = "write"
 					}
@@ -119,5 +135,65 @@ func TestRefreshRotatesCredentials(t *testing.T) {
 	same, err := g.Refresh(context.Background(), updated)
 	if err != nil || same != updated || calls != 1 {
 		t.Fatal("unnecessary refresh")
+	}
+}
+
+func TestMintExplicitOrganizationAndAccountScopes(t *testing.T) {
+	for _, scope := range []string{"organization", "account"} {
+		for _, mode := range []string{"ok", "broader", "wrong-target-type", "wrong-account", "wrong-selection"} {
+			t.Run(scope+"/"+mode, func(t *testing.T) {
+				target, kind, permission := "acme", "Organization", "organization_secrets"
+				req := Request{Organization: target, Permissions: map[string]string{permission: "write"}}
+				if scope == "account" {
+					target, kind, permission = "alice", "User", "git_ssh_keys"
+					req = Request{Account: target, Permissions: map[string]string{permission: "write"}}
+				}
+				h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.URL.Path {
+					case "/user":
+						login := "alice"
+						if mode == "wrong-account" && scope == "account" {
+							login = "bob"
+						}
+						json.NewEncoder(w).Encode(map[string]string{"login": login})
+					case "/user/installations":
+						typ := kind
+						if mode == "wrong-target-type" {
+							typ = "Wrong"
+						}
+						json.NewEncoder(w).Encode(map[string]any{"installations": []any{map[string]any{"id": 42, "account": map[string]string{"login": target, "type": typ}}}})
+					case "/applications/client/token/scoped":
+						var body map[string]any
+						json.NewDecoder(r.Body).Decode(&body)
+						if body["target"] != target || body["repository_ids"] != nil {
+							t.Error("incorrect wide scope")
+						}
+						perms := map[string]string{permission: "write", "metadata": "read"}
+						if mode == "broader" {
+							perms["contents"] = "write"
+						}
+						selection := "all"
+						if mode == "wrong-selection" {
+							selection = "selected"
+						}
+						json.NewEncoder(w).Encode(map[string]any{"token": "child", "expires_at": time.Now().Add(time.Hour), "user": map[string]string{"login": "alice"}, "installation": map[string]any{"repository_selection": selection, "permissions": perms, "account": map[string]string{"login": target}}})
+					default:
+						t.Error("unexpected endpoint", r.URL.Path)
+						w.WriteHeader(404)
+					}
+				}))
+				defer h.Close()
+				g := NewGitHub()
+				g.API = h.URL
+				grant, err := g.Mint(context.Background(), Credentials{ClientID: "client", ClientSecret: "secret", AccessToken: "parent"}, req)
+				wantOK := mode == "ok" || (mode == "wrong-account" && scope == "organization")
+				if (err == nil) != wantOK {
+					t.Fatalf("unexpected mint result %v", err)
+				}
+				if err == nil && (grant.Organization != req.Organization || grant.Account != req.Account) {
+					t.Fatal("grant lost scope")
+				}
+			})
+		}
 	}
 }

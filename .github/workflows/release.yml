@@ -98,6 +98,12 @@ jobs:
           current_sha=$(git rev-parse 'FETCH_HEAD^{commit}')
           test "$current_sha" = "$VERIFIED_SHA"
           gh release upload "$PASSLET_TAG" dist/*
+      - name: Upload package metadata for the release PR
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: passlet-package-updates
+          path: build/package-updates/
+          if-no-files-found: error
       - name: Remove signing credentials
         if: always()
         run: |

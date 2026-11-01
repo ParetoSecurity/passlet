@@ -19,7 +19,7 @@ import (
 
 var version = "dev"
 
-func main() {
+func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "passlet:", err)
 		os.Exit(1)
@@ -27,15 +27,13 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: passlet setup github | service | serve | request | exec | doctor | status | audit | import | version")
+		return errors.New("usage: passlet github setup | github reset | serve | request | exec | doctor | status | audit | import | version")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	switch os.Args[1] {
-	case "setup":
-		return setupCommand(ctx, os.Args[2:])
-	case "service":
-		return serviceCommand(ctx, os.Args[2:])
+	case "github":
+		return githubCommand(ctx, os.Args[2:])
 	case "doctor", "status":
 		return diagnostics(ctx, os.Args[1], os.Args[2:])
 	case "audit":
@@ -65,7 +63,9 @@ func run() error {
 		fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 		endpoint := fs.String("endpoint", passlet.DefaultEndpoint(), "unix:///absolute/socket or Tailscale HTTPS origin")
 		repos := fs.String("repos", "", "comma-separated owner/repository list")
-		perms := fs.String("permissions", "", "comma-separated permission:read|write list")
+		org := fs.String("org", "", "organization-wide permission target (exclusive with --repos/--account)")
+		account := fs.String("account", "", "account-wide permission target (exclusive with --repos/--org)")
+		perms := fs.String("permissions", "", "comma-separated permission:read|write|admin list")
 		out := fs.String("out", "", "write grant JSON to a new mode-0600 file (request only)")
 		grantFile := fs.String("grant", "", "existing grant JSON file (exec only)")
 		if err := fs.Parse(os.Args[2:]); err != nil {
@@ -73,23 +73,26 @@ func run() error {
 		}
 		var grant passlet.Grant
 		if *grantFile != "" {
-			if os.Args[1] != "exec" || *repos != "" || *perms != "" {
+			if os.Args[1] != "exec" || *repos != "" || *perms != "" || *org != "" || *account != "" {
 				return errors.New("--grant is exclusive with request scope flags")
 			}
 			f, err := os.Open(*grantFile)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			if json.NewDecoder(io.LimitReader(f, 65536)).Decode(&grant) != nil || grant.Token == "" || !grant.ExpiresAt.After(time.Now()) {
 				return errors.New("grant_expired_or_invalid")
 			}
 		} else {
-			requested := passlet.Request{Repositories: strings.Split(*repos, ","), Permissions: map[string]string{}}
+			requested := passlet.Request{Organization: *org, Account: *account, Permissions: map[string]string{}}
+			if *repos != "" {
+				requested.Repositories = strings.Split(*repos, ",")
+			}
 			for _, p := range strings.Split(*perms, ",") {
 				kv := strings.Split(p, ":")
 				if len(kv) != 2 {
-					return errors.New("permissions must be comma-separated name:read|write")
+					return errors.New("permissions must be comma-separated name:read|write|admin")
 				}
 				if _, ok := requested.Permissions[kv[0]]; ok {
 					return errors.New("duplicate_permission")
@@ -109,7 +112,7 @@ func run() error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				return json.NewEncoder(f).Encode(grant)
 			}
 			return json.NewEncoder(os.Stdout).Encode(grant)
@@ -127,14 +130,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(dir)
+		defer func() { _ = os.RemoveAll(dir) }()
 		self, err := os.Executable()
-		if err != nil {
+		if err != nil { // coverage-ignore: Requires the OS to lose the running executable identity.
 			return err
 		}
 		wrapper := filepath.Join(dir, "credential")
 		script := "#!/bin/sh\nexec '" + strings.ReplaceAll(self, "'", "'\\''") + "' git-credential \"$@\"\n"
-		if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil { // coverage-ignore: Requires disk failure or external interference inside a freshly created private directory.
 			return err
 		}
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)

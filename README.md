@@ -225,7 +225,7 @@ The default package set and Home Manager use the stable 26.05 release. Go 1.27 c
 
 ## License
 
-GNU General Public License v3.0 (GPL-3.0-only). See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
 
 ### Download a development build
 

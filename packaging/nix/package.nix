@@ -26,7 +26,7 @@ in stdenvNoCC.mkDerivation {
   meta = {
     description = "Short-lived credentials for your agents";
     homepage = "https://passlet.dev";
-    license = lib.licenses.gpl3Only;
+    license = lib.licenses.mit;
     mainProgram = "passlet";
     platforms = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
   };

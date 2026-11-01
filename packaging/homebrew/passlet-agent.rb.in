@@ -2,7 +2,7 @@ class PassletAgent < Formula
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"
   version "@VERSION@"
-  license "GPL-3.0-only"
+  license "MIT"
 
   depends_on :linux
 

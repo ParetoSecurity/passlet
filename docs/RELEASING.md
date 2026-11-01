@@ -13,7 +13,7 @@ uploads, or automatic dependency merging into this CLI project.
 
 ## One-time repository setup
 
-1. The public repository is `paretosecurity/passlet`, licensed GPL-3.0-only. Do not
+1. The public repository is `paretosecurity/passlet`, licensed MIT. Do not
    publish development evidence, credentials, provisioning profiles, or builds.
 2. Require CI's Linux and macOS test jobs on main; require reviewed PRs. Disable
    force pushes and branch deletion. Enable secret scanning/push protection where

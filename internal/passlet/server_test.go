@@ -34,6 +34,7 @@ func (s *testSession) Store(c Credentials) error {
 func (s *testSession) Close() { s.closed = true }
 
 type testApprover struct {
+	prompts []string
 	session *testSession
 	err     error
 	entered chan struct{}
@@ -41,6 +42,7 @@ type testApprover struct {
 }
 
 func (a *testApprover) Approve(ctx context.Context, prompt string) (CredentialSession, error) {
+	a.prompts = append(a.prompts, prompt)
 	if a.entered != nil {
 		select {
 		case a.entered <- struct{}{}:

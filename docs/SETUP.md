@@ -79,6 +79,18 @@ Corrupted entries are skipped with a warning on stderr; stdout remains JSON. The
 limit bounds the recent rows inspected, so corruption can result in fewer entries.
 An unreadable database still reports an error.
 
+## Repository groups
+
+Request multiple repositories from the same owner with a comma-separated
+`--repos` list. One approval grants access to exactly those repositories, using
+the same permissions for each. Different owners require separate grants.
+
+Requests accept up to 100 repositories, subject to transport size limits.
+When the repository list exceeds the approval text budget, the last repository
+line reads "and X additional repositories". The owner and every permission stay
+visible. The token, grant file, and audit record retain the full explicit list;
+the abbreviated display does not broaden or reduce access.
+
 ## Administrative access
 
 Repository administration uses `--repos owner/repository --permissions administration:write`. Organization permissions require `--org organization`, for example `--org teamniteo --permissions members:write`. Account permissions require `--account your-handle`, for example `--account alice --permissions git_ssh_keys:write`. These three scopes are mutually exclusive. Account requests must match the authenticated GitHub user. Levels are validated per permission, including `admin` where GitHub supports it.

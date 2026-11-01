@@ -18,19 +18,18 @@ Passlet delivers a short-lived token the agent can use with Git and `gh`, even a
 
 ## Features
 
-The current v0.2 development build includes:
-
 | Feature | What it does |
 | --- | --- |
 | Scoped GitHub access | Approve the repositories and permissions needed for each task. |
 | Native approval | Review each request on your Mac and approve with Touch ID or your password. |
 | Protected credentials | Keep parent tokens, refresh tokens, and client secrets in your Mac's Keychain. Only the scoped token reaches the agent. |
 | Local and remote agents | Connect through a local socket, SSH forwarding, or opt-in Tailscale HTTPS. |
+| macOS and Linux agents | Run your agents on macOS or Linux. |
 | Claude Code and Codex plugins | Let your agent request access and reuse approved grants through the bundled skill. |
 | Work after approval | Use delivered tokens until expiry, even while your Mac is offline. |
 | Audit history | Inspect requests, decisions, scopes, and delivery outcomes without recording credentials. |
 
-Planned features from the [roadmap](docs/ROADMAP.md):
+We're hoping to do these next:
 
 | Feature | Status |
 | --- | --- |
@@ -40,20 +39,9 @@ Planned features from the [roadmap](docs/ROADMAP.md):
 | Resume setup after organization approval | Coming soon |
 | Renew GitHub authorization without recreating your app | Coming soon |
 
-Agents currently run on macOS and Linux, with approvals on macOS. Coming soon features are planned, with no announced release dates.
-
-Git commit author metadata is configured separately.
-
-## Version and requirements
-
-This branch implements v0.2; v0.1.0 is already released. Follow these instructions with the v0.2 build. There are no compatibility aliases or migrations before v1.0.
-
-- Approver: macOS 14+, a logged-in graphical session, and a signed Passlet app. Run the service with the CLI or as a login service.
-- Agent: macOS or Linux, Passlet on PATH, and Git and/or GitHub CLI.
-- Remote agents: OpenSSH with Unix socket forwarding, or opt-in Tailscale HTTPS.
-- Each person owns and authorizes their own GitHub App. Organization installation may require an organization administrator.
-
 ## Install and set up your Mac
+
+Approving requests requires macOS 14 or later and a logged-in graphical session.
 
 Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 

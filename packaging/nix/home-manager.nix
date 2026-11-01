@@ -38,6 +38,7 @@ in {
     launchd.agents.passlet = lib.mkIf cfg.service.enable {
       enable = true;
       config = {
+        AssociatedBundleIdentifiers = [ "dev.passlet.app" ];
         Label = "dev.passlet.agent";
         ProgramArguments = [ executable "serve" "--helper" helper "--tailscale-listen" cfg.service.tailscaleListen ];
         EnvironmentVariables.PATH = lib.concatStringsSep ":"

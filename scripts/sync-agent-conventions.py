@@ -19,10 +19,14 @@ def link(source: Path, target: Path) -> None:
 
 
 def sync(source: Path, project: Path) -> None:
-    claude = project / ".claude"
-    claude.mkdir(exist_ok=True)
-    link(source / "rules", claude / "rules")
-    skills = claude / "skills"
+    agents = project / ".agents"
+    agents.mkdir(exist_ok=True)
+    # pkgs is Nix packaging rather than agent content. Skills merge with the
+    # project's own below, so they are not linked as a whole directory.
+    for entry in source.iterdir():
+        if entry.is_dir() and entry.name not in ("pkgs", "skills"):
+            link(entry, agents / entry.name)
+    skills = agents / "skills"
     skills.mkdir(exist_ok=True)
     desired = {entry.name: entry for entry in (source / "skills").iterdir() if entry.is_dir()}
     # Project-specific skill has precedence over any future upstream namesake.

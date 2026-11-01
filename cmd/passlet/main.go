@@ -27,6 +27,11 @@ func main() { // coverage-ignore: Process exit adapter; command behavior is test
 	}
 }
 func writeCommandError(out io.Writer, err error) {
+	var connectionErr connectionError
+	if errors.As(err, &connectionErr) {
+		_, _ = fmt.Fprintln(out, connectionErr)
+		return
+	}
 	if errors.Is(err, errGitHubAppNameTaken) {
 		_, _ = fmt.Fprintln(out)
 		return
@@ -34,23 +39,33 @@ func writeCommandError(out io.Writer, err error) {
 	_, _ = fmt.Fprintln(out, "passlet:", err)
 }
 func run() error {
-	if len(os.Args) < 2 {
-		return errors.New("usage: passlet github setup | github reset | serve | request | exec | doctor | status | audit | import | version")
-	}
+	return runWithOverview(overview)
+}
+
+func runWithOverview(showOverview func(context.Context)) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) < 2 {
+		showOverview(ctx)
+		return nil
+	}
 	switch os.Args[1] {
+	case "--help", "-h", "help":
+		fmt.Print(commandHelp)
+		return nil
+	case "connect":
+		return connect(ctx, os.Args[2:])
 	case "github":
 		return githubCommand(ctx, os.Args[2:])
-	case "doctor", "status":
-		return diagnostics(ctx, os.Args[1], os.Args[2:])
+	case "doctor":
+		return diagnostics(ctx, os.Args[2:])
 	case "audit":
 		return auditCommand(os.Args[2:])
-	case "version", "--version":
+	case "--version":
 		fmt.Println("passlet", version)
 		return nil
-	case "serve":
-		return serve(ctx, os.Args[2:])
+	case "conductor":
+		return conductor(ctx, os.Args[2:])
 	case "import":
 		fs := flag.NewFlagSet("import", flag.ContinueOnError)
 		helper := fs.String("helper", "", "signed helper executable")
@@ -69,7 +84,7 @@ func run() error {
 		return passlet.ImportCredentials(ctx, *helper, c)
 	case "request", "exec":
 		fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
-		endpoint := fs.String("endpoint", passlet.DefaultEndpoint(), "unix:///absolute/socket or Tailscale HTTPS origin")
+		endpoint := fs.String("endpoint", "", "override the environment, saved endpoint, or default local socket")
 		repos := fs.String("repos", "", "comma-separated owner/repository list")
 		org := fs.String("org", "", "organization-wide permission target (exclusive with --repos/--account)")
 		account := fs.String("account", "", "account-wide permission target (exclusive with --repos/--org)")
@@ -108,6 +123,10 @@ func run() error {
 				requested.Permissions[kv[0]] = kv[1]
 			}
 			var err error
+			*endpoint, err = passlet.ResolveEndpoint(*endpoint)
+			if err != nil {
+				return err
+			}
 			grant, err = passlet.RequestGrant(ctx, *endpoint, requested)
 			if err != nil {
 				return err

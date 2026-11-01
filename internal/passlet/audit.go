@@ -11,6 +11,7 @@ import (
 )
 
 type Event struct {
+	Operation           string            `json:"operation,omitempty"`
 	GrantedOrganization string            `json:"granted_organization,omitempty"`
 	GrantedAccount      string            `json:"granted_account,omitempty"`
 	RequestID           string            `json:"request_id"`

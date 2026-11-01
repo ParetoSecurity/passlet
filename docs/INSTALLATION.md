@@ -70,6 +70,34 @@ sudo darwin-rebuild switch --flake .#your-host
 
 Activate while logged into your Mac’s graphical desktop.
 
+#### Configure Tailscale forwarding
+
+Install Tailscale 1.104.4 or newer and sign in on both machines. On the Conductor Mac, enable Tailscale in the Home Manager module alongside the Passlet module import:
+
+```nix
+{
+  programs.passlet = {
+    enable = true;
+    service.tailscale = true;
+  };
+}
+```
+
+Activate with the same Home Manager or nix-darwin command used above. Home Manager supplies the Tailscale CLI on the service's PATH. Passlet creates a dedicated private Unix socket and checks Tailscale Serve on startup. Matching HTTPS forwarding on port `17400` is reused; missing forwarding is configured automatically. A conflict stops startup with an error instead of replacing another service. Unrelated ports are preserved.
+
+Tailscale must already be running and signed in, with HTTPS enabled for the tailnet and permission to configure Serve. Unix-socket forwarding requires local administrator access under Tailscale's permission rules. If the Tailscale app sandbox prevents access to the private socket, use the standalone `tailscaled` distribution. Passlet never invokes sudo or changes tailnet policy.
+
+Run `passlet` on the Conductor Mac. Its overview lists listening addresses and prints the command for remote agents:
+
+```sh
+passlet connect https://your-mac.your-tailnet.ts.net:17400
+passlet doctor
+```
+
+Local agents connect automatically. Tailscale handles HTTPS certificates and forwards traffic to the private socket; Passlet opens no TCP listener. Permit intended callers on TCP `17400` in Tailscale network policy. The temporary GitHub setup callback uses localhost port `17402`.
+
+To disable remote access, set `programs.passlet.service.tailscale = false;` and reactivate. Passlet stops accepting connections on its Tailscale socket. The persisted Serve rule remains, but cannot reach Passlet while the socket is disabled. Only remove that rule after verifying it still belongs to Passlet, using `tailscale serve --https=17400 off`. Never reset unrelated Serve configuration.
+
 ### Homebrew
 
 If you use Homebrew instead of Nix, install Conductor and Agent together:
@@ -100,10 +128,11 @@ Coming soon. Conductor currently requires macOS. You can already run Agent on Li
 
 Agent is installed alongside Conductor. Once GitHub setup is complete, your coding tools can request access on the same Mac. No SSH connection, Tailscale configuration, or separate Agent install is needed.
 
-Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Conductor, clear that override:
+Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Conductor, clear the environment override and save the local socket:
 
 ```sh
 unset PASSLET_ENDPOINT
+passlet connect "unix://$HOME/.local/share/passlet/passlet.sock"
 passlet doctor
 ```
 
@@ -165,15 +194,15 @@ Follow the [SSH forwarding instructions](SETUP.md#ssh-server-configuration) to f
 On the remote machine, point Agent at the forwarded socket. For example, with a Linux account named `alice`:
 
 ```sh
-export PASSLET_ENDPOINT=unix:///home/alice/.local/share/passlet/mac.sock
+passlet connect unix:///home/alice/.local/share/passlet/mac.sock
 passlet doctor
 ```
 
 Use the actual absolute socket path. On a remote Mac, a typical account path starts with `/Users/alice` instead of `/home/alice`.
 
-[Tailscale HTTPS](SETUP.md#tailscale) is an alternative to SSH. Enable its backend on the Conductor Mac with `programs.passlet.service.tailscaleListen = "127.0.0.1:8484";`, reactivate, and configure Tailscale Serve as described in the setup guide.
+[Tailscale HTTPS](#configure-tailscale-forwarding) is an alternative to SSH. Configure both the listener and forwarding on the Conductor Mac through Home Manager, then save the HTTPS address on the remote Agent with `passlet connect`.
 
-Install the [Claude Code or Codex plugin](../README.md#agent-plugins) on the remote account and start a new coding-agent session with `PASSLET_ENDPOINT` set. Requests appear on your Conductor Mac for approval. Keep GitHub setup and long-lived credentials on that Mac.
+Install the [Claude Code or Codex plugin](../README.md#agent-plugins) on the remote account and start a new coding-agent session after saving the endpoint. Requests appear on your Conductor Mac for approval. Keep GitHub setup and long-lived credentials on that Mac.
 
 ## Update or uninstall
 

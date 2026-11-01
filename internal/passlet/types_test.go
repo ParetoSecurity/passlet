@@ -101,3 +101,21 @@ func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
 		t.Fatal("display changed repository scope")
 	}
 }
+
+func TestApprovalUsesDeviceNameWithoutChangingAuditIdentity(t *testing.T) {
+	for _, tc := range []struct{ transport, name, want string }{
+		{"tailscale", "cruncher.tailnet.ts.net.", "cruncher"},
+		{"tailscale", "cruncher", "cruncher"},
+		{"tailscale", "cruncher\n.tailnet.ts.net.", "cruncher"},
+		{"unix", "local/SSH socket client", "local/SSH socket client"},
+	} {
+		caller := Caller{Transport: tc.transport, Name: tc.name, NodeID: "node"}
+		prompt := (Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}).Prompt(caller)
+		if !strings.HasPrefix(prompt, "grant "+tc.want+" GitHub access\n") {
+			t.Fatal(prompt)
+		}
+		if caller.Name != tc.name || caller.NodeID != "node" {
+			t.Fatal("display altered audit identity")
+		}
+	}
+}

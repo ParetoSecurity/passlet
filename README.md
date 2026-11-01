@@ -64,7 +64,7 @@ The package-managed LaunchAgent starts at graphical login and restarts after a c
 
 ## Local agents
 
-On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Clear any explicit `PASSLET_ENDPOINT` if you want the default.
+On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Use `passlet connect unix://$HOME/.local/share/passlet/passlet.sock` to save the local endpoint. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
 
 ## Remote agents over SSH
 
@@ -87,11 +87,21 @@ ssh -NT -o ExitOnForwardFailure=yes \
 On that remote account, before starting Claude:
 
 ```sh
-export PASSLET_ENDPOINT=unix:///home/alice/.local/share/passlet/mac.sock
+passlet connect unix:///home/alice/.local/share/passlet/mac.sock
 passlet doctor
 ```
 
 The remote SSH server must permit Unix socket forwarding. See [SSH server configuration, stale sockets, and Alice/Bob setup](docs/SETUP.md). Bob uses his own remote Unix account, socket path, Mac, and GitHub App. Do not share a Unix account or use a shared `/tmp/passlet.sock`.
+
+## Choose a Conductor
+
+Run `passlet connect <endpoint>` once on each agent account to check reachability and save the Conductor address in `~/.config/passlet/endpoint`. It supports HTTPS endpoints and absolute Unix socket URLs, including SSH-forwarded sockets. The health check does not request approval or verify GitHub credentials. If it fails, the previous endpoint remains saved. Use `passlet doctor` for credential verification.
+
+```sh
+passlet connect https://your-mac.your-tailnet.ts.net:17400
+```
+
+Commands choose their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved endpoint, then the default local socket. `passlet connect` refuses to check or save a connection while `PASSLET_ENDPOINT` is set. Unset it before connecting. An unreadable or invalid saved setting produces an error rather than silently using another Conductor. Running `passlet` shows the effective endpoint.
 
 ## Request and use access
 
@@ -115,18 +125,15 @@ The receipt reports user and actual expiry without printing the token. Always pa
 
 Use HTTPS Git remotes. `exec --grant` uses the delivered token without contacting the Mac, overrides ambient Git/gh credentials for the child, and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
 
-## Tailscale HTTPS, explicitly opt-in
+## Tailscale, explicitly opt-in
 
-The default service opens no TCP port. To enable Tailscale alongside the local socket, install the service with `--tailscale-listen 127.0.0.1:8484` (uninstall an existing login service before changing its arguments), then expose only that loopback backend:
+Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `{"tailscale":true}` in `~/.config/passlet/conductor.json` for Homebrew and restart the service. For foreground use, run `passlet conductor --tailscale`.
 
-```sh
-# Home Manager: programs.passlet.service.tailscaleListen = "127.0.0.1:8484";
-# Homebrew: configure tailscale_listen in ~/.config/passlet/serve.json,
-# then brew reinstall --cask paretosecurity/passlet/passlet.
-tailscale serve --proxy-protocol=2 --tls-terminated-tcp=8443 tcp://127.0.0.1:8484
-```
+Passlet keeps its local socket and creates a separate private socket for Tailscale Serve. At startup it checks forwarding on HTTPS port `17400`, leaves matching configuration alone, and creates it when absent. It refuses conflicting configuration and preserves unrelated Serve routes. No loopback TCP listener or separate setup command is needed. Tailscale must be running, signed in, and version 1.104.4 or newer. Its permissions and tailnet HTTPS settings must allow Serve configuration.
 
-Use Tailscale Serve, not Funnel. Keep Serve running and configure network policy to allow intended callers on TCP 8443. Do not reset unrelated Serve configuration. On the agent, set `PASSLET_ENDPOINT=https://your-mac.your-tailnet.ts.net:8443`. Passlet uses PROXY v2 and WhoIs for caller identity; no Passlet node allowlist is added.
+Run `passlet` on the Conductor Mac to see the connection instructions. Local agents connect automatically. On remote agents, use `passlet connect https://your-mac.your-tailnet.ts.net:17400`. Configure Tailscale network policy to allow intended callers on that port. Use Serve, not Funnel.
+
+Only the separate private socket trusts Serve's forwarded peer address. Passlet verifies that address with `tailscale whois`, shows the device name in approval prompts, and records the full hostname and node ID in audit events. Normal local and SSH socket clients cannot select a Tailscale identity through HTTP headers.
 
 ## Agent plugins
 
@@ -159,12 +166,7 @@ codex plugin marketplace upgrade passlet
 codex plugin add passlet@passlet
 ```
 
-Install the Passlet CLI separately and configure the transport first. Local Mac
-agents use the default socket; remote agents use their own `PASSLET_ENDPOINT`.
-Installing a plugin does not mint a token or bypass native approval. Remove any
-previous manually installed standalone Passlet skill to avoid duplicate skills.
-The skill is also included in release archives and the app's
-`Contents/Resources/skills`.
+Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents save their Conductor address with `passlet connect`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
 
 Plugin versions are independent of app releases. When changing the bundled
 skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
@@ -174,20 +176,21 @@ managers can identify the update.
 
 Use `brew upgrade --cask paretosecurity/passlet/passlet`, or update your pinned Passlet Nix source and activate Home Manager. The package manager restarts the service. Uninstall through the same manager. Credentials and audit history remain in place.
 
-## Status, diagnostics, and audit
+## Diagnostics and audit
+
+Run `passlet` without arguments to see the configured Conductor or Agent role, reachability, and addresses, with a hint pointing to `passlet --help` for available commands when no setup or troubleshooting action is needed. On macOS, the overview reads the installed Passlet LaunchAgent, including when the service is stopped. Remote addresses appear only when Tailscale reports matching HTTPS forwarding to its private Tailscale socket. The overview checks Conductor health within a two-second lookup budget and reports unavailable services. A reachable local Conductor says local agents connect automatically and shows a `passlet connect` command for remote agents when Tailscale forwarding is verified. Use `passlet doctor` to see the endpoint for troubleshooting. An Agent with no configured endpoint checks the default local socket. If no local Conductor responds, it shows a warning and directs you to run `passlet` on the Conductor machine for connection instructions. An unavailable configured Conductor shows a warning and directs you to `passlet doctor` instead of advertising listening addresses. It does not request approval or verify credentials. Use `passlet --help` to show help without configuration lookups.
 
 ```sh
-passlet status
 passlet doctor
 passlet audit --limit 20
 ```
 
-Diagnostics never mint tokens or trigger authentication. They distinguish locally recorded GitHub identity from current GitHub state; protected Keychain availability can remain unknown without authentication. `doctor` returns nonzero for detected faults and suggests repairs. `audit` reads an existing local SQLite database without creating one and emits structured events: caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
+`doctor` asks for Touch ID or password approval on the Conductor’s Mac, unlocks Keychain, refreshes authorization when needed, and verifies your GitHub identity. It works through local and remote endpoints and returns nonzero if verification fails. It never issues an agent token. `audit` reads an existing local SQLite database without creating one and emits structured events: caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
 
 ## Trust and failure boundaries
 
 - A socket connection proves access to the socket, not that Claude initiated it. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
-- Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The loopback PROXY backend trusts local Mac processes; do not treat it as an isolation boundary between hostile local users.
+- Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The private Tailscale socket trusts Tailscale and processes with access to the same Unix account.
 - Every request requires native user presence. There are no queues, automatic request retries, client pairing, session keys, unattended approvals, or early revocation.
 - If the Mac is offline, continue work requiring no new credential. Bring it online and make a new explicit request when ready. The connection timeout is 5 seconds, server deadline 120 seconds, and client timeout 130 seconds. Timeout or disconnect cancels pending authentication.
 - Tokens are bearer credentials. Anyone who obtains one can use its granted access until expiry. Effective access is constrained by the requested scope, app permissions/installation, and the author's GitHub access. Some GitHub listing endpoints expose metadata beyond the scoped content repositories.

@@ -17,11 +17,7 @@ in {
       default = pkgs.stdenv.hostPlatform.isDarwin;
       description = "Run the approving service at graphical login on this Mac.";
     };
-    service.tailscaleListen = lib.mkOption {
-      type = lib.types.str;
-      default = "";
-      description = "Opt-in loopback listener for Tailscale Serve PROXY v2.";
-    };
+    service.tailscale = lib.mkEnableOption "Expose the Conductor through Tailscale Serve on port 17400";
     # macOS names a background item after the program launchd spawns and groups
     # it under the app with the same signing team. Home Manager's launchd.agents
     # wraps every program in /bin/sh, which shows up as "sh" from an unidentified
@@ -33,11 +29,11 @@ in {
       default = pkgs.writeText "dev.passlet.agent.plist" (lib.generators.toPlist { escape = true; } {
         AssociatedBundleIdentifiers = [ "dev.passlet.app" ];
         EnvironmentVariables.PATH = lib.concatStringsSep ":"
-          (lib.optional (cfg.service.tailscaleListen != "") "${pkgs.tailscale}/bin" ++ [ "/usr/bin" "/bin" ]);
+          (lib.optional cfg.service.tailscale "${pkgs.tailscale}/bin" ++ [ "/usr/bin" "/bin" ]);
         KeepAlive.SuccessfulExit = false;
         Label = "dev.passlet.agent";
         LimitLoadToSessionType = "Aqua";
-        ProgramArguments = [ executable "serve" "--helper" helper "--tailscale-listen" cfg.service.tailscaleListen ];
+        ProgramArguments = [ executable "conductor" "--helper" helper "--tailscale=${lib.boolToString cfg.service.tailscale}" ];
         RunAtLoad = true;
         ThrottleInterval = 10;
         Umask = 63;

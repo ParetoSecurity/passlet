@@ -33,7 +33,7 @@ case "$action" in
         /usr/bin/plutil -insert PassletPackageManager -string homebrew "$temporary"
         /usr/bin/plutil -insert ProgramArguments -json '[]' "$temporary"
         /usr/bin/plutil -insert ProgramArguments.0 -string "$app/Contents/MacOS/passlet" "$temporary"
-        /usr/bin/plutil -insert ProgramArguments.1 -string serve "$temporary"
+        /usr/bin/plutil -insert ProgramArguments.1 -string conductor "$temporary"
         /usr/bin/plutil -insert ProgramArguments.2 -string --helper "$temporary"
         /usr/bin/plutil -insert ProgramArguments.3 -string "$app/Contents/MacOS/PassletHelper" "$temporary"
         /usr/bin/plutil -insert EnvironmentVariables -json '{}' "$temporary"

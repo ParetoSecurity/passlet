@@ -22,14 +22,14 @@ Feature: Set up a personal GitHub App
       """
     And no browser opens
     When I press Enter
-    Then my browser opens "http://127.0.0.1:45821/{session}/start"
+    Then my browser opens "http://127.0.0.1:17402/{session}/start"
     And the terminal shows:
       """
       If your browser didn't open, open this URL:
-      http://127.0.0.1:45821/{session}/start
+      http://127.0.0.1:17402/{session}/start
       """
     And the page automatically submits the app configuration to "https://github.com/settings/apps/new"
-    And the app configuration sets the Setup URL to "http://127.0.0.1:45821/github/installed"
+    And the app configuration sets the Setup URL to "http://127.0.0.1:17402/github/installed"
     When I confirm creating `passlet-alice` on GitHub
     And I authorize `passlet-alice` to act as `alice` on GitHub
     Then the same browser tab redirects to "https://github.com/apps/passlet-alice/installations/new"
@@ -42,7 +42,7 @@ Feature: Set up a personal GitHub App
       Waiting for installation…
       """
     When I install `passlet-alice` for `ACME` with access to all repositories
-    Then GitHub redirects my browser to "http://127.0.0.1:45821/github/installed" with the installation details
+    Then GitHub redirects my browser to "http://127.0.0.1:17402/github/installed" with the installation details
     And Passlet verifies the installation with GitHub before saving credentials
     And the terminal shows:
       """
@@ -63,6 +63,7 @@ Feature: Set up a personal GitHub App
 
       Run `passlet github setup` again to add another organization.
       """
+    And the command exits successfully
 
   Scenario: GitHub authorization is denied
     Given Keychain contains no Passlet credentials
@@ -81,6 +82,7 @@ Feature: Set up a personal GitHub App
       Return to your terminal for next steps.
       """
     And Keychain contains no Passlet credentials
+    And the command exits unsuccessfully
 
   Scenario: Wrong GitHub account is authorized
     Given Keychain contains no Passlet credentials
@@ -99,13 +101,14 @@ Feature: Set up a personal GitHub App
       Return to your terminal for next steps.
       """
     And Keychain contains no Passlet credentials
+    And the command exits unsuccessfully
 
   Scenario: Keychain fails to save credentials
     Given Keychain contains no Passlet credentials
     And I have created `passlet-alice` and authorized it to act as `alice` during GitHub setup
     And Keychain will fail to save the credentials
     When I install `passlet-alice` for `ACME` with access to all repositories
-    And GitHub redirects my browser to "http://127.0.0.1:45821/github/installed" with the installation details
+    And GitHub redirects my browser to "http://127.0.0.1:17402/github/installed" with the installation details
     Then the terminal shows:
       """
       Could not save credentials in your Mac's Keychain. GitHub setup failed.
@@ -119,13 +122,14 @@ Feature: Set up a personal GitHub App
       Credentials could not be saved in your Mac's Keychain. Return to your terminal for next steps.
       """
     And Keychain contains no Passlet credentials
+    And the command exits unsuccessfully
 
   Scenario: Installation gives no accessible repositories
     Given Keychain contains no Passlet credentials
     And I have created `passlet-alice` and authorized it to act as `alice` during GitHub setup
     And GitHub will report no accessible repositories for the installation
     When I install `passlet-alice` for `ACME` with access to all repositories
-    And GitHub redirects my browser to "http://127.0.0.1:45821/github/installed" with the installation details
+    And GitHub redirects my browser to "http://127.0.0.1:17402/github/installed" with the installation details
     Then the terminal shows:
       """
       GitHub setup failed. No accessible repositories were found for this installation. No credentials were saved.
@@ -136,8 +140,8 @@ Feature: Set up a personal GitHub App
       GitHub setup failed. No accessible repositories were found.
       Return to your terminal for next steps.
       """
-    And setup stops
     And Keychain contains no Passlet credentials
+    And the command exits unsuccessfully
 
   Scenario: Install an existing GitHub App for an organization
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
@@ -158,7 +162,7 @@ Feature: Set up a personal GitHub App
       """
     And my browser opens "https://github.com/apps/passlet-alice/installations/new"
     When I install `passlet-alice` for `Globex` with access to all repositories
-    Then GitHub redirects my browser to "http://127.0.0.1:45821/github/installed" with the installation details
+    Then GitHub redirects my browser to "http://127.0.0.1:17402/github/installed" with the installation details
     And the browser shows:
       """
       GitHub setup complete.
@@ -171,6 +175,7 @@ Feature: Set up a personal GitHub App
       Run `passlet github setup` again to add another organization.
       """
     And the existing Keychain credentials remain unchanged
+    And the command exits successfully
 
   # Confirm the request callback in a live GitHub walkthrough before implementation.
   # Integration reference: https://sparkwing.dev/docs/github-app/
@@ -183,7 +188,7 @@ Feature: Set up a personal GitHub App
     When I approve with Touch ID
     Then my browser opens "https://github.com/apps/passlet-alice/installations/new"
     When I request installation of `passlet-alice` for `ACME` on GitHub
-    And GitHub redirects my browser to "http://127.0.0.1:45821/github/installed?setup_action=request" without an installation ID
+    And GitHub redirects my browser to "http://127.0.0.1:17402/github/installed?setup_action=request" without an installation ID
     Then the terminal shows:
       """
       Organization owner approval is required. This request has not enabled repository access.
@@ -194,18 +199,19 @@ Feature: Set up a personal GitHub App
       Organization owner approval is required.
       You can close this tab. Check the installation request on GitHub for approval.
       """
-    And setup stops
     And the existing Keychain credentials remain unchanged
+    And the command exits unsuccessfully
 
   Scenario: Localhost port is already occupied
-    Given another process is listening on `127.0.0.1:45821`
+    Given another process is listening on `127.0.0.1:17402`
     When I run `passlet github setup`
     Then the terminal shows:
       """
-      Cannot start GitHub setup because localhost port 45821 is already in use.
+      Cannot start GitHub setup because localhost port 17402 is already in use.
       Close the application using that port, then run `passlet github setup` again.
       """
     And no browser opens
+    And the command exits unsuccessfully
 
   Scenario: Cancel Keychain approval
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
@@ -218,6 +224,7 @@ Feature: Set up a personal GitHub App
       """
     And no browser opens
     And the existing Keychain credentials remain unchanged
+    And the command exits unsuccessfully
 
   Scenario: GitHub App name is already taken
     Given Keychain contains no Passlet credentials
@@ -234,9 +241,9 @@ Feature: Set up a personal GitHub App
       2. Click "Delete GitHub App" and confirm. This deletes the app and its installations.
       3. Run `passlet github setup` again to create the app and grant it access to your repositories.
       """
-    And setup stops
     And no browser opens
     And Keychain contains no Passlet credentials
+    And the command exits unsuccessfully
 
   Scenario: Saved GitHub credentials are no longer valid
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
@@ -249,9 +256,9 @@ Feature: Set up a personal GitHub App
       GitHub no longer accepts the saved credentials for passlet-alice. The app may have been deleted or its authorization revoked.
       Run `passlet github reset`, then `passlet github setup` to set up again.
       """
-    And setup stops
     And no browser opens
     And the existing Keychain credentials remain unchanged
+    And the command exits unsuccessfully
 
   Scenario: Reset with no saved GitHub credentials
     Given Keychain contains no Passlet credentials
@@ -281,6 +288,7 @@ Feature: Set up a personal GitHub App
       Your GitHub App remains on GitHub: https://github.com/settings/apps/passlet-alice
       """
     And no browser opens
+    And the command exits successfully
 
   Scenario: Cancel resetting GitHub credentials
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
@@ -292,6 +300,7 @@ Feature: Set up a personal GitHub App
       GitHub reset canceled.
       """
     And the existing Keychain credentials remain unchanged
+    And the command exits successfully
 
   Scenario: Refuse Keychain approval during reset
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
@@ -305,6 +314,7 @@ Feature: Set up a personal GitHub App
       """
     And the existing Keychain credentials remain unchanged
     And no browser opens
+    And the command exits unsuccessfully
 
   Scenario: Override the suggested GitHub handle
     Given Keychain contains no Passlet credentials
@@ -314,3 +324,27 @@ Feature: Set up a personal GitHub App
     And the input is prefilled with `alice`
     When I enter `bob` and press Enter
     Then setup uses `bob` as my GitHub handle
+
+  @planned
+  Scenario Outline: Run GitHub setup on an Agent machine
+    Given this <machine> has no local Conductor configured
+    And PASSLET_ENDPOINT is "<endpoint>"
+    When I run `passlet github setup`
+    Then the terminal shows:
+      """
+      This machine is configured as an Agent.
+      Run `passlet github setup` on the Mac configured as your Conductor.
+      """
+    And no GitHub handle is requested
+    And no browser opens
+    And no GitHub callback listener starts
+    And no Keychain access or approval is requested
+    And no setup request is sent to the remote Conductor
+    And the command exits unsuccessfully
+
+    Examples:
+      | machine      | endpoint                                         |
+      | Linux        | https://alice-mac.example.ts.net:17400             |
+      | Linux        | unix:///home/alice/.local/share/passlet/mac.sock   |
+      | Mac          | https://alice-mac.example.ts.net:17400             |
+      | Mac          | unix:///Users/alice/.local/share/passlet/mac.sock  |

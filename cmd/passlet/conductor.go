@@ -26,35 +26,29 @@ func defaultHelper() string {
 	return filepath.Join(filepath.Dir(self), "PassletHelper")
 }
 
-func serve(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+func conductor(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("conductor", flag.ContinueOnError)
 	socket := fs.String("socket", passlet.DefaultSocket(), "private Unix socket path")
-	tcp := fs.String("tailscale-listen", "", "opt-in loopback TCP address; requires Tailscale Serve PROXY v2")
+	tailscale := fs.Bool("tailscale", false, "expose the Conductor through Tailscale Serve on port 17400")
 	helper := fs.String("helper", defaultHelper(), "absolute signed helper path")
 	audit := fs.String("audit", filepath.Join(passlet.StateDir(), "audit.sqlite"), "SQLite audit path")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 || !filepath.IsAbs(*helper) {
-		return errors.New("serve_requires_absolute_helper_and_no_positional_arguments")
+		return errors.New("conductor_requires_absolute_helper_and_no_positional_arguments")
 	}
 	if info, err := os.Stat(*helper); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 		return errors.New("helper_unavailable_reinstall_Passlet_through_Homebrew_or_Home_Manager")
 	}
-	explicitTCP := false
-	fs.Visit(func(f *flag.Flag) { explicitTCP = explicitTCP || f.Name == "tailscale-listen" })
-	if !explicitTCP {
-		configured, err := configuredTailscaleListener()
+	explicitTailscale := false
+	fs.Visit(func(f *flag.Flag) { explicitTailscale = explicitTailscale || f.Name == "tailscale" })
+	if !explicitTailscale {
+		configured, err := configuredTailscale()
 		if err != nil {
 			return err
 		}
-		*tcp = configured
-	}
-	if *tcp != "" {
-		host, _, err := net.SplitHostPort(*tcp)
-		if err != nil || !net.ParseIP(host).IsLoopback() {
-			return errors.New("tailscale_listener_must_be_loopback")
-		}
+		*tailscale = configured
 	}
 	l, err := passlet.ListenUnix(*socket)
 	if err != nil {
@@ -67,13 +61,16 @@ func serve(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = a.Close() }()
 	listeners := []net.Listener{l}
-	if *tcp != "" {
-		t, err := net.Listen("tcp", *tcp)
+	if *tailscale {
+		t, err := passlet.ListenUnix(tailscaleSocket(*socket))
 		if err != nil {
 			return err
 		}
 		defer func() { _ = t.Close() }()
-		listeners = append(listeners, &passlet.ProxyListener{Listener: t})
+		if err := ensureTailscale(ctx, tailscaleSocket(*socket), overviewOutput); err != nil {
+			return err
+		}
+		listeners = append(listeners, &passlet.TailscaleListener{Listener: t})
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -84,8 +81,8 @@ func serve(ctx context.Context, args []string) error {
 		go func() { results <- server.Serve(listener) }()
 	}
 	fmt.Fprintln(os.Stderr, "Passlet listening on", *socket)
-	if *tcp != "" {
-		fmt.Fprintln(os.Stderr, "Tailscale PROXY v2 listener:", *tcp)
+	if *tailscale {
+		fmt.Fprintln(os.Stderr, "Tailscale Serve socket:", tailscaleSocket(*socket))
 	}
 	select {
 	case err = <-results: // coverage-ignore: Listeners are owned here; unexpected accept failure requires an OS fault.

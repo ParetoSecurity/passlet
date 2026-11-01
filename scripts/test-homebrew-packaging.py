@@ -40,14 +40,14 @@ def main():
         # Run the generated fixture through the system shell. This test does not
         # exercise Gatekeeper or execute an unsigned downloaded app directly.
         script = script.replace('-insert ProgramArguments.0 -string "$app/Contents/MacOS/passlet"', '-insert ProgramArguments.0 -string /bin/sh')
-        script = script.replace('-insert ProgramArguments.1 -string serve', '-insert ProgramArguments.1 -string "$app/Contents/MacOS/passlet"')
-        script = script.replace('-insert ProgramArguments.2 -string --helper', '-insert ProgramArguments.2 -string serve')
+        script = script.replace('-insert ProgramArguments.1 -string conductor', '-insert ProgramArguments.1 -string "$app/Contents/MacOS/passlet"')
+        script = script.replace('-insert ProgramArguments.2 -string --helper', '-insert ProgramArguments.2 -string conductor')
         (app / "Contents/Resources/homebrew-service.sh").write_text(script)
 
         def publish_fixture(version):
             for name in ["passlet", "PassletHelper"]:
                 path = app / "Contents/MacOS" / name
-                path.write_text(f'#!/bin/sh\nif [ "$1" = version ]; then echo "passlet {version}"; exit 0; fi\nexec /bin/sleep 3600\n')
+                path.write_text(f'#!/bin/sh\nif [ "$1" = --version ]; then echo "passlet {version}"; exit 0; fi\nexec /bin/sleep 3600\n')
                 path.chmod(0o755)
             (app / "Contents/Info.plist").write_bytes(plistlib.dumps({
                 "CFBundleIdentifier": label, "CFBundleExecutable": "passlet",
@@ -88,7 +88,7 @@ def main():
             state = running_state()
             expected = str(PREFIX / "Caskroom/passlet-fixture/0.0.1/Passlet.app/Contents/MacOS/passlet")
             assert expected in state
-            installed = subprocess.check_output(["/bin/sh", str(PREFIX / "bin/passlet"), "version"], text=True)
+            installed = subprocess.check_output(["/bin/sh", str(PREFIX / "bin/passlet"), "--version"], text=True)
             assert installed.strip() == "passlet 0.0.1"
             run("uninstall", "--cask", token)
             assert subprocess.run(["/bin/launchctl", "print", target], capture_output=True).returncode != 0

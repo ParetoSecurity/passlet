@@ -13,59 +13,52 @@ import (
 	"passlet.dev/passlet/internal/passlet"
 )
 
-func diagnostics(ctx context.Context, command string, args []string) error {
-	return diagnosticsForOS(ctx, command, args, runtime.GOOS)
+func diagnostics(ctx context.Context, args []string) error {
+	return diagnosticsForOS(ctx, args, runtime.GOOS)
 }
 
-func diagnosticsForOS(ctx context.Context, command string, args []string, hostOS string) error {
-	fs := flag.NewFlagSet(command, flag.ContinueOnError)
-	endpoint := fs.String("endpoint", passlet.DefaultEndpoint(), "local Unix socket or remote HTTPS origin")
-	helper := fs.String("helper", defaultHelper(), "signed helper path (Mac only)")
+func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	endpoint := fs.String("endpoint", "", "override the environment, saved endpoint, or default local socket")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return errors.New("unexpected_arguments")
 	}
+	resolved, err := passlet.ResolveEndpoint(*endpoint)
+	if err != nil {
+		return err
+	}
+	*endpoint = resolved
 	if _, err := passlet.EndpointURL(*endpoint, "/v1/health"); err != nil {
 		return errors.New("invalid_endpoint_use_unix_absolute_socket_or_Tailscale_HTTPS_origin")
 	}
 	fmt.Println("Endpoint:", *endpoint)
-	failed := false
 	if err := passlet.Health(ctx, *endpoint); err != nil {
-		fmt.Println("Service: unavailable; check the Homebrew or Home Manager service on the Mac and check the SSH tunnel or Tailscale endpoint.")
-		failed = true
-	} else {
-		fmt.Println("Service: ready (connectivity only; no credentials unlocked)")
+		fmt.Println("Conductor: unavailable. Check the service on your Mac and your SSH tunnel or Tailscale endpoint.")
+		return errors.New("doctor_found_problems")
 	}
-	// These checks describe this Mac only; never imply that local Keychain state
-	// describes a remote endpoint chosen by the user.
+	fmt.Println("Conductor: running")
 	if *endpoint == "unix://"+passlet.DefaultSocket() && hostOS == "darwin" {
 		if err := passlet.CheckPrivateDir(filepath.Dir(passlet.DefaultSocket())); err != nil {
 			fmt.Println("Socket directory: unsafe; it must be owned by you with mode 0700.")
-			failed = true
+			return errors.New("doctor_found_problems")
 		}
-
-		state, err := passlet.KeychainStatus(ctx, *helper)
-		if err != nil {
-			fmt.Println("Helper: unavailable; install Passlet through Homebrew or Home Manager.")
-			failed = true
-		} else {
-			fmt.Println("Keychain:", state, "(no authentication performed)")
-			if state == "missing" {
-				fmt.Println("Run passlet github setup.")
-				failed = true
-			}
-			if state == "protected_or_unavailable" {
-				fmt.Println("Credential availability requires a real approved request to verify.")
-			}
+	}
+	fmt.Println("Approve the diagnostic check on your Mac with Touch ID or your password.")
+	result, err := passlet.Doctor(ctx, *endpoint)
+	if err != nil {
+		fmt.Println("GitHub credentials: verification failed (" + err.Error() + ").")
+		if err.Error() == "credentials_missing" {
+			fmt.Println("Run passlet github setup on your Mac.")
 		}
-	} else {
-		fmt.Println("GitHub setup and Keychain: check on the approving Mac; not inspected remotely.")
+		return err
 	}
-	if command == "doctor" && failed {
-		return errors.New("doctor_found_problems")
-	}
+	fmt.Println("Keychain: unlocked")
+	fmt.Println("GitHub authorization: valid")
+	fmt.Println("GitHub identity:", result.Login)
+	fmt.Println("No agent token was issued.")
 	return nil
 }
 

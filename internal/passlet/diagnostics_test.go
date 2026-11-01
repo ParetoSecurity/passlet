@@ -85,7 +85,7 @@ func TestAuditSkipsCorruptRecords(t *testing.T) {
 	}
 }
 
-func TestDiagnosticsDoNotApprove(t *testing.T) {
+func TestHealthDoesNotApprove(t *testing.T) {
 	s := NewServer(&testApprover{err: context.Canceled}, &testMinter{}, &memoryAudit{})
 	endpoint := unixServer(t, s)
 	if err := Health(context.Background(), endpoint); err != nil {

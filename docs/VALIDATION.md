@@ -82,7 +82,7 @@ From this checkout, enter `nix-shell`, set `PASSLET_PROVISIONING_PROFILE` to you
 ```sh
 make macos
 export PATH="$PWD/build/Passlet.app/Contents/MacOS:$PATH"
-passlet version
+passlet --version
 passlet github setup
 passlet doctor
 ```
@@ -94,15 +94,15 @@ Run onboarding in a dedicated Mac test account if the existing Keychain identity
 Use disposable GitHub repositories only for mutation tests. Record each item as pass, fail, or not run, with the OS/app version. Do not paste grant contents or credentials into the report.
 
 1. Build a development-signed v0.2 app with its explicit profile, or use the reviewed signed release candidate. Verify codesign and the expected Keychain identity. Use a dedicated macOS test account for fresh onboarding so the existing production authorization is not overwritten.
-2. Run `passlet github setup`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm setup reports the verified user and `passlet status` checks Keychain without displaying protected account identity. Confirm no private signing key or credential file was saved by setup. Organization approval handling is planned; do not count it as implemented.
+2. Run `passlet github setup`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm setup reports the verified user and `passlet doctor` requests native approval and verifies the GitHub identity. Confirm no private signing key or credential file was saved by setup. Organization approval handling is planned; do not count it as implemented.
 3. Install through Homebrew or enable the Home Manager module, then run `passlet doctor`. Confirm no default TCP listener. Log out and back in; confirm service startup and no unsolicited credential prompt. Kill only this test service's Go process and confirm launchd restarts it and the socket works again.
 4. Start a request with explicit repositories and permissions and a private `--out` path. Verify the native prompt shows the honest socket caller, complete repositories/permissions, and approximate provider expiry. Approve with Touch ID: exactly one prompt must release the protected credential and produce a scoped token. Repeat using password, then denial. Denial must create no grant.
 5. Leave a request unapproved for the 120-second server deadline. Confirm the native prompt disappears and no grant is delivered. Repeat by cancelling the requesting CLI or closing its SSH tunnel. A late interaction must never produce a grant for a cancelled request.
 6. On the remote host, set up separate Alice and Bob Unix accounts and separate SSH tunnels from their own Macs. Each user onboards their own GitHub App/account. Request concurrently; each prompt must appear on the correct Mac and GitHub actions must be attributed to the corresponding user. Bob must be unable to connect to Alice's socket or read her grant as an ordinary user. Root is deliberately trusted.
 7. Use a read grant for `gh api` and Git clone in disposable repository A. Verify writing fails and repository B content is denied. Use a separately approved write grant to push a disposable branch and create a PR; confirm user attribution. Reuse the grant after closing SSH and taking the Mac offline; Git/gh must continue until expiry without contacting the Mac.
-8. Run local Claude on the Mac with no `PASSLET_ENDPOINT`; verify it uses the private socket. Enable opt-in Tailscale with PROXY v2 and verify WhoIs caller text and the same scopes/approval behavior. Confirm neither request bodies nor headers can claim a different caller.
+8. Run local Claude on the Mac with no `PASSLET_ENDPOINT`; verify it uses the private socket. Enable `--tailscale` and verify startup creates HTTPS forwarding to the private socket. Verify the device name in approval prompts and the full hostname/node ID in audit events. Confirm forwarded identity headers are accepted only on the dedicated socket and never on the normal local socket.
 9. Put the Mac to sleep, confirm an agent handles unavailability without retries, wake it, and make a fresh explicit request. Verify login service and the chosen transport recover; re-establish SSH explicitly if it closed.
-10. Check `passlet audit --limit 30`: request, requested/granted scope, approval/denial/cancellation, expiry, and delivery outcomes must be present without tokens. Run `status` and `doctor` while Keychain is locked; they must not prompt or claim fresh GitHub verification.
+10. Check `passlet audit --limit 30`: request, requested/granted scope, approval/denial/cancellation, expiry, and delivery outcomes must be present without tokens. Run `doctor` while Keychain is locked, approve with Touch ID or password, and confirm it verifies GitHub identity without issuing an agent token. Denial must fail the check.
 11. Uninstall through Homebrew or disable Passlet in Home Manager and reactivate and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.

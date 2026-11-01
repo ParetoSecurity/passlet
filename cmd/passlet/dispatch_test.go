@@ -56,7 +56,6 @@ func TestCommandValidation(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"missing command", nil, "usage:"},
 		{"unknown command", []string{"unknown"}, "unknown command"},
 		{"missing github action", []string{"github"}, "usage:"},
 		{"relative helper", []string{"import", "--helper", "relative"}, "absolute --helper required"},
@@ -68,9 +67,12 @@ func TestCommandValidation(t *testing.T) {
 		{"grant excludes scope", []string{"exec", "--grant", "/unused", "--repos", "alice/repo"}, "--grant is exclusive"},
 		{"missing grant", []string{"exec", "--grant", filepath.Join(t.TempDir(), "missing")}, "no such file"},
 		{"unknown request flag", []string{"request", "--unknown"}, "flag provided but not defined"},
-		{"serve routing", []string{"serve", "--helper", "relative"}, "serve_requires_absolute_helper"},
+		{"conductor routing", []string{"conductor", "--helper", "relative"}, "conductor_requires_absolute_helper"},
 		{"audit routing", []string{"audit", "--unknown"}, "flag provided but not defined"},
-		{"status routing", []string{"status", "--endpoint", "http://invalid"}, "invalid_endpoint_use"},
+		{"removed serve command", []string{"serve"}, "unknown command"},
+		{"removed status command", []string{"status"}, "unknown command"},
+		{"version is a flag", []string{"version"}, "unknown command"},
+		{"doctor routing", []string{"doctor", "--endpoint", "http://invalid"}, "invalid_endpoint_use"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := invokeCLI(t, "not JSON", tc.args...)
@@ -79,12 +81,11 @@ func TestCommandValidation(t *testing.T) {
 			}
 		})
 	}
-	for _, command := range []string{"version", "--version"} {
-		out, err := invokeCLI(t, "", command)
-		if err != nil || out != "passlet "+version+"\n" {
-			t.Fatalf("version: %q, %v", out, err)
-		}
+	out, err := invokeCLI(t, "", "--version")
+	if err != nil || out != "passlet "+version+"\n" {
+		t.Fatalf("version: %q, %v", out, err)
 	}
+
 }
 
 func TestGrantExecutionValidation(t *testing.T) {

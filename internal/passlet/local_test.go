@@ -156,7 +156,8 @@ func TestUnixDisconnectCancelsApproval(t *testing.T) {
 
 func TestUnixNoFallbackAndDefault(t *testing.T) {
 	t.Setenv("PASSLET_ENDPOINT", "")
-	if DefaultEndpoint() != "unix://"+DefaultSocket() {
+	t.Setenv("HOME", t.TempDir())
+	if endpoint, err := ResolveEndpoint(""); err != nil || endpoint != "unix://"+DefaultSocket() {
 		t.Fatal("not local by default")
 	}
 	for _, endpoint := range []string{"unix://remote/tmp/x", "unix:relative", "unix:///tmp/../x", "unix:///tmp/x?secret=y", "unix:///"} {
@@ -187,7 +188,7 @@ func TestPrivateDirectoryErrors(t *testing.T) {
 		t.Fatal("created directory inside file")
 	}
 	t.Setenv("PASSLET_ENDPOINT", "https://mac.example")
-	if got := DefaultEndpoint(); got != "https://mac.example" {
+	if got, err := ResolveEndpoint(""); err != nil || got != "https://mac.example" {
 		t.Fatalf("ignored endpoint override: %s", got)
 	}
 }

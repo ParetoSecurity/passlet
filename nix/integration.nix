@@ -114,7 +114,7 @@ in pkgs.testers.runNixOSTest {
             # Metadata only: do not print test tokens, even in VM logs.
             cruncher.succeed(f"python3 -c \"import json; d=json.load(open('/home/{user}/.local/share/passlet/write.json')); assert d['user']=='{user}'; assert not any(k in d for k in ['access_token','refresh_token','client_secret'])\"")
         cruncher.fail(as_user("bob", "test -r /home/alice/.local/share/passlet/write.json"))
-        cruncher.fail(as_user("bob", "passlet status --endpoint unix:///home/alice/.local/share/passlet/mac.sock") + " | grep 'Service: ready'")
+        cruncher.fail(as_user("bob", "passlet doctor --endpoint unix:///home/alice/.local/share/passlet/mac.sock") + " | grep 'GitHub authorization: valid'")
 
     with subtest("Real Git push and gh access are scoped"):
         cruncher.succeed(execute("alice", "write", "git clone https://github.com/acme/test-a.git /home/alice/checkout"))
@@ -150,7 +150,7 @@ in pkgs.testers.runNixOSTest {
 
     with subtest("Crash recovery recreates the local socket"):
         bob.succeed("systemctl kill -s SIGKILL passlet-fixture")
-        bob.wait_until_succeeds("su - bob -c 'passlet status' | grep 'Service: ready'")
+        bob.wait_until_succeeds("su - bob -c 'passlet doctor' | grep 'GitHub authorization: valid'")
 
     with subtest("Audit never includes fixture credentials or tokens"):
         for machine, user in ((alice, "alice"), (bob, "bob")):

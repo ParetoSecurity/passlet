@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,9 +12,9 @@ import (
 	"passlet.dev/passlet/internal/passlet"
 )
 
-func serveTestPaths(t *testing.T) (string, string) {
+func conductorTestPaths(t *testing.T) (string, string) {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "passlet-serve-")
+	dir, err := os.MkdirTemp("/tmp", "passlet-conductor-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,8 +27,8 @@ func serveTestPaths(t *testing.T) (string, string) {
 	return dir, helper
 }
 
-func TestServeRejectsUnsafeConfiguration(t *testing.T) {
-	dir, helper := serveTestPaths(t)
+func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
+	dir, helper := conductorTestPaths(t)
 	plain := filepath.Join(dir, "not-executable")
 	if err := os.WriteFile(plain, nil, 0600); err != nil {
 		t.Fatal(err)
@@ -39,19 +39,17 @@ func TestServeRejectsUnsafeConfiguration(t *testing.T) {
 		want string
 	}{
 		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
-		{"relative helper", []string{"--helper", "relative"}, "serve_requires_absolute_helper"},
-		{"positional argument", []string{"--helper", helper, "unexpected"}, "serve_requires_absolute_helper"},
+		{"relative helper", []string{"--helper", "relative"}, "conductor_requires_absolute_helper"},
+		{"positional argument", []string{"--helper", helper, "unexpected"}, "conductor_requires_absolute_helper"},
 		{"missing helper", []string{"--helper", filepath.Join(dir, "missing")}, "helper_unavailable"},
 		{"directory helper", []string{"--helper", dir}, "helper_unavailable"},
 		{"nonexecutable helper", []string{"--helper", plain}, "helper_unavailable"},
-		{"public TCP", []string{"--helper", helper, "--tailscale-listen", "0.0.0.0:8484"}, "tailscale_listener_must_be_loopback"},
-		{"hostname TCP", []string{"--helper", helper, "--tailscale-listen", "localhost:8484"}, "tailscale_listener_must_be_loopback"},
-		{"malformed TCP", []string{"--helper", helper, "--tailscale-listen", "invalid"}, "tailscale_listener_must_be_loopback"},
+		{"removed listener flag", []string{"--tailscale-listen", "127.0.0.1:17401"}, "flag provided but not defined"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			socket := filepath.Join(dir, "socket")
 			args := append([]string{"--socket", socket}, tc.args...)
-			err := serve(context.Background(), args)
+			err := conductor(context.Background(), args)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v; want %s", err, tc.want)
 			}
@@ -62,47 +60,51 @@ func TestServeRejectsUnsafeConfiguration(t *testing.T) {
 	}
 }
 
-func TestServeReadsConfigurationBeforeBinding(t *testing.T) {
-	dir, helper := serveTestPaths(t)
+func TestConductorReadsConfigurationBeforeBinding(t *testing.T) {
+	dir, helper := conductorTestPaths(t)
 	t.Setenv("HOME", dir)
 	configDir := filepath.Join(dir, ".config", "passlet")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	config := filepath.Join(configDir, "serve.json")
+	config := filepath.Join(configDir, "conductor.json")
 	if err := os.WriteFile(config, []byte(`{"unexpected":true}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	args := []string{"--helper", helper, "--socket", "relative"}
-	if err := serve(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid_serve_config") {
+	if err := conductor(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid_conductor_config") {
 		t.Fatalf("invalid config: %v", err)
 	}
 	if err := os.Remove(config); err != nil {
 		t.Fatal(err)
 	}
-	if err := serve(context.Background(), args); err == nil || !strings.Contains(err.Error(), "socket_requires_absolute") {
+	if err := conductor(context.Background(), args); err == nil || !strings.Contains(err.Error(), "socket_requires_absolute") {
 		t.Fatalf("invalid socket: %v", err)
 	}
 }
 
-func TestServeStartupFailuresReleaseSocket(t *testing.T) {
-	for _, mode := range []string{"audit unavailable", "TCP occupied"} {
+func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
+	for _, mode := range []string{"audit unavailable", "Tailscale socket occupied", "Tailscale unavailable"} {
 		t.Run(mode, func(t *testing.T) {
-			dir, helper := serveTestPaths(t)
+			dir, helper := conductorTestPaths(t)
 			socket := filepath.Join(dir, "socket")
 			audit := filepath.Join(dir, "audit.sqlite")
-			tcp := ""
+			enabled := false
 			if mode == "audit unavailable" {
 				audit = dir
 			} else {
-				l, err := net.Listen("tcp", "127.0.0.1:0")
-				if err != nil {
-					t.Fatal(err)
+				enabled = true
+				if mode == "Tailscale socket occupied" {
+					l, err := passlet.ListenUnix(tailscaleSocket(socket))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer l.Close()
+				} else {
+					t.Setenv("PATH", t.TempDir())
 				}
-				defer l.Close()
-				tcp = l.Addr().String()
 			}
-			err := serve(context.Background(), []string{"--helper", helper, "--socket", socket, "--audit", audit, "--tailscale-listen", tcp})
+			err := conductor(context.Background(), []string{"--helper", helper, "--socket", socket, "--audit", audit, "--tailscale=" + strconv.FormatBool(enabled)})
 			if err == nil {
 				t.Fatal("startup unexpectedly succeeded")
 			}
@@ -118,17 +120,18 @@ func TestServeStartupFailuresReleaseSocket(t *testing.T) {
 	}
 }
 
-func TestServeHealthAndCancellation(t *testing.T) {
-	for _, tcp := range []string{"", "127.0.0.1:0"} {
-		t.Run("TCP="+tcp, func(t *testing.T) {
-			dir, helper := serveTestPaths(t)
+func TestConductorHealthAndCancellation(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run("Tailscale="+strconv.FormatBool(enabled), func(t *testing.T) {
+			dir, helper := conductorTestPaths(t)
 			socket := filepath.Join(dir, "socket")
+			installTailscaleFixture(t, tailscaleSocket(socket))
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
 				defer close(done)
-				done <- serve(ctx, []string{"--helper", helper, "--socket", socket, "--audit", filepath.Join(dir, "audit.sqlite"), "--tailscale-listen", tcp})
+				done <- conductor(ctx, []string{"--helper", helper, "--socket", socket, "--audit", filepath.Join(dir, "audit.sqlite"), "--tailscale=" + strconv.FormatBool(enabled)})
 			}()
 			t.Cleanup(func() {
 				cancel()

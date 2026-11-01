@@ -1,7 +1,7 @@
 name: Release
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
 permissions:
   contents: read
 concurrency:
@@ -24,11 +24,10 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
       - id: verify
         name: Verify release tag points to main before signing
         env:
-          PASSLET_TAG: ${{ github.event.release.tag_name }}
+          PASSLET_TAG: ${{ github.ref_name }}
         run: |
           python3 -c 'import os,re; assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", os.environ["PASSLET_TAG"])'
           sha=$(git rev-parse "refs/tags/$PASSLET_TAG^{commit}")
@@ -42,7 +41,7 @@ jobs:
     permissions:
       contents: write
     env:
-      PASSLET_TAG: ${{ github.event.release.tag_name }}
+      PASSLET_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,7 +87,7 @@ jobs:
           NOTARIZATION_USERNAME: ${{ secrets.NOTARIZATION_USERNAME }}
           NOTARIZATION_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD }}
         run: make release
-      - name: Attach signed release artifacts
+      - name: Create draft and attach signed release artifacts
         env:
           VERIFIED_SHA: ${{ needs.verify.outputs.sha }}
           GH_TOKEN: ${{ github.token }}
@@ -97,6 +96,7 @@ jobs:
           git fetch --no-tags origin "refs/tags/$PASSLET_TAG"
           current_sha=$(git rev-parse 'FETCH_HEAD^{commit}')
           test "$current_sha" = "$VERIFIED_SHA"
+          gh release create "$PASSLET_TAG" --draft --verify-tag --title "$PASSLET_TAG" --generate-notes
           gh release upload "$PASSLET_TAG" dist/*
       - name: Upload package metadata for the release PR
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -104,6 +104,13 @@ jobs:
           name: passlet-package-updates
           path: build/package-updates/
           if-no-files-found: error
+      - name: Publish the complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$PASSLET_TAG" --json isDraft --jq '.isDraft' | grep -qx true
+          gh release edit "$PASSLET_TAG" --draft=false
       - name: Remove signing credentials
         if: always()
         run: |

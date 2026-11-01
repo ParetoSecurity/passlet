@@ -1,12 +1,13 @@
 # Releasing Passlet
 
+Use the repository-local [release-passlet skill](../.agents/skills/release-passlet/SKILL.md) for the release checklist, including package metadata publication.
+
 ## Conventions
 
 Following pareto-mac, distribution uses Developer ID Application signing,
 hardened runtime, notarization and stapling. Following canario/trak/vend and
 pareto-linux, CI uses pinned actions, minimal job permissions, concurrency
-control, tests, coverage artifacts, and dependency update PRs. Publishing a GitHub release triggers the release workflow, which builds and
-attaches signed, notarized artifacts to that release automatically.
+control, tests, coverage artifacts, and dependency update PRs. Pushing a version tag triggers the release workflow. It builds and signs the artifacts, creates a draft release, uploads the complete asset set and package metadata, then publishes the release. Keep release immutability enabled.
 
 Do not copy product-specific Fly deployments, Setapp distribution, Sentry symbol
 uploads, or automatic dependency merging into this CLI project.
@@ -49,12 +50,13 @@ the existing prototype identity. The icon source is `assets/passlet.png`;
 
 ## Prepare and validate a release
 
-After CI passes on main, publish a GitHub release tagged `vX.Y.Z`.
-The Release workflow verifies that the tag points to a commit on main and passes that exact SHA to the signing job. GitHub pauses the signing job for approval under the `release` environment rules before making its credentials available. After approval it repeats tests, builds
-universal arm64/x86_64 macOS binaries, verifies Developer ID signing, notarizes,
-staples, assesses Gatekeeper, builds Linux amd64/arm64 archives and SHA-256 sums,
-and uploads the artifacts to that existing release. Uploads refuse to overwrite
-existing assets. The release will be visible before its assets finish building.
+After CI passes on main, push an unused `vX.Y.Z` tag pointing to the exact reviewed commit. Do not publish an empty release in the GitHub UI: immutable releases cannot accept assets after publication.
+
+The Release workflow verifies that the tag points to a commit on main and passes that exact SHA to the signing job. Its verification job uses the runner's Git and Python without loading the development environment. GitHub pauses signing for approval under the `release` environment rules before making credentials available. The signing job uses the pinned Nix environment, repeats tests, builds universal macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums.
+
+After checking that the tag still resolves to the verified SHA, the workflow creates a draft release with generated notes, attaches all signed assets, uploads the `passlet-package-updates` workflow artifact, and publishes the draft. Publication makes the assets and tag immutable. Existing releases and assets are not overwritten. If a run fails after draft creation, inspect the draft and uploaded assets before choosing a recovery; a blind rerun will not replace them.
+
+For a published release with missing assets, use a new version. Do not move or reuse an immutable tag or disable immutability to work around the failure. Release titles and notes can still be edited after publication.
 
 Verify the uploaded release artifacts and checksums, then
 publish the generated Homebrew/Nix package metadata in a reviewed PR after verifying the assets are available. The release workflow uploads the `passlet-package-updates` artifact for this purpose. See [package maintenance](../packaging/README.md). End users install through Homebrew or Nix/Home Manager, not by extracting archives manually.
@@ -71,8 +73,7 @@ architectures on actual hardware where possible; cross-compilation is not a
 runtime test. Confirm Mac-offline use after token delivery.
 
 Run production signing/Keychain validation before announcing the release.
-Publishing a release is the explicit trigger; signing and asset attachment then
-run automatically, following the Pareto macOS distribution model. Keep
+Pushing a version tag is the explicit trigger; signing, draft creation, asset attachment, and publication then run automatically. Keep
 GitHub parent credentials, refresh tokens, and app client secrets out of all CI
 secrets, artifacts, logs, and screenshots.
 
@@ -81,8 +82,7 @@ secrets, artifacts, logs, and screenshots.
 The v0.1.0 release workflow successfully built, signed, notarized, and attached
 artifacts using the configured distribution credentials:
 [successful release run](https://github.com/ParetoSecurity/passlet/actions/runs/41110201864).
-The devenv migration preserves that release trigger, environment, credentials,
-and Developer ID authority check. New toolchain changes still need validation
+That historical run used the previous publish-first trigger. The current workflow retains the signing environment, credentials, and Developer ID authority check while publishing only after asset upload. New toolchain changes still need validation
 in the release workflow; local checks do not establish production Keychain behavior.
 
 ## Local preparation results

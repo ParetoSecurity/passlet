@@ -1,6 +1,8 @@
 package passlet
 
 import (
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +45,7 @@ func TestRequestRejectsAmbiguousAndOversizedScopes(t *testing.T) {
 		{"malformed repository", []string{"alice"}, map[string]string{"contents": "read"}, "invalid_repository"},
 		{"duplicate ignoring case", []string{"alice/repo", "Alice/Repo"}, map[string]string{"contents": "read"}, "duplicate_repository"},
 		{"metadata exceeds permission budget", []string{"alice/repo"}, map[string]string{"actions": "read", "contents": "read", "issues": "read", "pull_requests": "read", "checks": "read", "deployments": "read", "discussions": "read", "environments": "read", "packages": "read"}, "invalid_request"},
-		{"approval cannot fit", []string{strings.Repeat("o", 100) + "/" + strings.Repeat("a", 100), strings.Repeat("o", 100) + "/" + strings.Repeat("b", 100), strings.Repeat("o", 100) + "/" + strings.Repeat("c", 100)}, map[string]string{"actions": "read", "contents": "read", "issues": "read", "pull_requests": "read", "checks": "read", "deployments": "read", "discussions": "read", "environments": "read"}, "request_too_large_for_prompt"},
+		{"too many repositories", make([]string, 101), map[string]string{"contents": "read"}, "invalid_request"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := Request{Repositories: tc.repos, Permissions: tc.permissions}
@@ -65,5 +67,37 @@ func TestStrictJSONRejectsClosingDelimiterAfterObject(t *testing.T) {
 	var value map[string]string
 	if err := strictJSON([]byte(`{"value":"ok"}]`), &value); err == nil {
 		t.Fatal("accepted trailing closing delimiter")
+	}
+}
+
+func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
+	owner := strings.Repeat("o", 100)
+	r := Request{Permissions: map[string]string{"metadata": "read"}}
+	for _, name := range []string{"repository_custom_properties", "secret_scanning_alerts", "vulnerability_alerts", "repository_projects", "dependabot_secrets", "artifact_metadata", "repository_hooks", "security_events"} {
+		spec := permissionCatalog[name]
+		r.Permissions[name] = spec.Levels[len(spec.Levels)-1]
+	}
+	for i := 0; i < 100; i++ {
+		r.Repositories = append(r.Repositories, fmt.Sprintf("%s/%096d", owner, i))
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]string(nil), r.Repositories...)
+	prompt := r.Prompt(Caller{Name: strings.Repeat("c", 100)})
+	if len(prompt) > 650 || !strings.Contains(prompt, "Owner: "+owner) {
+		t.Fatalf("invalid approval prompt: %s", prompt)
+	}
+	shown := strings.Count(prompt, "• "+owner+"/")
+	if !strings.Contains(prompt, fmt.Sprintf("and %d additional repositories\n\nPermissions:", 100-shown)) {
+		t.Fatalf("incorrect repository count: %s", prompt)
+	}
+	for name, level := range r.Permissions {
+		if !strings.Contains(prompt, "• "+name+": "+level+"\n") {
+			t.Fatalf("missing permission %s", name)
+		}
+	}
+	if !reflect.DeepEqual(before, r.Repositories) {
+		t.Fatal("display changed repository scope")
 	}
 }

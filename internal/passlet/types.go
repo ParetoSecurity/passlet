@@ -57,7 +57,7 @@ func (c Credentials) Validate() error {
 var component = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
 
 func (r *Request) Validate() error {
-	if len(r.Repositories) > 3 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
+	if len(r.Repositories) > 100 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
 		return errors.New("invalid_request")
 	}
 	scope := "repository"
@@ -115,9 +115,6 @@ func (r *Request) Validate() error {
 	// Metadata read is intrinsic to GitHub repository tokens and must be displayed.
 	r.Permissions["metadata"] = "read"
 	sort.Strings(r.Repositories)
-	if len(r.Prompt(Caller{Name: "requesting-node"})) > 650 {
-		return errors.New("request_too_large_for_prompt")
-	}
 	return nil
 }
 func safeLabel(s string) string {
@@ -146,15 +143,28 @@ func (r Request) Prompt(c Caller) string {
 	if r.Account != "" {
 		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Account: " + r.Account, "Account-wide access", "All installed repositories: metadata read only"}
 	}
-	for _, repo := range r.Repositories {
-		lines = append(lines, "• "+repo)
+	if len(r.Repositories) > 0 {
+		owner, _, _ := strings.Cut(r.Repositories[0], "/")
+		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Owner: " + owner, "Repositories:"}
 	}
-	lines = append(lines, "", "Permissions:")
+	suffix := []string{"", "Permissions:"}
 	for _, k := range keys {
-		lines = append(lines, "• "+k+": "+r.Permissions[k])
+		suffix = append(suffix, "• "+k+": "+r.Permissions[k])
 	}
-	lines = append(lines, "", "GitHub sets expiry at issuance (approximately 8 hours)")
-	return strings.Join(lines, "\n")
+	suffix = append(suffix, "", "GitHub sets expiry at issuance (approximately 8 hours)")
+	for shown := len(r.Repositories); ; shown-- {
+		body := append([]string(nil), lines...)
+		for _, repo := range r.Repositories[:shown] {
+			body = append(body, "• "+repo)
+		}
+		if remaining := len(r.Repositories) - shown; remaining > 0 {
+			body = append(body, fmt.Sprintf("and %d additional repositories", remaining))
+		}
+		prompt := strings.Join(append(body, suffix...), "\n")
+		if len(prompt) <= 650 || shown == 0 {
+			return prompt
+		}
+	}
 }
 func strictJSON(data []byte, v any) error {
 	d := json.NewDecoder(strings.NewReader(string(data)))

@@ -40,7 +40,7 @@ printf 'Grant path: %s\n' "$passlet_dir/grant.json"
 
 Replace the example repository and permissions with the task's actual scope. Check that the request succeeded before using the file. `--out` creates a new mode-0600 file and refuses overwrites. Never omit `--out`: otherwise the token JSON goes to stdout and into your transcript.
 
-Keep the concrete grant path and scope in your session context. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
+Keep the concrete grant path, approved scope, and expiry in your session context and handoff summaries so later prompts can reuse it. Check for a suitable retained grant before requesting another. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
 
 Run each authenticated command through the grant:
 
@@ -54,7 +54,7 @@ passlet exec --grant /concrete/private/path/grant.json -- \
 
 Reuse the same grant for operations within its approved scope until expiry. `exec --grant` does not contact the Mac. It supplies the scoped credentials to Git and gh and disables global/system Git configuration and ambient credential helpers for that child. Use HTTPS remotes. If needed, configure commit author identity locally in the checkout.
 
-Once the task is finished, delete only the grant file and private temporary directory you created. A token usually expires after about eight hours, as reported by GitHub; deleting its file does not revoke it.
+Retain the grant file and its private directory after each command, task, and prompt for later reuse. Do not actively delete grants, including expired ones, unless the user asks. Keep the directory mode 0700 and grant mode 0600. Retention does not extend a grant's expiry or scope: use it only while valid and for authorized operations within its approved scope. Deleting a grant file does not revoke its token.
 
 ## Failures and new access
 

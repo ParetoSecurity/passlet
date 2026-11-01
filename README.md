@@ -1,14 +1,48 @@
-<img src="assets/passlet.png" width="96" alt="Passlet icon">
+<h1 align="center">
+  <a href="https://passlet.dev"><img src="assets/passlet.png" width="64" valign="middle" alt="Passlet icon"></a> Passlet
+</h1>
 
-# Passlet
+<p align="center">
+  Short-lived credentials for your agents.
+  <br>
+  GitHub API actions retain your identity.
+  <br>
+  <a href="#features">Features</a> · <a href="#install-and-set-up-your-mac">Get started</a> · <a href="https://passlet.dev">Website</a> · <a href="https://github.com/ParetoSecurity/passlet/releases">Releases</a> · <a href="https://discord.gg/989fwbsyw7">Discord</a>
+</p>
 
-Short-lived credentials for your agents.
+## About
 
-Your agent running in a remote server or a sandbox needs access to GitHub. Let it ask you for scoped permissions on-the-fly instead of giving it perpetual carte blanche access.
+Give your coding agent GitHub access when it needs it. The agent asks for specific repositories and permissions, and you approve on your Mac with Touch ID or your password.
 
-Approve each request on your Mac with one native Touch ID/password prompt. Passlet retrieves protected Keychain credentials using the same authentication context, obtains a repository- and permission-scoped GitHub App user token, and delivers only that token. Git and `gh` work independently until expiry, even with your Mac offline. API actions retain your GitHub identity; Git commit author metadata is configured separately.
+Passlet delivers a short-lived token the agent can use with Git and `gh`, even after your Mac goes offline. Your long-lived credentials stay in your Mac's protected Keychain.
 
-[Website](https://passlet.dev) · [Releases](https://github.com/ParetoSecurity/passlet/releases) · [Discord](https://discord.gg/989fwbsyw7)
+## Features
+
+The current v0.2 development build includes:
+
+| Feature | What it does |
+| --- | --- |
+| Scoped GitHub access | Approve the repositories and permissions needed for each task. |
+| Native approval | Review each request on your Mac and approve with Touch ID or your password. |
+| Protected credentials | Keep parent tokens, refresh tokens, and client secrets in your Mac's Keychain. Only the scoped token reaches the agent. |
+| Local and remote agents | Connect through a local socket, SSH forwarding, or opt-in Tailscale HTTPS. |
+| Claude Code and Codex plugins | Let your agent request access and reuse approved grants through the bundled skill. |
+| Work after approval | Use delivered tokens until expiry, even while your Mac is offline. |
+| Audit history | Inspect requests, decisions, scopes, and delivery outcomes without recording credentials. |
+
+Planned features from the [roadmap](docs/ROADMAP.md):
+
+| Feature | Status |
+| --- | --- |
+| Fly.io, AWS, Cloudflare, and Vercel providers | Coming soon |
+| Approve requests on Linux and Windows | Coming soon |
+| iOS and Android companion apps for approvals | Coming soon |
+| Resume setup after organization approval | Coming soon |
+| Renew GitHub authorization without recreating your app | Coming soon |
+
+Agents currently run on macOS and Linux, with approvals on macOS. Coming soon features are planned, with no announced release dates.
+
+Git commit author metadata is configured separately.
 
 ## Version and requirements
 

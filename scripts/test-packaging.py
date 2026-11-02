@@ -92,6 +92,7 @@ esac
         self.assertEqual(plist["ProgramArguments"], [str(self.app / "Contents/MacOS/passlet"), "serve", "--helper", str(self.app / "Contents/MacOS/PassletHelper")])
         self.assertNotIn("--tailscale-listen", plist["ProgramArguments"])
         self.assertEqual(plist["LimitLoadToSessionType"], "Aqua")
+        self.assertEqual(plist["AssociatedBundleIdentifiers"], ["dev.passlet.app"])
         self.assertEqual(plist["Umask"], 63)
         self.assertEqual(self.file.stat().st_mode & 0o777, 0o600)
         self.assertTrue(self.state.exists())

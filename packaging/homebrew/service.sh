@@ -29,6 +29,7 @@ case "$action" in
         trap 'rm -f "$temporary"' EXIT HUP INT TERM
         /usr/bin/plutil -create xml1 "$temporary"
         /usr/bin/plutil -insert Label -string "$label" "$temporary"
+        /usr/bin/plutil -insert AssociatedBundleIdentifiers -json '["dev.passlet.app"]' "$temporary"
         /usr/bin/plutil -insert PassletPackageManager -string homebrew "$temporary"
         /usr/bin/plutil -insert ProgramArguments -json '[]' "$temporary"
         /usr/bin/plutil -insert ProgramArguments.0 -string "$app/Contents/MacOS/passlet" "$temporary"
@@ -44,7 +45,7 @@ case "$action" in
         /usr/bin/plutil -insert LimitLoadToSessionType -string Aqua "$temporary"
         /usr/bin/plutil -insert Umask -integer 63 "$temporary"
         if /bin/launchctl print "$domain/$label" >/dev/null 2>&1; then
-            /bin/launchctl bootout "$domain/$label"
+            /bin/launchctl bootout --wait "$domain/$label"
         fi
         mv -f "$temporary" "$file"
         /bin/launchctl bootstrap "$domain" "$file"
@@ -52,7 +53,7 @@ case "$action" in
     uninstall)
         if [ -f "$file" ]; then
             if /bin/launchctl print "$domain/$label" >/dev/null 2>&1; then
-                /bin/launchctl bootout "$domain/$label"
+                /bin/launchctl bootout --wait "$domain/$label"
             fi
             rm "$file"
         fi

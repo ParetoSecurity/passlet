@@ -52,7 +52,7 @@ its `@planned` tag (split it into a separate feature if needed). Never replace a
 missing implementation with a passing placeholder. These fixtures do not test
 real Touch ID or macOS Keychain protection.
 
-Inside `nix-shell`, run `make check-all`. On macOS also run `make check-macos`. The latter compiles the native helper, runs its lifecycle/cancellation/rotation state tests, and builds the UI smoke runner. Go tests cover prompt/scoping logic, provider responses, browser setup state and PKCE, identity, Unix sockets, cancellation, diagnostics, and credential handling.
+Inside `nix-shell`, run `make check-all`. On macOS also run `make check-macos`. The latter compiles the native helper for both Mac architectures, tests credential validation and lifecycle/cancellation/rotation state, runs the compiled helper against malformed and out-of-order pipe requests, and builds the UI smoke runner. The process tests exercise invalid imports, invalid prompts, store/delete before approval, non-pipe stdin, EOF, and duplicate error suppression. They never send a valid approval request or import real credentials. `./scripts/check-macos.sh --tests-only` compiles the helper for the current architecture and runs the same tests in macOS CI. Go tests cover prompt/scoping logic, provider responses, browser setup state and PKCE, identity, Unix sockets, cancellation, diagnostics, and credential handling.
 
 Run `make integration` on a Linux KVM machine. On Apple Silicon with the configured aarch64 Linux KVM builder:
 
@@ -75,7 +75,7 @@ build/ui-smoke /absolute/path/Passlet.app/Contents/MacOS/PassletHelper
 
 The runner requires Accessibility access for its launching application/process and system permission to inspect the authentication dialog. It does not request permission automatically. Exit 77 means skipped because permission/UI inspection is unavailable; it is not a pass. Exit 0 means the marked native prompt appeared and disappeared after closing the helper's input. The runner never approves authentication or reads a credential value. It uses a distinct smoke-test prompt and leaves real biometric approval to the human checklist. Do not authenticate a smoke-test prompt.
 
-GitHub-hosted macOS runners compile these tests and exercise the pure helper state machine. They do not establish real Touch ID, protected Keychain, login startup, or sleep/wake behavior.
+GitHub-hosted macOS runners run the Swift validation, state-machine, and helper process tests. They do not establish real Touch ID, protected Keychain, login startup, or sleep/wake behavior.
 
 ## Prepare the development app
 

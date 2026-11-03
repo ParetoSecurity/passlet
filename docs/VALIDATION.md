@@ -62,6 +62,8 @@ nix-build nix/tests.nix --argstr system aarch64-linux --no-out-link
 
 The test uses three isolated NixOS VMs: Alice and Bob's approvers plus a shared remote host. Real SSH reverse socket forwarding, Unix users, Git HTTP and gh operate against a test-only GitHub/approval fixture. It covers routing, concurrent independent requests, cross-user socket/file denial, read/write and repository scoping, busy/denied requests, cancellation, crash recovery, audit redaction, token use after tunnel closure, and provider expiry. Fixture keys and certificates are synthetic Nix build outputs, not production secrets. No fixture flags exist in the shipped CLI or Swift helper.
 
+Approval text scenarios in `cmd/passlet/features/approval.feature` run the real request CLI and Conductor against a helper fixture. They assert the complete approval message sent over the helper pipe, including local, SSH, and Tailscale caller labels, repository scope, and permissions. The expected text includes the English macOS prefix `Passlet is trying to ` and final period. The test adds that documented wrapper to the captured helper message for comparison, it does not inspect native rendering or verify other system languages. The fixture always denies the request, so these tests do not open Touch ID, access Keychain, or issue a token. macOS controls the surrounding dialog title, buttons, and rendering; those remain part of the native UI checks. Run these scenarios with `go test -v -run '^TestApprovalFeatures$' ./cmd/passlet`.
+
 ## Native UI smoke
 
 Run from a logged-in Mac desktop with the signed test app available:

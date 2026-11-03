@@ -159,7 +159,8 @@ func overviewConductor(ctx context.Context, hostOS, home string, command overvie
 	explicit := false
 	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "tailscale" })
 	if !explicit {
-		*enabled, _ = readTailscale(filepath.Join(home, ".config", "passlet", "conductor.json"))
+		config, _ := readConductorConfig(filepath.Join(home, ".config", "passlet", "conductor.json"))
+		*enabled = config.Tailscale
 	}
 	return *socket, *enabled
 }

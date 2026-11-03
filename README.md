@@ -68,6 +68,8 @@ On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default
 
 ## Remote agents over SSH
 
+On your Conductor Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `"ssh": ["cruncher"]` to `~/.config/passlet/conductor.json`, preserving any Tailscale setting, and restart the service. The Conductor creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
+
 On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
 ```sh
@@ -80,8 +82,8 @@ From your Mac, keep this SSH connection open, substituting your actual remote us
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
   -o StreamLocalBindUnlink=yes \
-  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/passlet.sock" \
-  alice@remote-box
+  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" \
+  alice@cruncher
 ```
 
 On that remote account, before starting Claude:
@@ -189,7 +191,8 @@ passlet audit --limit 20
 
 ## Trust and failure boundaries
 
-- A socket connection proves access to the socket, not that Claude initiated it. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
+- Requests infer the app label from `CLAUDECODE=1` (Claude) or a nonempty `CODEX_THREAD_ID` (Codex). Missing or conflicting markers display “Shell”. Inference happens on the Agent machine for both `request` and `exec` when requesting access. This label is unverified and does not authenticate the requesting app. The Conductor determines the device or socket route separately.
+- A socket connection proves access to the socket, not that Claude initiated it. SSH labels identify the configured socket route, not an authenticated remote host or process. A process running as your Mac user or root can access every route socket. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
 - Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The private Tailscale socket trusts Tailscale and processes with access to the same Unix account.
 - Every request requires native user presence. There are no queues, automatic request retries, client pairing, session keys, unattended approvals, or early revocation.
 - If the Mac is offline, continue work requiring no new credential. Bring it online and make a new explicit request when ready. The connection timeout is 5 seconds, server deadline 120 seconds, and client timeout 130 seconds. Timeout or disconnect cancels pending authentication.

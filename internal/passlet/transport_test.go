@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -113,5 +114,69 @@ printf '%s\n' '{"Node":{"StableID":"real-node","Name":"cruncher.tailnet.ts.net."
 				t.Fatal("closed socket accepted")
 			}
 		}
+	}
+}
+
+func TestSshSocketsAttributeRequestsByRoute(t *testing.T) {
+	approval := &testApprover{session: &testSession{}}
+	provider := &testMinter{}
+	audit := &memoryAudit{}
+	handler := NewServer(approval, provider, audit)
+	server := &http.Server{Handler: handler, ConnContext: ConnectionContext}
+	defer server.Close()
+	var listeners []*SshListener
+	for _, label := range []string{"cruncher", "other-server"} {
+		path := socketPath(t)
+		listener, err := ListenUnix(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ssh := &SshListener{Listener: listener, Label: label}
+		listeners = append(listeners, ssh)
+		go func() { _ = server.Serve(ssh) }()
+		client, closeClient, err := EndpointClient("unix://" + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequest("POST", "http://passlet.local/v1/grants", strings.NewReader(validBody))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-Forwarded-For", "100.72.70.9")
+		req.Header.Set("Tailscale-User-Login", "forged")
+		req.Header.Set("X-Passlet-Node", "forged")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		closeClient()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("grant failed: %d", resp.StatusCode)
+		}
+	}
+	if err := server.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(approval.prompts) != 2 || provider.calls != 2 {
+		t.Fatal("each route must require approval before issuing a grant")
+	}
+	for i, label := range []string{"cruncher", "other-server"} {
+		if !strings.HasPrefix(approval.prompts[i], "grant access to GitHub for:\n• Shell from "+label+"\n") {
+			t.Fatalf("missing route label: %s", approval.prompts[i])
+		}
+		if _, err := listeners[i].Accept(); err == nil {
+			t.Fatal("closed SSH listener accepted a connection")
+		}
+	}
+	seen := map[string]bool{}
+	for _, event := range audit.events {
+		if event.Caller.Transport != "ssh" || event.Caller.NodeID != "" || event.Caller.User != "" || (event.Caller.Name != "cruncher" && event.Caller.Name != "other-server") {
+			t.Fatalf("incorrect route identity: %+v", event.Caller)
+		}
+		seen[event.Caller.Name] = true
+	}
+	if len(seen) != 2 {
+		t.Fatal("both routes must appear in audit")
 	}
 }

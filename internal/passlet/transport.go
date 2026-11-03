@@ -10,6 +10,25 @@ import (
 	"time"
 )
 
+type sshConn struct {
+	net.Conn
+	label string
+}
+
+// The label belongs to a configured tunnel route, not a caller-supplied claim.
+type SshListener struct {
+	net.Listener
+	Label string
+}
+
+func (l *SshListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &sshConn{Conn: c, label: l.Label}, nil
+}
+
 type tailscaleConn struct{ net.Conn }
 
 // The dedicated socket is private because Serve's forwarded headers are trusted.

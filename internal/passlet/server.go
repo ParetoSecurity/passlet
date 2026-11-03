@@ -30,8 +30,12 @@ type Server struct {
 }
 
 type transportKey struct{}
+type callerKey struct{}
 
 func ConnectionContext(ctx context.Context, c net.Conn) context.Context {
+	if c, ok := c.(*sshConn); ok {
+		return context.WithValue(ctx, callerKey{}, Caller{Transport: "ssh", Name: c.label})
+	}
 	if _, ok := c.(*tailscaleConn); ok {
 		return context.WithValue(ctx, transportKey{}, "tailscale")
 	}
@@ -39,6 +43,9 @@ func ConnectionContext(ctx context.Context, c net.Conn) context.Context {
 }
 
 func connectionIdentity(ctx context.Context, remote string) (Caller, error) {
+	if caller, ok := ctx.Value(callerKey{}).(Caller); ok {
+		return caller, nil
+	}
 	if ctx.Value(transportKey{}) == "unix" {
 		return Caller{Transport: "unix", Name: "local/SSH socket client"}, nil
 	}

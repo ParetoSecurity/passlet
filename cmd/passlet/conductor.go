@@ -41,14 +41,14 @@ func conductor(ctx context.Context, args []string) error {
 	if info, err := os.Stat(*helper); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 		return errors.New("helper_unavailable_reinstall_Passlet_through_Homebrew_or_Home_Manager")
 	}
+	config, err := configuredConductor()
+	if err != nil {
+		return err
+	}
 	explicitTailscale := false
 	fs.Visit(func(f *flag.Flag) { explicitTailscale = explicitTailscale || f.Name == "tailscale" })
 	if !explicitTailscale {
-		configured, err := configuredTailscale()
-		if err != nil {
-			return err
-		}
-		*tailscale = configured
+		*tailscale = config.Tailscale
 	}
 	l, err := passlet.ListenUnix(*socket)
 	if err != nil {
@@ -61,6 +61,15 @@ func conductor(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = a.Close() }()
 	listeners := []net.Listener{l}
+	for _, label := range config.Ssh {
+		path := filepath.Join(filepath.Dir(*socket), "ssh-"+label+".sock")
+		listener, err := passlet.ListenUnix(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = listener.Close() }()
+		listeners = append(listeners, &passlet.SshListener{Listener: listener, Label: label})
+	}
 	if *tailscale {
 		t, err := passlet.ListenUnix(tailscaleSocket(*socket))
 		if err != nil {

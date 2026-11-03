@@ -29,6 +29,40 @@ Run `passlet connect <endpoint>` on the agent machine to check the Conductor's h
 
 The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved address. Without any of these, requests use the default local socket. If a saved address cannot be read or is invalid, correct it with `passlet connect`; commands do not silently switch to the local socket. Use `passlet` to see the effective address and `passlet doctor` to verify GitHub access.
 
+## SSH tunnel labels
+
+Configure the Conductor with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/conductor.json` and restart the service:
+
+```json
+{
+  "ssh": ["cruncher", "other-server"],
+  "tailscale": true
+}
+```
+
+Tailscale is optional. Labels must be unique, start with a lowercase letter or digit, and contain only lowercase letters, digits, and hyphens, up to 32 characters. On startup, the Conductor creates `ssh-cruncher.sock` and `ssh-other-server.sock` beside its normal socket. Each socket has mode `0600` in the same private directory. All listeners share the approval gate. Removing a label and restarting stops that listener.
+
+For Home Manager, declare the labels in your configuration and reactivate:
+
+```nix
+programs.passlet.service.ssh = [ "cruncher" "other-server" ];
+```
+
+Home Manager writes `~/.config/passlet/conductor.json` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated JSON file.
+
+For an account named `alice`, add this to `~/.ssh/config` on the Conductor Mac:
+
+```sshconfig
+Host cruncher
+    User alice
+    RemoteForward /home/alice/.local/share/passlet/mac.sock /Users/alice/.local/share/passlet/ssh-cruncher.sock
+    ExitOnForwardFailure yes
+```
+
+The first socket is created on Cruncher by SSH, and its parent directory must already exist with mode `0700`. The second socket is created on the Mac by the Conductor. It must be listening when a request arrives, although SSH can establish the tunnel before it exists. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. For another server, use another Host entry and the matching Mac-side socket.
+
+Approval prompts say “cruncher,” and audit events record `transport: "ssh"` and `name: "cruncher"`. These values come from the configured listener; request headers cannot change them. The label identifies the route, not an authenticated remote host, Unix user, or process. Other processes with access to that route can request approval too. Forwarding the normal `passlet.sock` still works, but its approval prompts display “local” and its audit records say “local/SSH socket client”. That socket cannot distinguish a local caller from an SSH forward; use a named SSH socket to display the route.
+
 ## SSH server configuration
 
 Use a separate remote Unix account per person and a mode-0700 directory for each forwarded socket. The server's sshd must allow stream-local forwarding. An administrator can scope these settings to the intended users:
@@ -42,20 +76,20 @@ Match User alice,bob
 
 Validate sshd configuration before reloading it and retain an existing admin session. `StreamLocalBindUnlink` on the server allows a new tunnel to replace its stale remote socket after disconnect. The SSH client's setting alone does not configure remote sshd. When the server cannot enable it, inspect the old tunnel and remove only your own stale forwarded socket before reconnecting. Replacing a live forward would interrupt requests.
 
-Alice runs this from her Mac:
+After configuring the `cruncher` label, Alice runs this from her Mac:
 
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
-  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/passlet.sock" alice@remote-box
+  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" alice@cruncher
 ```
 
-Bob uses `/home/bob/.local/share/passlet/mac.sock` and `bob@remote-box` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/mac.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
+Bob uses `/home/bob/.local/share/passlet/mac.sock` and `bob@cruncher` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/mac.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
 
 Unix permissions isolate Alice from Bob, but not either from remote root or other processes sharing their account. Never describe this as attesting the agent executable. Root can request approval through either socket and read delivered tokens. A compromised same-user process can also request approval; examine the scopes in the native prompt.
 
 ## Tailscale
 
-For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/conductor.json` containing `{"tailscale":true}`, then reinstall the cask to restart it. This file contains no credentials. Explicit CLI settings take precedence over the file; Home Manager always supplies its configured value. For foreground diagnostics, run `passlet conductor --tailscale`.
+For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/conductor.json` containing `{"tailscale":true}`, then reinstall the cask to restart it. This file contains no credentials. The `--tailscale` CLI setting takes precedence over the file; SSH labels are always read from the file. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet conductor --tailscale`.
 
 Passlet uses Tailscale Serve's HTTPS proxy to a dedicated mode-0600 Unix socket beside its normal local socket, with a `.tailscale` suffix. The sockets share one approval lock. Startup requires Tailscale 1.104.4 or newer, reuses matching forwarding on port `17400`, creates missing forwarding, and rejects conflicts. It does not configure Funnel, modify unrelated routes, invoke sudo, or alter tailnet HTTPS policy. A permission or HTTPS setup failure produces an actionable startup error.
 

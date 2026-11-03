@@ -15,11 +15,13 @@ case "${1:-}" in
     --tests-only) compile_app=false ;;
     *) echo 'Usage: check-macos.sh [--tests-only]' >&2; exit 1 ;;
 esac
+architectures="$(uname -m)"
 if [ "$compile_app" = true ]; then
-    for arch in arm64 x86_64; do
-        /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 macos/ApprovalState.swift macos/main.swift -o "build/PassletHelper-ci-$arch" -framework AppKit -framework Security -framework LocalAuthentication
-    done
+    architectures="arm64 x86_64"
 fi
-/usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/ApprovalState.swift macos/tests/main.swift -o build/helper-state-tests
-build/helper-state-tests
+for arch in $architectures; do
+    /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 macos/ApprovalState.swift macos/Credentials.swift macos/main.swift -o "build/PassletHelper-ci-$arch" -framework AppKit -framework Security -framework LocalAuthentication
+done
+/usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/ApprovalState.swift macos/Credentials.swift macos/tests/main.swift -o build/helper-state-tests
+build/helper-state-tests "build/PassletHelper-ci-$(uname -m)"
 /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 macos/ui-smoke/main.swift -o build/ui-smoke -framework AppKit -framework ApplicationServices

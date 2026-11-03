@@ -213,7 +213,7 @@ make check-macos             # macOS with Apple Command Line Tools
 
 The pinned flake exports `lib.integrationTest`; `nix/tests.nix` supplies the repository source to it. On an Apple Silicon Mac with an aarch64 Linux KVM builder, run `nix-build nix/tests.nix --argstr system aarch64-linux --no-out-link`. Three isolated NixOS guests run real SSH, Unix accounts, Git, gh, and Passlet. Approval and GitHub fixtures exist only in the test binary; production has no bypass switches. These VM tests do not test Keychain, Touch ID, launchd, or Mac sleep/wake.
 
-See [manual and UI validation](docs/VALIDATION.md) and [release controls](docs/RELEASING.md). For a development-signed helper, set `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`, then `make macos`. The output is `build/Passlet.app`; use a dedicated test account/profile for isolated Keychain testing.
+Swift validation, lifecycle, and helper process tests run with `make check-macos` and in macOS CI without requesting approval or reading protected credentials. See [manual and UI validation](docs/VALIDATION.md) and [release controls](docs/RELEASING.md). For a development-signed helper, set `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`, then `make macos`. The output is `build/Passlet.app`; use a dedicated test account/profile for isolated Keychain testing.
 
 The default package set and Home Manager use the stable 26.05 release. Go 1.27 comes from stable. Only `golangci-lint` comes from a separate pinned `nixpkgs-unstable` input because the stable linter is built with Go 1.26. Both package sets are updated by the weekly updater.
 

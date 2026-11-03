@@ -43,7 +43,7 @@ cp docs/*.md "$APP/Contents/Resources/docs/"
 mkdir -p "$APP/Contents/Resources/skills/passlet"
 cp skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
 for arch in $architectures; do
-    /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/main.swift -o "$(dirname "$APP")/helper-$arch" -framework AppKit -framework Security -framework LocalAuthentication
+    /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/Credentials.swift macos/main.swift -o "$(dirname "$APP")/helper-$arch" -framework AppKit -framework Security -framework LocalAuthentication
 done
 if [ "$mode" != development ]; then
     /usr/bin/lipo -create "$(dirname "$APP")"/helper-arm64 "$(dirname "$APP")"/helper-x86_64 -output "$APP/Contents/MacOS/PassletHelper"

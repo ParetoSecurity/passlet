@@ -80,9 +80,9 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 	if args[0] == "reset" {
 		return resetGitHub(ctx, *helper, deps)
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:45821")
+	listener, err := net.Listen("tcp4", "127.0.0.1:17402")
 	if err != nil {
-		writeSetupText(deps.output, "Cannot start GitHub setup because localhost port 45821 is already in use.\nClose the application using that port, then run `passlet github setup` again.")
+		writeSetupText(deps.output, "Cannot start GitHub setup because localhost port 17402 is already in use.\nClose the application using that port, then run `passlet github setup` again.")
 		return errors.New("setup_listener_unavailable")
 	}
 	defer func() { _ = listener.Close() }()

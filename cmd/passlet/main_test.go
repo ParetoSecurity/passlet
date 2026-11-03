@@ -83,7 +83,7 @@ func TestExecRejectsExpiredGrant(t *testing.T) {
 	}
 }
 
-func TestDiagnosticsUseSelectedSocketWithoutApproving(t *testing.T) {
+func TestDoctorUsesSelectedConductor(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "passlet-cli-")
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +95,10 @@ func TestDiagnosticsUseSelectedSocketWithoutApproving(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/v1/doctor" {
+			w.Write([]byte(`{"login":"alice"}`))
+			return
+		}
 		if r.Method != "GET" || r.URL.Path != "/v1/health" {
 			t.Error("diagnostic requested more than health")
 			w.WriteHeader(403)
@@ -104,16 +108,14 @@ func TestDiagnosticsUseSelectedSocketWithoutApproving(t *testing.T) {
 	})}
 	go server.Serve(listener)
 	defer server.Close()
-	for _, command := range []string{"doctor", "status"} {
-		if err := diagnostics(context.Background(), command, []string{"--endpoint", "unix://" + path}); err != nil {
-			t.Fatal(err)
-		}
+	if err := diagnostics(context.Background(), []string{"--endpoint", "unix://" + path}); err != nil {
+		t.Fatal(err)
 	}
 	server.Close()
-	if err := diagnostics(context.Background(), "doctor", []string{"--endpoint", "unix://" + path}); err == nil {
+	if err := diagnostics(context.Background(), []string{"--endpoint", "unix://" + path}); err == nil {
 		t.Fatal("offline doctor succeeded")
 	}
-	if err := diagnostics(context.Background(), "doctor", []string{"--endpoint", "https://secret@example.test"}); err == nil {
+	if err := diagnostics(context.Background(), []string{"--endpoint", "https://secret@example.test"}); err == nil {
 		t.Fatal("credential-bearing endpoint accepted")
 	}
 }

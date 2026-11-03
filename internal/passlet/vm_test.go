@@ -31,7 +31,7 @@ func (a vmApproval) Approve(ctx context.Context, _ string) (CredentialSession, e
 		<-ctx.Done()
 		return nil, errors.New("approval_cancelled")
 	}
-	return &testSession{c: Credentials{ClientID: "fixture", ClientSecret: "fixture-client-secret", AccessToken: "parent-" + a.user, RefreshToken: "fixture-refresh", ExpiresAt: time.Now().Add(time.Hour)}}, nil
+	return &testSession{c: Credentials{Account: AccountInfo{Login: a.user, AppID: 1, AppURL: "https://github.com/apps/passlet-" + a.user, VerifiedAt: time.Now()}, ClientID: "fixture", ClientSecret: "fixture-client-secret", AccessToken: "parent-" + a.user, RefreshToken: "fixture-refresh", ExpiresAt: time.Now().Add(time.Hour)}}, nil
 }
 
 func TestVMFixture(t *testing.T) {

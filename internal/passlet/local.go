@@ -17,13 +17,6 @@ func StateDir() string {
 
 func DefaultSocket() string { return filepath.Join(StateDir(), "passlet.sock") }
 
-func DefaultEndpoint() string {
-	if endpoint := os.Getenv("PASSLET_ENDPOINT"); endpoint != "" {
-		return endpoint
-	}
-	return "unix://" + DefaultSocket()
-}
-
 // PrivateDir refuses existing shared directories instead of changing their
 // permissions. Unix account isolation does not defend against root or same-UID
 // processes. Ancestor directories must be controlled by the account or root.

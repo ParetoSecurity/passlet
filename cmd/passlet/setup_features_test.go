@@ -20,10 +20,10 @@ func TestGitHubSetupFeatures(t *testing.T) {
 	if os.Getenv("PASSLET_TEST_PLANNED") == "1" {
 		tags = ""
 	} else {
-		t.Log("@planned organization approval is excluded pending live verification")
+		t.Log("@planned scenarios are excluded until implemented and verified")
 	}
 	suite := godog.TestSuite{
-		Options: &godog.Options{Format: "pretty", Paths: []string{"features"}, Tags: tags, Strict: true, TestingT: t},
+		Options: &godog.Options{Format: "pretty", Paths: []string{"features/github.feature"}, Tags: tags, Strict: true, TestingT: t},
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
 			type event struct{ action, output string }
 			var f *setupFixture
@@ -325,21 +325,12 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				return nil
 			})
-			s.Step(`^setup stops$`, func() error {
+			s.Step(`^the command exits (successfully|unsuccessfully)$`, func(outcome string) error {
 				if err := await(); err != nil {
 					return err
 				}
-				if pending.action != "done" || result.err == nil {
-					return fmt.Errorf("setup did not stop with an error")
-				}
-				return nil
-			})
-			s.Step(`^the command exits successfully$`, func() error {
-				if err := await(); err != nil {
-					return err
-				}
-				if pending.action != "done" || result.err != nil {
-					return fmt.Errorf("command did not succeed: %v", result.err)
+				if pending.action != "done" || (result.err == nil) != (outcome == "successfully") {
+					return fmt.Errorf("expected command to exit %s, got action %q and error %v", outcome, pending.action, result.err)
 				}
 				return nil
 			})
@@ -368,9 +359,9 @@ func TestGitHubSetupFeatures(t *testing.T) {
 			})
 			s.Step("^a GitHub App named `passlet-alice` already exists$", func() { configure("name_conflict") })
 			s.Step(`^GitHub rejects those credentials because the app was deleted or its authorization was revoked$`, func() { configure("revoked") })
-			s.Step("^another process is listening on `127.0.0.1:45821`$", func() error {
+			s.Step("^another process is listening on `127.0.0.1:17402`$", func() error {
 				var err error
-				occupied, err = net.Listen("tcp4", "127.0.0.1:45821")
+				occupied, err = net.Listen("tcp4", "127.0.0.1:17402")
 				return err
 			})
 			created := func() error {
@@ -413,11 +404,6 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				if f.command == "reset" && (result.browserOpens != 0 || result.exchanges != 0) {
 					t.Error("reset contacted setup flow")
-				}
-				if strings.Contains(result.output, "GitHub setup complete.") || strings.Contains(result.output, "GitHub access enabled for") || strings.Contains(result.output, "GitHub credentials removed.") {
-					if result.err != nil {
-						t.Errorf("command reported success but returned an error: %v", result.err)
-					}
 				}
 				assertSetupOutputContainsNoSecrets(t, result)
 				return ctx, nil

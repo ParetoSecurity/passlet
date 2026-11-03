@@ -60,8 +60,9 @@ func (a *testApprover) Approve(ctx context.Context, prompt string) (CredentialSe
 }
 
 type testMinter struct {
-	calls   int
-	refresh bool
+	calls       int
+	refresh     bool
+	identityErr error
 }
 
 func (g *testMinter) Refresh(ctx context.Context, c Credentials) (Credentials, error) {
@@ -393,3 +394,5 @@ func TestDeliveryFailureIsAudited(t *testing.T) {
 		t.Fatal("delivery outcome missing")
 	}
 }
+
+func (g *testMinter) VerifyIdentity(context.Context, Credentials, string) error { return g.identityErr }

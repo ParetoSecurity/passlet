@@ -9,7 +9,7 @@ let
     printf '#!/bin/sh\nexit 0\n' > "$out/bin/passlet"
     chmod +x "$out/bin/passlet"
   '';
-  evaluate = system: enabled: service: package:
+  evaluate = system: enabled: service: tailscale: package:
     let platformPkgs = import pkgs.path { inherit system; };
     in (home-manager.lib.homeManagerConfiguration {
       pkgs = platformPkgs;
@@ -17,16 +17,17 @@ let
         home.username = "alice";
         home.homeDirectory = if platformPkgs.stdenv.hostPlatform.isDarwin then "/Users/alice" else "/home/alice";
         home.stateVersion = "25.05";
-        programs.passlet = { enable = enabled; inherit package; }
+        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; }
           // lib.optionalAttrs (service != null) { service.enable = service; };
       } ];
     }).config;
-  mac = evaluate "aarch64-darwin" true null fakePackage;
-  updated = evaluate "aarch64-darwin" true null (fakePackage.overrideAttrs (_: { name = "passlet-package-fixture-new"; }));
-  disabled = evaluate "aarch64-darwin" false false fakePackage;
-  linux = evaluate "x86_64-linux" true null fakePackage;
-  client = evaluate "aarch64-darwin" true false fakePackage;
-  invalidLinux = evaluate "x86_64-linux" true true fakePackage;
+  mac = evaluate "aarch64-darwin" true null false fakePackage;
+  tailscale = evaluate "aarch64-darwin" true null true fakePackage;
+  updated = evaluate "aarch64-darwin" true null false (fakePackage.overrideAttrs (_: { name = "passlet-package-fixture-new"; }));
+  disabled = evaluate "aarch64-darwin" false false false fakePackage;
+  linux = evaluate "x86_64-linux" true null false fakePackage;
+  client = evaluate "aarch64-darwin" true false false fakePackage;
+  invalidLinux = evaluate "x86_64-linux" true true false fakePackage;
   plist = mac.programs.passlet.service.plist.text;
   activation = mac.home.activation.passletAgent.data;
   result = { inherit plist; };
@@ -35,12 +36,15 @@ assert builtins.all (a: a.assertion) mac.assertions;
 assert builtins.all (a: a.assertion) linux.assertions;
 assert lib.hasInfix "<string>dev.passlet.agent</string>" plist;
 assert lib.hasInfix (builtins.unsafeDiscardStringContext "<string>${fakePackage}/bin/passlet</string>") plist;
-assert lib.hasInfix "<string>serve</string>" plist;
+assert lib.hasInfix "<string>conductor</string>" plist;
 assert lib.hasInfix "<string>dev.passlet.app</string>" plist;
 assert lib.hasInfix "<string>Aqua</string>" plist;
 assert lib.hasInfix "<integer>63</integer>" plist;
 assert lib.hasInfix "<string>/usr/bin:/bin</string>" plist;
 assert !(lib.hasInfix "/bin/sh" plist);
+assert lib.hasInfix "<string>--tailscale=false</string>" plist;
+assert lib.hasInfix "<string>--tailscale=true</string>" tailscale.programs.passlet.service.plist.text;
+assert lib.hasInfix "/bin:/usr/bin:/bin</string>" tailscale.programs.passlet.service.plist.text;
 assert plist != updated.programs.passlet.service.plist.text;
 assert lib.hasInfix "launchctl bootstrap" activation;
 assert !(mac.launchd.agents ? passlet);

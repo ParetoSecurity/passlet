@@ -67,7 +67,7 @@ entitlement and provisioning profile only there. The bundle contains the CLI and
 The build signs the CLI before the outer helper bundle.
 
 On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
-approval/denial/cancellation flow. On Linux, verify `passlet version`, then the
+approval/denial/cancellation flow. On Linux, verify `passlet --version`, then the
 Git/gh workflows and scope denials against disposable repositories. Test both
 architectures on actual hardware where possible; cross-compilation is not a
 runtime test. Confirm Mac-offline use after token delivery.

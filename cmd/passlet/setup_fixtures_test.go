@@ -301,7 +301,7 @@ func (f *setupFixture) openBrowser(u string) error {
 		if u != "https://github.com/apps/passlet-alice/installations/new" {
 			f.t.Error("wrong existing app URL")
 		}
-		f.installCallback = "http://127.0.0.1:45821/github/installed?installation_id=1"
+		f.installCallback = "http://127.0.0.1:17402/github/installed?installation_id=1"
 		resp, err := http.Get(f.installCallback)
 		if err != nil {
 			return err
@@ -396,7 +396,7 @@ func (f *setupFixture) openBrowser(u string) error {
 		f.cancel()
 		return nil
 	}
-	f.installCallback = "http://127.0.0.1:45821/github/installed?installation_id=1"
+	f.installCallback = "http://127.0.0.1:17402/github/installed?installation_id=1"
 	resp, err = browserClient.Get(f.installCallback)
 	if err != nil {
 		return err

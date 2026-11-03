@@ -130,22 +130,30 @@ func safeLabel(s string) string {
 	}
 	return s
 }
+func (c Caller) displayName() string {
+	name := c.Name
+	if c.Transport == "tailscale" {
+		name, _, _ = strings.Cut(name, ".")
+	}
+	return safeLabel(name)
+}
+
 func (r Request) Prompt(c Caller) string {
 	keys := make([]string, 0, len(r.Permissions))
 	for k := range r.Permissions {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	lines := []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Repositories:"}
+	lines := []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Repositories:"}
 	if r.Organization != "" {
-		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Organization: " + r.Organization, "Organization-wide access", "All installed repositories: metadata read only"}
+		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Organization: " + r.Organization, "Organization-wide access", "All installed repositories: metadata read only"}
 	}
 	if r.Account != "" {
-		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Account: " + r.Account, "Account-wide access", "All installed repositories: metadata read only"}
+		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Account: " + r.Account, "Account-wide access", "All installed repositories: metadata read only"}
 	}
 	if len(r.Repositories) > 0 {
 		owner, _, _ := strings.Cut(r.Repositories[0], "/")
-		lines = []string{fmt.Sprintf("grant %s GitHub access", safeLabel(c.Name)), "", "Owner: " + owner, "Repositories:"}
+		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Owner: " + owner, "Repositories:"}
 	}
 	suffix := []string{"", "Permissions:"}
 	for _, k := range keys {

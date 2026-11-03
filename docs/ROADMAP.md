@@ -8,6 +8,10 @@ Ideas for future features, in no particular order. Inclusion here is not a commi
 - Fly.io, AWS, Cloudflare, and Vercel providers.
 - Native approval on Linux and Windows. Agents already run on macOS and Linux, while approval currently requires macOS.
 - iOS and Android companion apps for reviewing and approving requests.
+- Agent authentication with replay protection. Pair each Agent with the Conductor and verify signed requests bound to that Conductor, the requested scope, and a fresh single-use challenge. Reject reused or expired requests before prompting for approval, including after a Conductor restart. Show the authenticated Agent in approval prompts and audit history. Design key storage, rotation, and revocation explicitly; processes sharing an Agent’s Unix account remain within the same trust boundary.
+- Encrypt token responses for the requesting Agent. Bind the recipient key and encrypted response to the authenticated request so only that Agent can decrypt the token, even when Tailscale Serve or another proxy terminates HTTPS. Authenticate the Conductor’s response and reject responses belonging to another request.
+- Detect ambient credentials with `passlet doctor`. Check the machine running doctor for tokens in environment variables, dotfiles, and credential configuration used by `gh`, Git, and similar tools. Report variable names and file locations without printing token values, explain how these credentials could bypass Passlet’s scoped grants, and suggest removal or revocation without changing credentials automatically.
+- Harden and document the release process, including signing approvals, Nix cache configuration, artifact validation, package metadata publication, and recovery from failed or partial releases.
 
 ## Codebase improvements with the feature set frozen
 

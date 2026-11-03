@@ -13,7 +13,7 @@ import (
 	"passlet.dev/passlet/internal/passlet"
 )
 
-func TestDoctorLocalKeychainStatus(t *testing.T) {
+func TestDoctorRejectsUnsafeSocketDirectory(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "pl-doctor-")
 	if err != nil {
 		t.Fatal(err)
@@ -28,34 +28,11 @@ func TestDoctorLocalKeychainStatus(t *testing.T) {
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"ready"}`)) })}
 	go server.Serve(listener)
 	defer server.Close()
-	for _, tc := range []struct {
-		status, want string
-		fail         bool
-	}{
-		{"configured", "Keychain: configured", false},
-		{"missing", "Run passlet github setup.", true},
-		{"protected_or_unavailable", "Credential availability requires a real approved request", false},
-		{"unknown", "Helper: unavailable", true},
-	} {
-		t.Run(tc.status, func(t *testing.T) {
-			helper := filepath.Join(t.TempDir(), "helper")
-			script := "#!/bin/sh\n[ \"$1\" = --status ] || exit 2\nprintf '%s' '{\"status\":\"" + tc.status + "\"}'\n"
-			if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
-				t.Fatal(err)
-			}
-			output, err := invokeCLICommand(t, "", func() error {
-				return diagnosticsForOS(context.Background(), "doctor", []string{"--helper", helper}, "darwin")
-			})
-			if (err != nil) != tc.fail || !strings.Contains(output, tc.want) || !strings.Contains(output, "Service: ready") {
-				t.Fatalf("doctor: %q %v", output, err)
-			}
-		})
-	}
 	if err := os.Chmod(filepath.Dir(passlet.DefaultSocket()), 0755); err != nil {
 		t.Fatal(err)
 	}
 	output, err := invokeCLICommand(t, "", func() error {
-		return diagnosticsForOS(context.Background(), "doctor", []string{"--helper", filepath.Join(dir, "missing")}, "darwin")
+		return diagnosticsForOS(context.Background(), nil, "darwin")
 	})
 	if err == nil || !strings.Contains(output, "Socket directory: unsafe") {
 		t.Fatalf("unsafe directory: %q %v", output, err)
@@ -64,7 +41,7 @@ func TestDoctorLocalKeychainStatus(t *testing.T) {
 
 func TestDiagnosticArgumentValidation(t *testing.T) {
 	for _, args := range [][]string{{"--unknown"}, {"extra"}} {
-		if err := diagnostics(context.Background(), "doctor", args); err == nil {
+		if err := diagnostics(context.Background(), args); err == nil {
 			t.Fatal("invalid arguments accepted")
 		}
 	}
@@ -129,5 +106,46 @@ func TestAuditCommandWarnsWhenSkippingCorruption(t *testing.T) {
 	}
 	if string(warning) != "Warning: audit log contains corrupted entries (1 skipped).\n" {
 		t.Fatalf("missing corruption warning: %q", warning)
+	}
+}
+
+func TestDoctorReportsVerificationFailures(t *testing.T) {
+	for _, code := range []string{"credentials_missing", "approval_denied"} {
+		t.Run(code, func(t *testing.T) {
+			dir, err := os.MkdirTemp("/tmp", "pl-doctor-error-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			socket := filepath.Join(dir, "socket")
+			listener, err := passlet.ListenUnix(socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/health":
+					_, _ = w.Write([]byte(`{"status":"ready"}`))
+				case "/v1/doctor":
+					w.WriteHeader(http.StatusForbidden)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			})}
+			go func() { _ = server.Serve(listener) }()
+			defer server.Close()
+			output, err := invokeCLI(t, "", "doctor", "--endpoint", "unix://"+socket)
+			if err == nil || err.Error() != code || !strings.Contains(output, "GitHub credentials: verification failed ("+code+").") {
+				t.Fatalf("unexpected failure: %q %v", output, err)
+			}
+			if strings.Contains(output, "Run passlet github setup on your Mac.") != (code == "credentials_missing") {
+				t.Fatalf("incorrect recovery instructions: %q", output)
+			}
+			if strings.Contains(output, "GitHub authorization: valid") {
+				t.Fatal("failed verification was reported as successful")
+			}
+		})
 	}
 }

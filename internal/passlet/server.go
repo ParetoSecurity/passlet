@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -15,6 +16,7 @@ import (
 
 type Recorder interface{ Record(Event) error }
 type Minter interface {
+	VerifyIdentity(context.Context, Credentials, string) error
 	Refresh(context.Context, Credentials) (Credentials, error)
 	Mint(context.Context, Credentials, Request) (Grant, error)
 }
@@ -30,6 +32,9 @@ type Server struct {
 type transportKey struct{}
 
 func ConnectionContext(ctx context.Context, c net.Conn) context.Context {
+	if _, ok := c.(*tailscaleConn); ok {
+		return context.WithValue(ctx, transportKey{}, "tailscale")
+	}
 	return context.WithValue(ctx, transportKey{}, c.LocalAddr().Network())
 }
 
@@ -57,6 +62,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 403, "browser_requests_not_supported")
 		return
 	}
+	if r.Context().Value(transportKey{}) == "tailscale" {
+		peer, err := tailscalePeer(r)
+		if err != nil {
+			apiError(w, 403, "identity_unavailable")
+			return
+		}
+		r.RemoteAddr = peer
+	}
 	if r.URL.Path == "/v1/health" && r.Method == "GET" {
 		if _, err := s.Identity(r.Context(), r.RemoteAddr); err != nil {
 			apiError(w, 403, "identity_unavailable")
@@ -66,7 +79,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"status":"ready"}`)
 		return
 	}
-	if r.URL.Path != "/v1/grants" {
+	doctor := r.URL.Path == "/v1/doctor"
+	if r.URL.Path != "/v1/grants" && !doctor {
 		apiError(w, 404, "not_found")
 		return
 	}
@@ -90,7 +104,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// background disconnect detection after the request body is consumed.
 	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
 	var requested Request
-	if strictJSON(data, &requested) != nil || requested.Validate() != nil {
+	invalid := strictJSON(data, &requested) != nil || requested.Validate() != nil
+	if doctor {
+		invalid = strictJSON(data, &struct{}{}) != nil
+	}
+	if invalid {
 		apiError(w, 400, "invalid_request")
 		return
 	}
@@ -100,6 +118,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event := Event{RequestID: hex.EncodeToString(id), Caller: caller, Request: requested, Approver: "human", Outcome: "requested"}
+	if doctor {
+		event.Operation = "doctor"
+	}
 	if s.Audit.Record(event) != nil {
 		apiError(w, 503, "audit_unavailable")
 		return
@@ -135,7 +156,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = s.Audit.Record(event)
 		apiError(w, status, code)
 	}
-	session, err := s.Approval.Approve(ctx, requested.Prompt(caller))
+	prompt := requested.Prompt(caller)
+	if doctor {
+		prompt = fmt.Sprintf("check Passlet GitHub credentials for %s. This verifies your identity and may refresh saved authorization. No agent token will be issued.", caller.displayName())
+	}
+	session, err := s.Approval.Approve(ctx, prompt)
 	if err != nil {
 		fail(err.Error(), 403)
 		return
@@ -152,6 +177,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := session.Credentials()
+	if doctor && c.Account.Validate() != nil {
+		fail("invalid_protected_account_identity", 502)
+		return
+	}
 	updated, err := s.GitHub.Refresh(ctx, c)
 	if err != nil {
 		fail(err.Error(), 502)
@@ -164,19 +193,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		c = updated
 	}
-	grant, err := s.GitHub.Mint(ctx, c, requested)
-	if err != nil {
-		fail(err.Error(), 502)
-		return
+	var response any
+	if doctor {
+		if err := s.GitHub.VerifyIdentity(ctx, c, c.Account.Login); err != nil {
+			fail("github_identity_verification_failed", 502)
+			return
+		}
+		response = DoctorResult{Login: c.Account.Login}
+		event.GitHubUser = c.Account.Login
+		event.Outcome = "verified"
+	} else {
+		grant, err := s.GitHub.Mint(ctx, c, requested)
+		if err != nil {
+			fail(err.Error(), 502)
+			return
+		}
+		grant.ID = event.RequestID
+		event.ExpiresAt = &grant.ExpiresAt
+		event.GrantedOrganization = grant.Organization
+		event.GrantedAccount = grant.Account
+		event.GrantedPermissions = grant.Permissions
+		event.GrantedRepositories = grant.Repositories
+		event.GitHubUser = grant.User
+		event.Outcome = "minted"
+		response = grant
 	}
-	grant.ID = event.RequestID
-	event.ExpiresAt = &grant.ExpiresAt
-	event.GrantedOrganization = grant.Organization
-	event.GrantedAccount = grant.Account
-	event.GrantedPermissions = grant.Permissions
-	event.GrantedRepositories = grant.Repositories
-	event.GitHubUser = grant.User
-	event.Outcome = "minted"
 	if s.Audit.Record(event) != nil {
 		fail("audit_unavailable", 503)
 		return
@@ -186,7 +227,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(grant)
+	err = json.NewEncoder(w).Encode(response)
 	// A successful write is not proof that the remote application received it.
 	if err != nil {
 		event.Outcome = "delivery_failed"

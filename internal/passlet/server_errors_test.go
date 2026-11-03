@@ -107,3 +107,5 @@ func TestAuditDeliveryFailureIsLogged(t *testing.T) {
 		t.Fatalf("delivery audit failure log: %s", output.String())
 	}
 }
+
+func (g minterFuncs) VerifyIdentity(context.Context, Credentials, string) error { return nil }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ func diagnostics(ctx context.Context, args []string) error {
 }
 
 func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs := commandFlags("doctor", "Check your Conductor connection and verify GitHub access. Requires approval on your Conductor Mac. No agent token is issued.")
 	endpoint := fs.String("endpoint", "", "override the environment, saved endpoint, or default local socket")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -63,8 +62,8 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 }
 
 func auditCommand(args []string) error {
-	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
-	path := fs.String("path", filepath.Join(passlet.StateDir(), "audit.sqlite"), "local audit database")
+	fs := commandFlags("audit", "Show recent access events from the local audit log. Run on your Conductor Mac to review requests and approval decisions.")
+	jsonOutput := fs.Bool("json", false, "print structured records as JSON")
 	limit := fs.Int("limit", 20, "recent events, 1–1000")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -72,12 +71,16 @@ func auditCommand(args []string) error {
 	if fs.NArg() != 0 {
 		return errors.New("unexpected_arguments")
 	}
-	entries, skipped, err := passlet.ReadAudit(*path, *limit)
+	entries, skipped, err := passlet.ReadAudit(filepath.Join(passlet.StateDir(), "audit.sqlite"), *limit)
 	if err != nil {
 		return err
 	}
 	if skipped > 0 {
 		fmt.Fprintf(os.Stderr, "Warning: audit log contains corrupted entries (%d skipped).\n", skipped)
 	}
-	return json.NewEncoder(os.Stdout).Encode(entries)
+	if *jsonOutput {
+		return json.NewEncoder(os.Stdout).Encode(entries)
+	}
+	_, err = fmt.Fprint(os.Stdout, formatAudit(entries))
+	return err
 }

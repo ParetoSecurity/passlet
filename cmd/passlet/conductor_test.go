@@ -48,8 +48,8 @@ func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
 		{"removed listener flag", []string{"--tailscale-listen", "127.0.0.1:17401"}, "flag provided but not defined"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			socket := filepath.Join(dir, "socket")
-			args := append([]string{"--socket", socket}, tc.args...)
+			socket := passlet.DefaultSocket()
+			args := tc.args
 			err := conductor(context.Background(), args)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v; want %s", err, tc.want)
@@ -68,35 +68,36 @@ func TestConductorReadsConfigurationBeforeBinding(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	config := filepath.Join(configDir, "conductor.json")
-	if err := os.WriteFile(config, []byte(`{"unexpected":true}`), 0600); err != nil {
+	config := filepath.Join(configDir, "conductor.toml")
+	if err := os.WriteFile(config, []byte(`unexpected = true`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--helper", helper, "--socket", "relative"}
+	args := []string{"--helper", helper}
 	if err := conductor(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid_conductor_config") {
 		t.Fatalf("invalid config: %v", err)
 	}
-	if err := os.Remove(config); err != nil {
-		t.Fatal(err)
-	}
-	if err := conductor(context.Background(), args); err == nil || !strings.Contains(err.Error(), "socket_requires_absolute") {
-		t.Fatalf("invalid socket: %v", err)
+	if _, err := os.Stat(passlet.DefaultSocket()); !os.IsNotExist(err) {
+		t.Fatal("invalid config created a socket")
 	}
 }
 
 func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
-	for _, mode := range []string{"audit unavailable", "SSH socket occupied", "Tailscale socket occupied", "Tailscale unavailable"} {
+	for _, mode := range []string{"socket occupied", "audit unavailable", "SSH socket occupied", "Tailscale socket occupied", "Tailscale unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			dir, helper := conductorTestPaths(t)
-			socket := filepath.Join(dir, "socket")
-			audit := filepath.Join(dir, "audit.sqlite")
+			socket := passlet.DefaultSocket()
 			enabled := false
 			switch mode {
+			case "socket occupied":
+				if err := os.MkdirAll(passlet.DefaultSocket(), 0700); err != nil {
+					t.Fatal(err)
+				}
 			case "audit unavailable":
-				audit = dir
+				if err := os.MkdirAll(filepath.Join(passlet.StateDir(), "audit.sqlite"), 0700); err != nil {
+					t.Fatal(err)
+				}
 			case "SSH socket occupied":
-				writeSshConfig(t, dir)
-				l, err := passlet.ListenUnix(filepath.Join(dir, "ssh-other-server.sock"))
+				l, err := passlet.ListenUnix(filepath.Join(passlet.StateDir(), "ssh-other-server.sock"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -113,12 +114,18 @@ func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
 					t.Setenv("PATH", t.TempDir())
 				}
 			}
-			err := conductor(context.Background(), []string{"--helper", helper, "--socket", socket, "--audit", audit, "--tailscale=" + strconv.FormatBool(enabled)})
+			writeSshConfig(t, dir, enabled)
+			err := conductor(context.Background(), []string{"--helper", helper})
 			if err == nil {
 				t.Fatal("startup unexpectedly succeeded")
 			}
 			if mode == "audit unavailable" && err.Error() != "audit_unavailable" {
 				t.Fatal(err)
+			}
+			if mode == "socket occupied" {
+				if err := os.Remove(socket); err != nil {
+					t.Fatal(err)
+				}
 			}
 			l, err := passlet.ListenUnix(socket)
 			if err != nil {
@@ -126,7 +133,7 @@ func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
 			}
 			l.Close()
 			if mode == "SSH socket occupied" {
-				l, err := passlet.ListenUnix(filepath.Join(dir, "ssh-cruncher.sock"))
+				l, err := passlet.ListenUnix(filepath.Join(passlet.StateDir(), "ssh-cruncher.sock"))
 				if err != nil {
 					t.Fatalf("failed startup retained SSH socket: %v", err)
 				}
@@ -140,15 +147,15 @@ func TestConductorHealthAndCancellation(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		t.Run("Tailscale="+strconv.FormatBool(enabled), func(t *testing.T) {
 			dir, helper := conductorTestPaths(t)
-			socket := filepath.Join(dir, "socket")
-			writeSshConfig(t, dir)
+			socket := passlet.DefaultSocket()
+			writeSshConfig(t, dir, enabled)
 			installTailscaleFixture(t, tailscaleSocket(socket))
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
 				defer close(done)
-				done <- conductor(ctx, []string{"--helper", helper, "--socket", socket, "--audit", filepath.Join(dir, "audit.sqlite"), "--tailscale=" + strconv.FormatBool(enabled)})
+				done <- conductor(ctx, []string{"--helper", helper})
 			}()
 			t.Cleanup(func() {
 				cancel()
@@ -172,7 +179,7 @@ func TestConductorHealthAndCancellation(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 			for _, label := range []string{"cruncher", "other-server"} {
-				path := filepath.Join(dir, "ssh-"+label+".sock")
+				path := filepath.Join(passlet.StateDir(), "ssh-"+label+".sock")
 				if err := passlet.Health(ctx, "unix://"+path); err != nil {
 					t.Fatalf("SSH socket unhealthy: %v", err)
 				}
@@ -193,7 +200,7 @@ func TestConductorHealthAndCancellation(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("shutdown timed out")
 			}
-			for _, path := range []string{socket, filepath.Join(dir, "ssh-cruncher.sock"), filepath.Join(dir, "ssh-other-server.sock")} {
+			for _, path := range []string{socket, filepath.Join(passlet.StateDir(), "ssh-cruncher.sock"), filepath.Join(passlet.StateDir(), "ssh-other-server.sock")} {
 				l, err := passlet.ListenUnix(path)
 				if err != nil {
 					t.Fatalf("shutdown retained socket or lock: %v", err)
@@ -204,13 +211,13 @@ func TestConductorHealthAndCancellation(t *testing.T) {
 	}
 }
 
-func writeSshConfig(t *testing.T, home string) {
+func writeSshConfig(t *testing.T, home string, tailscale bool) {
 	t.Helper()
 	dir := filepath.Join(home, ".config", "passlet")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{"ssh":["cruncher","other-server"]}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), []byte("ssh = [\"cruncher\", \"other-server\"]\ntailscale = "+strconv.FormatBool(tailscale)), 0600); err != nil {
 		t.Fatal(err)
 	}
 }

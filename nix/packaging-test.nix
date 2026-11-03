@@ -1,6 +1,7 @@
 { pkgs, home-manager, source }:
 let
   lib = pkgs.lib;
+  tomlFormat = (import pkgs.path { system = "aarch64-darwin"; }).formats.toml { };
   flake = (import (source + "/flake.nix")).outputs {
     nixpkgs = { outPath = pkgs.path; inherit lib; };
   };
@@ -43,13 +44,13 @@ assert lib.hasInfix "<integer>63</integer>" plist;
 assert lib.hasInfix "<string>/usr/bin:/bin</string>" plist;
 assert !(lib.hasInfix "/bin/sh" plist);
 assert !(lib.hasInfix "--tailscale" plist);
-assert builtins.fromJSON mac.xdg.configFile."passlet/conductor.json".text == { ssh = [ ]; tailscale = false; };
-assert builtins.fromJSON tailscale.xdg.configFile."passlet/conductor.json".text == { ssh = [ "cruncher" ]; tailscale = true; };
+assert toString mac.xdg.configFile."passlet/conductor.toml".source == toString (tomlFormat.generate "passlet-conductor.toml" { ssh = [ ]; tailscale = false; });
+assert toString tailscale.xdg.configFile."passlet/conductor.toml".source == toString (tomlFormat.generate "passlet-conductor.toml" { ssh = [ "cruncher" ]; tailscale = true; });
 assert lib.hasInfix "<key>PassletConfiguration</key>" plist;
 assert plist != tailscale.programs.passlet.service.plist.text;
 assert builtins.elem "linkGeneration" mac.home.activation.passletAgent.after;
-assert !(linux.xdg.configFile ? "passlet/conductor.json");
-assert !(client.xdg.configFile ? "passlet/conductor.json");
+assert !(linux.xdg.configFile ? "passlet/conductor.toml");
+assert !(client.xdg.configFile ? "passlet/conductor.toml");
 assert lib.hasInfix "/bin:/usr/bin:/bin</string>" tailscale.programs.passlet.service.plist.text;
 assert plist != updated.programs.passlet.service.plist.text;
 assert lib.hasInfix "launchctl bootstrap" activation;

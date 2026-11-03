@@ -23,11 +23,8 @@ func githubCommand(ctx context.Context, args []string) error { // coverage-ignor
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "reset") {
 		return errors.New("usage: passlet github setup | reset")
 	}
-	if runtime.GOOS != "darwin" {
-		return errors.New("run_setup_on_your_Mac")
-	}
 	return setupWithDependencies(ctx, args, setupDependencies{
-		input: bufio.NewReader(os.Stdin), output: os.Stdout, provider: passlet.NewGitHub(),
+		hostOS: runtime.GOOS, command: overviewOutput, input: bufio.NewReader(os.Stdin), output: os.Stdout, provider: passlet.NewGitHub(),
 		helper:  defaultHelper(),
 		suggest: configuredGitHubHandle,
 		prompt:  promptSetupLine,
@@ -39,6 +36,9 @@ func githubCommand(ctx context.Context, args []string) error { // coverage-ignor
 
 // Dependencies are supplied by the command, never by environment-based test modes.
 type setupDependencies struct {
+	command  overviewCommand
+	listen   func(string, string) (net.Listener, error)
+	hostOS   string
 	approve  func(context.Context, string) (passlet.CredentialSession, error)
 	input    *bufio.Reader
 	output   io.Writer
@@ -68,11 +68,35 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 	}
 	fs := flag.NewFlagSet("github "+args[0], flag.ContinueOnError)
 	fs.SetOutput(deps.output)
-	githubUser := fs.String("github-user", "", "GitHub handle used to pre-fill the App name (prompted if omitted)")
+	var githubHandle string
+	if args[0] == "setup" {
+		fs.StringVar(&githubHandle, "handle", "", "GitHub handle used to pre-fill the App name (prompted if omitted)")
+	}
+	fs.Usage = func() {
+		description := "Set up GitHub access on your Conductor Mac in your browser. Credentials are saved in the macOS Keychain. Run again to add another organization."
+		if args[0] == "reset" {
+			description = "Remove saved GitHub credentials from this Conductor Mac. Your GitHub App and its installations remain on GitHub."
+		}
+		_, _ = fmt.Fprintln(deps.output, description)
+		if args[0] == "setup" {
+			_, _ = fmt.Fprintln(deps.output, "\nUsage of github setup:")
+			_, _ = fmt.Fprintln(deps.output, "  --handle string\n        GitHub handle used to pre-fill the App name (prompted if omitted)")
+		}
+	}
 	helper := fs.String("helper", deps.helper, "signed helper path")
-	permissions := fs.String("permissions", passlet.DefaultSetupPermissions, "maximum App permissions; each agent request is separately scoped")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
+	}
+	if args[0] == "setup" && deps.hostOS != "" {
+		home, _ := os.UserHomeDir()
+		socket, _ := overviewConductor(ctx, deps.hostOS, home, deps.command)
+		if socket == "" {
+			_, _ = fmt.Fprintln(deps.output, "This machine is configured as an Agent.\nRun `passlet github setup` on the Mac configured as your Conductor.")
+			return errSetupOnAgent
+		}
+	}
+	if deps.hostOS != "" && deps.hostOS != "darwin" {
+		return errors.New("run_setup_on_your_Mac")
 	}
 	if fs.NArg() != 0 || !filepath.IsAbs(*helper) {
 		return errors.New("setup_requires_absolute_helper")
@@ -80,7 +104,11 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 	if args[0] == "reset" {
 		return resetGitHub(ctx, *helper, deps)
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:17402")
+	listen := deps.listen
+	if listen == nil {
+		listen = net.Listen
+	}
+	listener, err := listen("tcp4", "127.0.0.1:17402")
 	if err != nil {
 		writeSetupText(deps.output, "Cannot start GitHub setup because localhost port 17402 is already in use.\nClose the application using that port, then run `passlet github setup` again.")
 		return errors.New("setup_listener_unavailable")
@@ -129,15 +157,12 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		})
 	}
 	perms := map[string]string{}
-	for _, p := range strings.Split(*permissions, ",") {
-		kv := strings.Split(p, ":")
-		if len(kv) != 2 || perms[kv[0]] != "" {
-			return errors.New("invalid_permissions")
-		}
-		perms[kv[0]] = kv[1]
+	for _, p := range strings.Split(passlet.DefaultSetupPermissions, ",") {
+		name, level, _ := strings.Cut(p, ":")
+		perms[name] = level
 	}
 
-	if *githubUser == "" {
+	if githubHandle == "" {
 		initial := ""
 		if deps.suggest != nil {
 			initial = deps.suggest(ctx)
@@ -146,9 +171,9 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		if err != nil {
 			return err
 		}
-		*githubUser = strings.TrimSpace(line)
+		githubHandle = strings.TrimSpace(line)
 	}
-	name, err := passlet.GitHubAppName(*githubUser)
+	name, err := passlet.GitHubAppName(githubHandle)
 	if err != nil {
 		return err
 	}
@@ -175,7 +200,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		return nil
 	}
 
-	return passlet.RunSetup(ctx, listener, *githubUser, perms, deps.provider, func(ctx context.Context, c passlet.Credentials, account passlet.AccountInfo) error {
+	return passlet.RunSetup(ctx, listener, githubHandle, perms, deps.provider, func(ctx context.Context, c passlet.Credentials, account passlet.AccountInfo) error {
 		writeSetupVerification(deps.output, account)
 		if err := passlet.ImportCredentials(ctx, *helper, c); err != nil {
 			return err
@@ -242,14 +267,6 @@ func resetGitHub(ctx context.Context, helper string, deps setupDependencies) err
 		return nil
 	}
 	writeSetupText(deps.output, "This removes Passlet's GitHub credentials from your Mac's Keychain.\nYour GitHub App and its installations will remain on GitHub.")
-	answer, err := setupReadLine(deps, "Remove GitHub credentials? [y/N]", "")
-	if err != nil {
-		return err
-	}
-	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-		writeSetupText(deps.output, "GitHub reset canceled.")
-		return nil
-	}
 	account, err := (passlet.NativeHelper{Path: helper}).Reset(ctx)
 	if err != nil {
 		return err

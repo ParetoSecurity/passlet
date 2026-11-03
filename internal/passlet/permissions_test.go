@@ -22,8 +22,8 @@ func TestPermissionScopesAndLevels(t *testing.T) {
 			if err := r.Validate(); err != nil {
 				t.Errorf("%s:%s: %v", name, level, err)
 			}
-			if !strings.Contains(r.Prompt(Caller{Name: "agent"}), name+": "+level) {
-				t.Error("permission missing from prompt", name)
+			if strings.Contains(r.Prompt(Caller{Name: "agent"}), name+": "+level) != (name != "metadata") {
+				t.Error("unexpected permission visibility in prompt", name)
 			}
 		}
 	}
@@ -44,7 +44,7 @@ func TestPermissionScopesAndLevels(t *testing.T) {
 	}
 }
 
-func TestWidePromptsDeclareRepositoryMetadata(t *testing.T) {
+func TestWidePromptsDeclareAllRepositories(t *testing.T) {
 	for _, r := range []Request{
 		{Organization: "Acme", Permissions: map[string]string{"members": "write"}},
 		{Account: "Alice", Permissions: map[string]string{"git_ssh_keys": "write"}},
@@ -53,7 +53,7 @@ func TestWidePromptsDeclareRepositoryMetadata(t *testing.T) {
 			t.Fatal(err)
 		}
 		prompt := r.Prompt(Caller{Name: "agent"})
-		if !strings.Contains(prompt, "All installed repositories: metadata read only") || !strings.Contains(prompt, "-wide access") {
+		if !strings.Contains(prompt, "Repositories:\n• all") || strings.Contains(prompt, "• metadata: read") {
 			t.Fatal("wide scope not disclosed", prompt)
 		}
 	}

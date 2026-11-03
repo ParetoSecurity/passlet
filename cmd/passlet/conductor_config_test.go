@@ -9,7 +9,7 @@ import (
 )
 
 func TestPackageServiceSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "conductor.json")
+	path := filepath.Join(t.TempDir(), "conductor.toml")
 	if got, err := readConductorConfig(path); got.Tailscale != false || err != nil {
 		t.Fatal("missing config must leave Tailscale disabled", err)
 	}
@@ -18,11 +18,12 @@ func TestPackageServiceSettings(t *testing.T) {
 		want     bool
 		valid    bool
 	}{
-		{`{}`, false, true},
-		{`{"tailscale":true}`, true, true},
-		{`{"tailscale":"yes"}`, false, false},
-		{`{"token":"must-not-be-printed"}`, false, false},
-		{`{} {}`, false, false},
+		{``, false, true},
+		{`tailscale = true`, true, true},
+		{"# Remote agents\ntailscale = true # Enable forwarding\n", true, true},
+		{`tailscale = "yes"`, false, false},
+		{`token = "must-not-be-printed"`, false, false},
+		{"tailscale = true\ntailscale = false", false, false},
 	} {
 		if err := os.WriteFile(path, []byte(tt.contents), 0600); err != nil {
 			t.Fatal(err)
@@ -47,7 +48,7 @@ func TestConfiguredConductor(t *testing.T) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{"tailscale":true}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), []byte(`tailscale = true`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := configuredConductor(); err != nil || got.Tailscale != true {
@@ -74,22 +75,22 @@ func TestConductorConfigIOErrors(t *testing.T) {
 }
 
 func TestConductorSshLabels(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "conductor.json")
+	path := filepath.Join(t.TempDir(), "conductor.toml")
 	for _, tc := range []struct {
 		name, contents string
 		want           []string
 		valid          bool
 	}{
-		{"two routes", `{"ssh":["cruncher","other-server"],"tailscale":true}`, []string{"cruncher", "other-server"}, true},
-		{"empty", `{"ssh":[]}`, []string{}, true},
-		{"duplicate", `{"ssh":["cruncher","cruncher"]}`, nil, false},
-		{"path traversal", `{"ssh":["../cruncher"]}`, nil, false},
-		{"uppercase", `{"ssh":["Cruncher"]}`, nil, false},
-		{"empty label", `{"ssh":[""]}`, nil, false},
-		{"leading hyphen", `{"ssh":["-cruncher"]}`, nil, false},
-		{"too long", `{"ssh":["` + strings.Repeat("a", 33) + `"]}`, nil, false},
-		{"wrong type", `{"ssh":"cruncher"}`, nil, false},
-		{"oversized config", `{"ssh":[]}` + strings.Repeat(" ", 4096), nil, false},
+		{"two routes", "ssh = [\"cruncher\", \"other-server\"]\ntailscale = true", []string{"cruncher", "other-server"}, true},
+		{"empty", `ssh = []`, []string{}, true},
+		{"duplicate", `ssh = ["cruncher","cruncher"]`, nil, false},
+		{"path traversal", `ssh = ["../cruncher"]`, nil, false},
+		{"uppercase", `ssh = ["Cruncher"]`, nil, false},
+		{"empty label", `ssh = [""]`, nil, false},
+		{"leading hyphen", `ssh = ["-cruncher"]`, nil, false},
+		{"too long", `ssh = ["` + strings.Repeat("a", 33) + `"]`, nil, false},
+		{"wrong type", `ssh = "cruncher"`, nil, false},
+		{"oversized config", `ssh = []` + strings.Repeat(" ", 4096), nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.contents), 0600); err != nil {

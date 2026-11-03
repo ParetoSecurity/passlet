@@ -50,8 +50,8 @@ in {
   };
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    xdg.configFile."passlet/conductor.json" = lib.mkIf cfg.service.enable {
-      text = builtins.toJSON settings;
+    xdg.configFile."passlet/conductor.toml" = lib.mkIf cfg.service.enable {
+      source = (pkgs.formats.toml { }).generate "passlet-conductor.toml" settings;
     };
     assertions = [{
       assertion = !cfg.service.enable || pkgs.stdenv.hostPlatform.isDarwin;

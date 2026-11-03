@@ -56,7 +56,7 @@ passlet doctor
 
 The first CLI-only release must publish package metadata before these installation commands are available.
 
-`setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum requests the highest supported level for the repository, organization, and account permissions in the checked-in GitHub API catalog, including administration, secrets, and account keys. Metadata remains read-only. Enterprise-only and single-file permissions are excluded. Select All repositories during installation; each agent token remains scoped to explicitly approved repositories. Override it with `--permissions contents:read,pull_requests:read` if you want a read-only app. Each later agent request must still name its exact repositories and permissions, within that maximum.
+`setup github` opens your browser to create a personal GitHub App, install it on eligible repositories, and authorize your GitHub account. Review the maximum permissions shown in GitHub. The default maximum requests the highest supported level for the repository, organization, and account permissions in the checked-in GitHub API catalog, including administration, secrets, and account keys. Metadata remains read-only. Enterprise-only and single-file permissions are excluded. Select All repositories during installation; each agent token remains scoped to explicitly approved repositories. Each later agent request must still name its exact repositories and permissions, within that maximum.
 
 Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
@@ -68,7 +68,7 @@ On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default
 
 ## Remote agents over SSH
 
-On your Conductor Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `"ssh": ["cruncher"]` to `~/.config/passlet/conductor.json`, preserving any Tailscale setting, and restart the service. The Conductor creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
+On your Conductor Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `"ssh": ["cruncher"]` to `~/.config/passlet/conductor.toml`, preserving any Tailscale setting, and restart the service. The Conductor creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
 
 On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
@@ -123,13 +123,23 @@ passlet exec --grant "$passlet_dir/grant.json" -- \
   gh pr list --repo acme/project
 ```
 
-The receipt reports user and actual expiry without printing the token. Always pass `--out` for agent requests; without it, JSON containing the token goes to stdout. The new grant file is mode 0600 and cannot overwrite another file. Remove it when finished; deleting it does not revoke the token.
+The receipt reports user and actual expiry without printing the token. Use `--out` when saving a grant for reuse. Without it, JSON containing the token goes to stdout and should be passed directly to `exec` rather than printed to the terminal. The new grant file is mode 0600 and cannot overwrite another file. Remove it when finished; deleting it does not revoke the token.
+
+For one-off commands in Bash or Zsh, use process substitution to pass the grant without saving a file:
+
+```sh
+passlet exec \
+  --grant <(passlet request --repos acme/project --permissions contents:read) \
+  -- gh repo view acme/project
+```
+
+The grant travels through a separate pipe, leaving the child command's standard input available for interactive use or piped data. `request` owns the scope and endpoint options. `exec` requires `--grant` and never requests approval itself.
 
 Use HTTPS Git remotes. `exec --grant` uses the delivered token without contacting the Mac, overrides ambient Git/gh credentials for the child, and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
 
 ## Tailscale, explicitly opt-in
 
-Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `{"tailscale":true}` in `~/.config/passlet/conductor.json` for Homebrew and restart the service. For foreground use, run `passlet conductor --tailscale`.
+Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `tailscale = true` in `~/.config/passlet/conductor.toml` for Homebrew and restart the service.
 
 Passlet keeps its local socket and creates a separate private socket for Tailscale Serve. At startup it checks forwarding on HTTPS port `17400`, leaves matching configuration alone, and creates it when absent. It refuses conflicting configuration and preserves unrelated Serve routes. No loopback TCP listener or separate setup command is needed. Tailscale must be running, signed in, and version 1.104.4 or newer. Its permissions and tailnet HTTPS settings must allow Serve configuration.
 
@@ -187,7 +197,7 @@ passlet doctor
 passlet audit --limit 20
 ```
 
-`doctor` asks for Touch ID or password approval on the Conductor’s Mac, unlocks Keychain, refreshes authorization when needed, and verifies your GitHub identity. It works through local and remote endpoints and returns nonzero if verification fails. It never issues an agent token. `audit` reads an existing local SQLite database without creating one and emits structured events: caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
+`doctor` asks for Touch ID or password approval on the Conductor’s Mac, unlocks Keychain, refreshes authorization when needed, and verifies your GitHub identity. It works through local and remote endpoints and returns nonzero if verification fails. It never issues an agent token. `audit` reads an existing local SQLite database without creating one and shows readable event summaries. Use `audit --json` for complete structured events, including caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
 
 ## Trust and failure boundaries
 

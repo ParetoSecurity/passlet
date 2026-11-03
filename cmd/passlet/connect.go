@@ -17,7 +17,7 @@ func (e connectionError) Error() string { return string(e) }
 func connect(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("connect", flag.ContinueOnError)
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), "Usage: passlet connect <https://host:port or unix:///absolute/socket>")
+		_, _ = fmt.Fprintln(fs.Output(), "Tell Passlet Agent how to connect to Passlet Conductor. Run once on each Agent machine. The connection is saved in ~/.config/passlet/endpoint for future commands.\n\nUsage: passlet connect <https://host:port or unix:///absolute/socket>")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

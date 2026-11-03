@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,22 +23,22 @@ func TestOverviewConductorConfiguration(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "conductor.json"), []byte(`{"tailscale":true}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "conductor.toml"), []byte(`tailscale = true`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
 		name, data, socket string
 		enabled            bool
 	}{
-		{"Homebrew", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--socket","/tmp/passlet.sock","--helper","/helper"]}`, "/tmp/passlet.sock", true},
-		{"Home Manager explicit disable", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--socket=/tmp/passlet.sock","--tailscale=false"]}`, "/tmp/passlet.sock", false},
+		{"Homebrew", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--helper","/helper"]}`, passlet.DefaultSocket(), true},
+		{"removed Tailscale flag", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--tailscale=false"]}`, "", false},
 		{"invalid JSON", `{`, "", false},
 		{"unrelated label", `{"Label":"other","ProgramArguments":["/passlet","conductor"]}`, "", false},
 		{"missing command", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet"]}`, "", false},
 		{"wrong command", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","doctor"]}`, "", false},
 		{"invalid flag", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--unknown"]}`, "", false},
 		{"positional argument", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","unexpected"]}`, "", false},
-		{"relative socket", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--socket=relative"]}`, "", false},
+		{"removed socket flag", `{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor","--socket=relative"]}`, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			socket, listener := overviewConductor(context.Background(), "darwin", home, func(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -91,7 +92,7 @@ func TestOverviewRemoteAddressValidation(t *testing.T) {
 
 func TestOverviewEndpointOverride(t *testing.T) {
 	t.Setenv("PASSLET_ENDPOINT", "https://other.example.ts.net:17400")
-	f := overviewFixture{conductor: true, socket: "/tmp/passlet.sock"}
+	f := overviewFixture{conductor: true, socket: passlet.DefaultSocket()}
 	var out bytes.Buffer
 	writeOverview(context.Background(), &out, "darwin", t.TempDir(), f.command, f.health)
 	if !strings.Contains(out.String(), "Configured as a Conductor.") || !strings.Contains(out.String(), "Sending requests to: https://other.example.ts.net:17400") {
@@ -126,15 +127,15 @@ func TestOverviewCommandAndDispatcher(t *testing.T) {
 
 func TestOverviewHomeManagerWrapper(t *testing.T) {
 	for _, script := range []string{
-		`/bin/wait4path /nix/store && exec /nix/store/package/bin/passlet conductor --helper /nix/store/package/helper --tailscale=true`,
-		`/bin/wait4path /nix/store && exec '/nix/store/package/bin/passlet' 'conductor' '--helper' '/nix/store/package/helper' '--tailscale=true'`,
+		`/bin/wait4path /nix/store && exec /nix/store/package/bin/passlet conductor --helper /nix/store/package/helper`,
+		`/bin/wait4path /nix/store && exec '/nix/store/package/bin/passlet' 'conductor' '--helper' '/nix/store/package/helper'`,
 	} {
 		data, err := json.Marshal(map[string]any{"Label": "dev.passlet.agent", "ProgramArguments": []string{"/bin/sh", "-c", script}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		socket, listener := overviewConductor(context.Background(), "darwin", t.TempDir(), func(context.Context, string, ...string) ([]byte, error) { return data, nil })
-		if socket == "" || !listener {
+		if socket == "" || listener {
 			t.Fatalf("wrapper not recognized: %q %v", socket, listener)
 		}
 	}
@@ -165,9 +166,18 @@ func TestOverviewLiteralShellArguments(t *testing.T) {
 	}
 }
 
-func TestOverviewHealthUsesConfiguredSocket(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	endpoint := endpointTestServer(t)
+func TestOverviewHealthUsesDefaultSocket(t *testing.T) {
+	conductorTestPaths(t)
+	listener, err := passlet.ListenUnix(passlet.DefaultSocket())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+	endpoint := "unix://" + passlet.DefaultSocket()
 	t.Setenv("PASSLET_ENDPOINT", endpoint)
 	f := overviewFixture{conductor: true, socket: strings.TrimPrefix(endpoint, "unix://")}
 	var out bytes.Buffer
@@ -179,21 +189,21 @@ func TestOverviewHealthUsesConfiguredSocket(t *testing.T) {
 
 func TestOverviewExpiredLookupDoesNotClaimUnavailability(t *testing.T) {
 	t.Setenv("PASSLET_ENDPOINT", "https://other.example.ts.net:17400")
-	f := overviewFixture{conductor: true, socket: "/tmp/passlet.sock", tailscale: true, condition: "querying Tailscale times out"}
+	f := overviewFixture{conductor: true, socket: passlet.DefaultSocket(), tailscale: true, condition: "querying Tailscale times out"}
 	var out bytes.Buffer
 	start := time.Now()
 	writeOverview(context.Background(), &out, "darwin", t.TempDir(), f.command, f.health)
 	if !strings.Contains(out.String(), "Local agents on this Mac connect automatically.") || !strings.Contains(out.String(), "WARNING! The Passlet Conductor could not be checked before the overview timed out.") {
 		t.Fatal(out.String())
 	}
-	if time.Since(start) >= 3*time.Second || len(f.healthCalls) != 1 || f.healthCalls[0] != "unix:///tmp/passlet.sock" {
+	if time.Since(start) >= 3*time.Second || len(f.healthCalls) != 1 || f.healthCalls[0] != "unix://"+passlet.DefaultSocket() {
 		t.Fatalf("unexpected health lookups: %v", f.healthCalls)
 	}
 }
 
 func TestOverviewDoctorTargetsUnavailableLocalConductor(t *testing.T) {
 	t.Setenv("PASSLET_ENDPOINT", "https://other.example.ts.net:17400")
-	f := overviewFixture{conductor: true, socket: "/tmp/passlet.sock"}
+	f := overviewFixture{conductor: true, socket: passlet.DefaultSocket()}
 	var out bytes.Buffer
 	writeOverview(context.Background(), &out, "darwin", t.TempDir(), f.command, func(_ context.Context, endpoint string) error {
 		if endpoint == "unix://"+f.socket {
@@ -204,7 +214,7 @@ func TestOverviewDoctorTargetsUnavailableLocalConductor(t *testing.T) {
 		}
 		return nil
 	})
-	if !strings.Contains(out.String(), "WARNING! The Passlet Conductor is not reachable") || !strings.Contains(out.String(), "Run `passlet doctor --endpoint 'unix:///tmp/passlet.sock'` for more information.") || !strings.Contains(out.String(), "Selected Conductor: reachable") || strings.Contains(out.String(), "Local agents on this Mac connect automatically.") {
+	if !strings.Contains(out.String(), "WARNING! The Passlet Conductor is not reachable") || !strings.Contains(out.String(), "Run `passlet doctor --endpoint 'unix://"+passlet.DefaultSocket()+"'` for more information.") || !strings.Contains(out.String(), "Selected Conductor: reachable") || strings.Contains(out.String(), "Local agents on this Mac connect automatically.") {
 		t.Fatal(out.String())
 	}
 }

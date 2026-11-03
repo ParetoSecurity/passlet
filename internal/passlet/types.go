@@ -116,7 +116,7 @@ func (r *Request) Validate() error {
 			return errors.New("permission_requires_" + permissionCatalog[name].Scope + "_scope")
 		}
 	}
-	// Metadata read is intrinsic to GitHub repository tokens and must be displayed.
+	// Metadata read is intrinsic to GitHub repository tokens.
 	r.Permissions["metadata"] = "read"
 	sort.Strings(r.Repositories)
 	return nil
@@ -145,7 +145,9 @@ func (c Caller) displayName() string {
 func (r Request) Prompt(c Caller) string {
 	keys := make([]string, 0, len(r.Permissions))
 	for k := range r.Permissions {
-		keys = append(keys, k)
+		if k != "metadata" {
+			keys = append(keys, k)
+		}
 	}
 	sort.Strings(keys)
 	agent := r.Agent
@@ -159,13 +161,16 @@ func (r Request) Prompt(c Caller) string {
 	lines := []string{fmt.Sprintf("grant access to GitHub for:\n• %s from %s\n• 8 hours", agent, location), ""}
 	switch {
 	case r.Organization != "":
-		lines = append(lines, "Organization: "+r.Organization, "Organization-wide access", "All installed repositories: metadata read only")
+		lines = append(lines, "Organization: "+r.Organization, "", "Repositories:", "• all")
 	case r.Account != "":
-		lines = append(lines, "Account: "+r.Account, "Account-wide access", "All installed repositories: metadata read only")
+		lines = append(lines, "Account: "+r.Account, "", "Repositories:", "• all")
 	default:
 		lines = append(lines, "Repositories:")
 	}
-	suffix := []string{"", "Permissions:"}
+	var suffix []string
+	if len(keys) > 0 {
+		suffix = []string{"", "Permissions:"}
+	}
 	for _, k := range keys {
 		suffix = append(suffix, "• "+k+": "+r.Permissions[k])
 	}
@@ -175,8 +180,10 @@ func (r Request) Prompt(c Caller) string {
 			body = append(body, "• "+repo)
 		}
 		if remaining := len(r.Repositories) - shown; remaining > 0 {
-			owner, _, _ := strings.Cut(r.Repositories[0], "/")
-			body = append(body, "Owner: "+owner)
+			if shown == 0 {
+				owner, _, _ := strings.Cut(r.Repositories[0], "/")
+				body = append(body, "Owner: "+owner)
+			}
 			body = append(body, fmt.Sprintf("and %d additional repositories", remaining))
 		}
 		prompt := strings.Join(append(body, suffix...), "\n")

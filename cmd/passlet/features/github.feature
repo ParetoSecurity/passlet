@@ -177,31 +177,6 @@ Feature: Set up a personal GitHub App
     And the existing Keychain credentials remain unchanged
     And the command exits successfully
 
-  # Confirm the request callback in a live GitHub walkthrough before implementation.
-  # Integration reference: https://sparkwing.dev/docs/github-app/
-  @planned
-  Scenario: Organization installation needs owner approval
-    Given Keychain contains credentials for `passlet-alice` authorized as `alice`
-    And `ACME` requires an organization owner to approve app installations
-    When I run `passlet github setup`
-    Then Passlet asks me to unlock its Keychain item
-    When I approve with Touch ID
-    Then my browser opens "https://github.com/apps/passlet-alice/installations/new"
-    When I request installation of `passlet-alice` for `ACME` on GitHub
-    And GitHub redirects my browser to "http://127.0.0.1:17402/github/installed?setup_action=request" without an installation ID
-    Then the terminal shows:
-      """
-      Organization owner approval is required. This request has not enabled repository access.
-      You can close this terminal. Check the installation request on GitHub for approval.
-      """
-    And the browser shows:
-      """
-      Organization owner approval is required.
-      You can close this tab. Check the installation request on GitHub for approval.
-      """
-    And the existing Keychain credentials remain unchanged
-    And the command exits unsuccessfully
-
   Scenario: Localhost port is already occupied
     Given another process is listening on `127.0.0.1:17402`
     When I run `passlet github setup`
@@ -278,9 +253,7 @@ Feature: Set up a personal GitHub App
       This removes Passlet's GitHub credentials from your Mac's Keychain.
       Your GitHub App and its installations will remain on GitHub.
       """
-    And the terminal prompts "Remove GitHub credentials? [y/N]"
-    When I enter `y` and press Enter
-    Then Keychain contains no Passlet credentials
+    And Keychain contains no Passlet credentials
     And the terminal shows:
       """
       GitHub credentials removed. Run `passlet github setup` to set up again.
@@ -290,24 +263,10 @@ Feature: Set up a personal GitHub App
     And no browser opens
     And the command exits successfully
 
-  Scenario: Cancel resetting GitHub credentials
-    Given Keychain contains credentials for `passlet-alice` authorized as `alice`
-    When I run `passlet github reset`
-    Then the terminal prompts "Remove GitHub credentials? [y/N]"
-    When I press Enter
-    Then the terminal shows:
-      """
-      GitHub reset canceled.
-      """
-    And the existing Keychain credentials remain unchanged
-    And the command exits successfully
-
   Scenario: Refuse Keychain approval during reset
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
     And I will refuse the Keychain prompt
     When I run `passlet github reset`
-    Then the terminal prompts "Remove GitHub credentials? [y/N]"
-    When I enter `y` and press Enter
     Then the terminal shows:
       """
       GitHub reset canceled.
@@ -325,7 +284,6 @@ Feature: Set up a personal GitHub App
     When I enter `bob` and press Enter
     Then setup uses `bob` as my GitHub handle
 
-  @planned
   Scenario Outline: Run GitHub setup on an Agent machine
     Given this <machine> has no local Conductor configured
     And PASSLET_ENDPOINT is "<endpoint>"

@@ -19,7 +19,9 @@ import (
 
 const overviewHelpHint = "See `passlet --help` for available commands.\n"
 
-const commandHelp = `Usage: passlet <command>
+const commandHelp = `Give your remote agents scoped access to services, approved on-the-fly from your laptop. Run passlet without arguments to see how this machine is configured.
+
+Usage: passlet <command>
 
 Commands:
   connect       Check and save a Conductor endpoint
@@ -30,8 +32,6 @@ Commands:
   exec          Run a command with scoped access
   doctor        Verify Conductor and GitHub access with approval
   audit         Show local audit history
-  import        Import credentials using the signed helper
-  --version     Show the installed version
 
 Run passlet <command> --help for command options.
 `
@@ -149,20 +149,12 @@ func overviewConductor(ctx context.Context, hostOS, home string, command overvie
 	}
 	fs := flag.NewFlagSet("conductor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	socket := fs.String("socket", passlet.DefaultSocket(), "")
-	enabled := fs.Bool("tailscale", false, "")
 	fs.String("helper", "", "")
-	fs.String("audit", "", "")
-	if fs.Parse(args[2:]) != nil || fs.NArg() != 0 || !filepath.IsAbs(*socket) {
+	if fs.Parse(args[2:]) != nil || fs.NArg() != 0 {
 		return "", false
 	}
-	explicit := false
-	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "tailscale" })
-	if !explicit {
-		config, _ := readConductorConfig(filepath.Join(home, ".config", "passlet", "conductor.json"))
-		*enabled = config.Tailscale
-	}
-	return *socket, *enabled
+	settings, _ := readConductorConfig(filepath.Join(home, ".config", "passlet", "conductor.toml"))
+	return passlet.DefaultSocket(), settings.Tailscale
 }
 
 func overviewRemoteAddresses(ctx context.Context, socket string, enabled bool, command overviewCommand) []string {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -120,12 +121,32 @@ func TestDoctorUsesSelectedConductor(t *testing.T) {
 	}
 }
 
-func TestAuditCLIRequiresExistingDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing.sqlite")
-	if err := auditCommand([]string{"--path", path}); err == nil {
-		t.Fatal("missing audit accepted")
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("audit command created database")
+func TestExecProcessSubstitutionPreservesStdin(t *testing.T) {
+	t.Setenv("PASSLET_ENDPOINT", endpointTestServer(t))
+	for _, permissions := range []string{"contents:read", "invalid"} {
+		t.Run(permissions, func(t *testing.T) {
+			cli := fixture(t)
+			cmd := exec.Command("bash", "--noprofile", "--norc", "-c", `
+"$1" exec --grant <("$1" request --repos alice/repo --permissions "$2") -- /bin/sh -c '
+  test "$GH_TOKEN" = fixture-token || exit 9
+  printf "child started\n"
+  cat
+'`, "passlet-process-substitution", cli.Path, permissions)
+			cmd.Env = cli.Env
+			cmd.Stdin = strings.NewReader("input for the child\n")
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			output, err := cmd.Output()
+			if permissions == "contents:read" {
+				if err != nil || string(output) != "child started\ninput for the child\n" {
+					t.Fatalf("process substitution failed: %q, %v, %s", output, err, stderr.String())
+				}
+			} else if err == nil || len(output) != 0 {
+				t.Fatalf("failed request started child: %q, %v", output, err)
+			}
+			if strings.Contains(stderr.String(), "fixture-token") || strings.Contains(string(output), "fixture-token") {
+				t.Fatal("grant token leaked to command output")
+			}
+		})
 	}
 }

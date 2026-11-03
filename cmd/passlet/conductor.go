@@ -28,10 +28,11 @@ func defaultHelper() string {
 
 func conductor(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("conductor", flag.ContinueOnError)
-	socket := fs.String("socket", passlet.DefaultSocket(), "private Unix socket path")
-	tailscale := fs.Bool("tailscale", false, "expose the Conductor through Tailscale Serve on port 17400")
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(fs.Output(), "Run Passlet Conductor service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.")
+	}
+	socket := passlet.DefaultSocket()
 	helper := fs.String("helper", defaultHelper(), "absolute signed helper path")
-	audit := fs.String("audit", filepath.Join(passlet.StateDir(), "audit.sqlite"), "SQLite audit path")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -45,24 +46,19 @@ func conductor(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	explicitTailscale := false
-	fs.Visit(func(f *flag.Flag) { explicitTailscale = explicitTailscale || f.Name == "tailscale" })
-	if !explicitTailscale {
-		*tailscale = config.Tailscale
-	}
-	l, err := passlet.ListenUnix(*socket)
+	l, err := passlet.ListenUnix(socket)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = l.Close() }()
-	a, err := passlet.OpenAudit(*audit)
+	a, err := passlet.OpenAudit(filepath.Join(passlet.StateDir(), "audit.sqlite"))
 	if err != nil {
 		return errors.New("audit_unavailable")
 	}
 	defer func() { _ = a.Close() }()
 	listeners := []net.Listener{l}
 	for _, label := range config.Ssh {
-		path := filepath.Join(filepath.Dir(*socket), "ssh-"+label+".sock")
+		path := filepath.Join(filepath.Dir(socket), "ssh-"+label+".sock")
 		listener, err := passlet.ListenUnix(path)
 		if err != nil {
 			return err
@@ -70,13 +66,13 @@ func conductor(ctx context.Context, args []string) error {
 		defer func() { _ = listener.Close() }()
 		listeners = append(listeners, &passlet.SshListener{Listener: listener, Label: label})
 	}
-	if *tailscale {
-		t, err := passlet.ListenUnix(tailscaleSocket(*socket))
+	if config.Tailscale {
+		t, err := passlet.ListenUnix(tailscaleSocket(socket))
 		if err != nil {
 			return err
 		}
 		defer func() { _ = t.Close() }()
-		if err := ensureTailscale(ctx, tailscaleSocket(*socket), overviewOutput); err != nil {
+		if err := ensureTailscale(ctx, tailscaleSocket(socket), overviewOutput); err != nil {
 			return err
 		}
 		listeners = append(listeners, &passlet.TailscaleListener{Listener: t})
@@ -89,9 +85,9 @@ func conductor(ctx context.Context, args []string) error {
 	for _, listener := range listeners {
 		go func() { results <- server.Serve(listener) }()
 	}
-	fmt.Fprintln(os.Stderr, "Passlet listening on", *socket)
-	if *tailscale {
-		fmt.Fprintln(os.Stderr, "Tailscale Serve socket:", tailscaleSocket(*socket))
+	fmt.Fprintln(os.Stderr, "Passlet listening on", socket)
+	if config.Tailscale {
+		fmt.Fprintln(os.Stderr, "Tailscale Serve socket:", tailscaleSocket(socket))
 	}
 	select {
 	case err = <-results: // coverage-ignore: Listeners are owned here; unexpected accept failure requires an OS fault.

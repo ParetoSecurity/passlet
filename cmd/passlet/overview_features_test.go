@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/pelletier/go-toml/v2"
 	"passlet.dev/passlet/internal/passlet"
 )
 
@@ -47,7 +47,16 @@ func (f *overviewFixture) command(ctx context.Context, name string, args ...stri
 		if !f.conductor {
 			return nil, errors.New("no LaunchAgent")
 		}
-		arguments := []string{"/passlet", "conductor", "--socket", f.socket, "--tailscale=" + strconv.FormatBool(f.tailscale)}
+		home := filepath.Dir(filepath.Dir(filepath.Dir(args[len(args)-1])))
+		dir := filepath.Join(home, ".config", "passlet")
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return nil, err
+		}
+		config, _ := toml.Marshal(conductorConfig{Tailscale: f.tailscale})
+		if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), config, 0600); err != nil {
+			return nil, err
+		}
+		arguments := []string{"/passlet", "conductor"}
 		return json.Marshal(map[string]any{"Label": "dev.passlet.agent", "ProgramArguments": arguments})
 	}
 	if name != "tailscale" {
@@ -89,9 +98,9 @@ func (f *overviewFixture) command(ctx context.Context, name string, args ...stri
 	})
 }
 
-func TestOverviewHelpAndVersionFeatures(t *testing.T) {
+func TestOverviewAndVersionFeatures(t *testing.T) {
 	suite := godog.TestSuite{
-		Options: &godog.Options{Format: "pretty", Paths: []string{"features/help.feature", "features/overview.feature", "features/version.feature"}, Strict: true, TestingT: t},
+		Options: &godog.Options{Format: "pretty", Paths: []string{"features/overview.feature", "features/version.feature"}, Strict: true, TestingT: t},
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
 			var f overviewFixture
 			var output string
@@ -134,12 +143,12 @@ func TestOverviewHelpAndVersionFeatures(t *testing.T) {
 					return errors.New("configure a Conductor first")
 				}
 				conductorDir, helper = conductorTestPaths(t)
-				f.socket = filepath.Join(conductorDir, "socket")
+				f.socket = passlet.DefaultSocket()
 				ctx, cancel := context.WithCancel(context.Background())
 				done := make(chan error, 1)
 				go func() {
 					defer close(done)
-					done <- conductor(ctx, []string{"--helper", helper, "--socket", f.socket, "--audit", filepath.Join(conductorDir, "audit.sqlite"), "--tailscale=false"})
+					done <- conductor(ctx, []string{"--helper", helper})
 				}()
 				defer func() {
 					cancel()
@@ -191,7 +200,7 @@ func TestOverviewHelpAndVersionFeatures(t *testing.T) {
 				}
 				output, result = invokeCLICommand(t, "", func() error {
 					return runWithOverview(func(ctx context.Context) {
-						writeOverview(ctx, os.Stdout, f.hostOS, "/fixture-home", f.command, f.health)
+						writeOverview(ctx, os.Stdout, f.hostOS, os.Getenv("HOME"), f.command, f.health)
 					})
 				}, args...)
 			})
@@ -250,6 +259,6 @@ func TestOverviewHelpAndVersionFeatures(t *testing.T) {
 		},
 	}
 	if suite.Run() != 0 {
-		t.Fatal("overview, help, or version scenarios failed")
+		t.Fatal("overview or version scenarios failed")
 	}
 }

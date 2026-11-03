@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -47,65 +46,6 @@ func TestDiagnosticArgumentValidation(t *testing.T) {
 	}
 	if err := auditCommand([]string{"extra"}); err == nil {
 		t.Fatal("audit accepted extra arguments")
-	}
-}
-
-func TestAuditCommandPrintsEntries(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.sqlite")
-	audit, err := passlet.OpenAudit(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := audit.Record(passlet.Event{RequestID: "test-request", Outcome: "approved"}); err != nil {
-		t.Fatal(err)
-	}
-	audit.Close()
-	output, err := invokeCLI(t, "", "audit", "--path", path)
-	if err != nil || !strings.Contains(output, `"request_id":"test-request"`) {
-		t.Fatalf("audit output: %q %v", output, err)
-	}
-}
-
-func TestAuditCommandWarnsWhenSkippingCorruption(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.sqlite")
-	audit, err := passlet.OpenAudit(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := audit.Record(passlet.Event{RequestID: "valid", Outcome: "approved"}); err != nil {
-		t.Fatal(err)
-	}
-	audit.Close()
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO events(at,request_id,outcome,data) VALUES('now','broken','approved','corrupted-fixture')`); err != nil {
-		t.Fatal(err)
-	}
-	stderr, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stderr.Close()
-	oldStderr := os.Stderr
-	os.Stderr = stderr
-	defer func() { os.Stderr = oldStderr }()
-	output, err := invokeCLI(t, "", "audit", "--path", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var entries []passlet.AuditEntry
-	if err := json.Unmarshal([]byte(output), &entries); err != nil || len(entries) != 1 || entries[0].Event.RequestID != "valid" {
-		t.Fatalf("valid JSON entries lost: %q %v", output, err)
-	}
-	warning, err := os.ReadFile(stderr.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(warning) != "Warning: audit log contains corrupted entries (1 skipped).\n" {
-		t.Fatalf("missing corruption warning: %q", warning)
 	}
 }
 

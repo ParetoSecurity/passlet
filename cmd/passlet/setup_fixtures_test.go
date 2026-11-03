@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -90,8 +91,10 @@ func TestSetupHelperFixture(t *testing.T) {
 // setupFixture wires the real CLI and GitHub client to disposable test resources.
 // Only the signed Swift process, browser/user actions, and GitHub are simulated.
 type setupFixture struct {
+	hostOS              string
+	agent               bool
+	listenerStarts      int
 	command             string
-	answer              string
 	prompts             int
 	suggestedHandle     string
 	installCallback     string
@@ -124,10 +127,11 @@ type setupResult struct {
 
 func newSetupFixture(t *testing.T, mode string) *setupFixture {
 	t.Helper()
-	f := &setupFixture{t: t, mode: mode, dir: t.TempDir(), handle: "alice", command: "setup"}
+	f := &setupFixture{hostOS: "darwin", t: t, mode: mode, dir: t.TempDir(), handle: "alice", command: "setup"}
 	if err := os.Chmod(f.dir, 0700); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("HOME", f.dir)
 	f.marker = filepath.Join(f.dir, "imported")
 	f.helper = f.writeHelperLauncher()
 	if mode == "existing" || mode == "protected" || mode == "revoked" {
@@ -147,7 +151,7 @@ func (f *setupFixture) writeHelperLauncher() string {
 		f.t.Fatal(err)
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-	script := "#!/bin/sh\nGORACE=atexit_sleep_ms=0 PASSLET_SETUP_FIXTURE=" + quote(f.mode) + " PASSLET_SETUP_MARKER=" + quote(f.marker) + " exec " + quote(self) + " -test.run='^TestSetupHelperFixture$' -- \"$@\"\n"
+	script := "#!/bin/sh\n: > " + quote(filepath.Join(f.dir, "helper-invoked")) + "\nGORACE=atexit_sleep_ms=0 PASSLET_SETUP_FIXTURE=" + quote(f.mode) + " PASSLET_SETUP_MARKER=" + quote(f.marker) + " exec " + quote(self) + " -test.run='^TestSetupHelperFixture$' -- \"$@\"\n"
 	path := filepath.Join(f.dir, "helper")
 	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
 		f.t.Fatal(err)
@@ -157,7 +161,18 @@ func (f *setupFixture) writeHelperLauncher() string {
 
 func (f *setupFixture) run() setupResult {
 	f.t.Helper()
-	err := setupWithDependencies(f.ctx, []string{f.command, "--permissions", "contents:read"}, setupDependencies{
+	err := setupWithDependencies(f.ctx, []string{f.command}, setupDependencies{
+		hostOS: f.hostOS,
+		command: func(context.Context, string, ...string) ([]byte, error) {
+			if f.agent {
+				return nil, os.ErrNotExist
+			}
+			return []byte(`{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor"]}`), nil
+		},
+		listen: func(network, address string) (net.Listener, error) {
+			f.listenerStarts++
+			return net.Listen(network, address)
+		},
 		input: bufio.NewReader(strings.NewReader("")), output: &f.output,
 		approve: func(ctx context.Context, prompt string) (passlet.CredentialSession, error) {
 			if f.action != nil {
@@ -171,14 +186,6 @@ func (f *setupFixture) run() setupResult {
 		prompt: func(prompt, initial string) (string, error) {
 			f.prompts++
 			fmt.Fprintln(&f.output, prompt+initial)
-			if strings.HasPrefix(prompt, "Remove GitHub") {
-				if f.action != nil {
-					if err := f.action("reset"); err != nil {
-						return "", err
-					}
-				}
-				return f.answer, nil
-			}
 			if f.action == nil {
 				if prompt != "" {
 					return "alice", nil
@@ -217,6 +224,7 @@ type setupGitHubFixture struct {
 	owner                    string
 	server                   *httptest.Server
 	exchanges, verifications atomic.Int32
+	requests                 atomic.Int32
 	lookupName               atomic.Value
 }
 
@@ -233,7 +241,14 @@ func (f *setupGitHubFixture) client() *passlet.GitHub {
 }
 
 func (f *setupGitHubFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	f.requests.Add(1)
 	w.Header().Set("Content-Type", "application/json")
+	permissions := map[string]string{}
+	for _, permission := range strings.Split(passlet.DefaultSetupPermissions, ",") {
+		name, level, _ := strings.Cut(permission, ":")
+		permissions[name] = level
+	}
+	encoded, _ := json.Marshal(permissions)
 	switch r.URL.Path {
 	case "/apps/passlet-alice", "/apps/passlet-bob":
 		f.lookupName.Store(strings.TrimPrefix(r.URL.Path, "/apps/"))
@@ -246,7 +261,7 @@ func (f *setupGitHubFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			f.t.Error("wrong conversion method")
 		}
-		io.WriteString(w, `{"id":123,"client_id":"fixture-client","client_secret":"fixture-client-secret","html_url":"https://github.com/apps/passlet-alice","owner":{"login":"alice"},"permissions":{"contents":"read","metadata":"read"},"pem":"fixture-unused-private-key"}`)
+		fmt.Fprintf(w, `{"id":123,"client_id":"fixture-client","client_secret":"fixture-client-secret","html_url":"https://github.com/apps/passlet-alice","owner":{"login":"alice"},"permissions":%s,"pem":"fixture-unused-private-key"}`, encoded)
 	case "/oauth":
 		f.exchanges.Add(1)
 		if err := r.ParseForm(); err != nil {
@@ -275,7 +290,7 @@ func (f *setupGitHubFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, `{"installations":[]}`)
 			return
 		}
-		fmt.Fprintf(w, `{"installations":[{"id":1,"app_id":123,"account":{"type":"Organization","login":%q},"permissions":{"contents":"read","metadata":"read"}}]}`, f.owner)
+		fmt.Fprintf(w, `{"installations":[{"id":1,"app_id":123,"account":{"type":"Organization","login":%q},"permissions":%s}]}`, f.owner, encoded)
 	case "/user/installations/1/repositories":
 		if f.mode == "no_repositories" {
 			io.WriteString(w, `{"repositories":[]}`)

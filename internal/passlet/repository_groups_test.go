@@ -92,8 +92,8 @@ func TestRepositoryGroupUsesOneApprovalAndOneScopedToken(t *testing.T) {
 				}
 			}
 			for permission, level := range permissions {
-				if !strings.Contains(prompt, permission+": "+level) {
-					t.Fatalf("permission missing in approval: %s", permission)
+				if strings.Contains(prompt, permission+": "+level) != (permission != "metadata") {
+					t.Fatalf("unexpected permission visibility in approval: %s", permission)
 				}
 			}
 			if len(prompt) > 1000 {

@@ -93,7 +93,7 @@ func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
 		t.Fatalf("incorrect repository count: %s", prompt)
 	}
 	for name, level := range r.Permissions {
-		if !strings.Contains(prompt+"\n", "• "+name+": "+level+"\n") {
+		if name != "metadata" && !strings.Contains(prompt+"\n", "• "+name+": "+level+"\n") {
 			t.Fatalf("missing permission %s", name)
 		}
 	}
@@ -139,7 +139,18 @@ func TestLabeledPromptPreservesOwnerWhenRepositoriesAreTruncated(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompt := r.Prompt(Caller{Transport: "ssh", Name: "cruncher"})
-	if len(prompt) > 650 || !strings.Contains(prompt, "Owner: alice") || !strings.Contains(prompt, "additional repositories") || !strings.Contains(prompt, "• contents: read") {
+	if len(prompt) > 650 || !strings.Contains(prompt, "• alice/repository-") || strings.Contains(prompt, "Owner: alice") || !strings.Contains(prompt, "additional repositories") || !strings.Contains(prompt, "• contents: read") {
 		t.Fatalf("incomplete truncated prompt: %s", prompt)
+	}
+}
+
+func TestMetadataOnlyPromptOmitsEmptyPermissions(t *testing.T) {
+	r := Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"metadata": "read"}}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	prompt := r.Prompt(Caller{Transport: "unix"})
+	if strings.Contains(prompt, "Permissions:") || !strings.HasSuffix(prompt, "• alice/repo") || r.Permissions["metadata"] != "read" {
+		t.Fatalf("unexpected baseline permission prompt: %q", prompt)
 	}
 }

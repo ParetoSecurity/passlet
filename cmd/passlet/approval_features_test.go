@@ -20,9 +20,11 @@ func TestApprovalFeatures(t *testing.T) {
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
 			var caller passlet.Caller
 			var capture string
+			var repositories []string
 			s.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 				caller = passlet.Caller{}
 				capture = ""
+				repositories = nil
 				t.Setenv("HOME", t.TempDir())
 				t.Setenv("PASSLET_ENDPOINT", "")
 				t.Setenv("CLAUDECODE", "")
@@ -35,7 +37,7 @@ func TestApprovalFeatures(t *testing.T) {
 			s.Step(`^the request is made from Codex$`, func() {
 				t.Setenv("CODEX_THREAD_ID", "fixture-thread")
 			})
-			s.Step(`^an Agent on this Mac$`, func() {
+			s.Step("^(?:an Agent on this Mac|a Conductor configured for GitHub account `alice`)$", func() {
 				caller = passlet.Caller{Transport: "unix", Name: "local/SSH socket client"}
 			})
 			s.Step(`^an Agent connected through the "([^"]*)" SSH tunnel$`, func(label string) {
@@ -44,7 +46,13 @@ func TestApprovalFeatures(t *testing.T) {
 			s.Step(`^an Agent connected through Tailscale as "([^"]*)"$`, func(host string) {
 				caller = passlet.Caller{Transport: "tailscale", Name: host, NodeID: "fixture-node"}
 			})
-			s.Step("^I run `passlet request --repos alice/repo --permissions contents:read`$", func() error {
+			s.Step("^repositories `alice/repository-001` through `alice/repository-100`$", func() {
+				for i := 1; i <= 100; i++ {
+					repositories = append(repositories, fmt.Sprintf("alice/repository-%03d", i))
+				}
+			})
+			s.Step("^I run `passlet (request [^`]+)`$", func(command string) error {
+				command = strings.ReplaceAll(command, "{repositories}", strings.Join(repositories, ","))
 				dir, err := os.MkdirTemp("/tmp", "pl-approval-")
 				if err != nil {
 					return err
@@ -75,7 +83,8 @@ func TestApprovalFeatures(t *testing.T) {
 				go func() { _ = server.Serve(listener) }()
 				defer server.Close()
 				grant := filepath.Join(dir, "grant.json")
-				_, err = invokeCLI(t, "", "request", "--endpoint", "unix://"+socket, "--repos", "alice/repo", "--permissions", "contents:read", "--out", grant)
+				args := append(strings.Fields(command), "--endpoint", "unix://"+socket, "--out", grant)
+				_, err = invokeCLI(t, "", args...)
 				if err == nil || err.Error() != "approval_denied" {
 					return fmt.Errorf("expected fixture denial, got %v", err)
 				}

@@ -12,6 +12,7 @@ func TestCommandErrorOutput(t *testing.T) {
 		err  error
 		want string
 	}{
+		{"explained Agent setup", errSetupOnAgent, ""},
 		{"explained app conflict", errGitHubAppNameTaken, "\n"},
 		{"unexpected error", errors.New("connection failed"), "passlet: connection failed\n"},
 	} {

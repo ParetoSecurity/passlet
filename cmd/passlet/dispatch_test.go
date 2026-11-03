@@ -58,14 +58,13 @@ func TestCommandValidation(t *testing.T) {
 	}{
 		{"unknown command", []string{"unknown"}, "unknown command"},
 		{"missing github action", []string{"github"}, "usage:"},
-		{"relative helper", []string{"import", "--helper", "relative"}, "absolute --helper required"},
-		{"malformed import", []string{"import", "--helper", "/unused"}, "invalid_credentials_json"},
-		{"unknown import flag", []string{"import", "--unknown"}, "flag provided but not defined"},
 		{"malformed permission", []string{"request", "--permissions", "contents"}, "permissions must be"},
 		{"duplicate permission", []string{"request", "--permissions", "contents:read,contents:write"}, "duplicate_permission"},
-		{"request cannot use grant", []string{"request", "--grant", "/unused"}, "--grant is exclusive"},
-		{"grant excludes scope", []string{"exec", "--grant", "/unused", "--repos", "alice/repo"}, "--grant is exclusive"},
+		{"request cannot use grant", []string{"request", "--grant", "/unused"}, "flag provided but not defined"},
+		{"grant excludes scope", []string{"exec", "--grant", "/unused", "--repos", "alice/repo"}, "flag provided but not defined"},
+		{"grant required", []string{"exec", "--", "/bin/true"}, "exec requires --grant"},
 		{"missing grant", []string{"exec", "--grant", filepath.Join(t.TempDir(), "missing")}, "no such file"},
+		{"invalid request endpoint", []string{"request", "--endpoint", "http://invalid", "--repos", "alice/repo", "--permissions", "contents:read"}, "endpoint"},
 		{"unknown request flag", []string{"request", "--unknown"}, "flag provided but not defined"},
 		{"conductor routing", []string{"conductor", "--helper", "relative"}, "conductor_requires_absolute_helper"},
 		{"audit routing", []string{"audit", "--unknown"}, "flag provided but not defined"},
@@ -99,7 +98,7 @@ func TestGrantExecutionValidation(t *testing.T) {
 		{"expired", "fixture-secret", time.Now().Add(-time.Hour), nil, "grant_expired_or_invalid"},
 		{"empty token", "", time.Now().Add(time.Hour), nil, "grant_expired_or_invalid"},
 		{"missing command", "fixture-secret", time.Now().Add(time.Hour), nil, "exec requires"},
-		{"out is request only", "fixture-secret", time.Now().Add(time.Hour), []string{"--out", "unused"}, "--out is request-only"},
+		{"out is request only", "fixture-secret", time.Now().Add(time.Hour), []string{"--out", "unused"}, "flag provided but not defined"},
 		{"child fails", "fixture-secret", time.Now().Add(time.Hour), []string{"--", "/bin/sh", "-c", "exit 7"}, "command_failed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -217,15 +216,6 @@ func TestExecReplacesAmbientCredentials(t *testing.T) {
 	got, err := invokeCLI(t, "", "exec", "--grant", path, "--", "/bin/sh", "-c", script)
 	if err != nil || got != "ok" {
 		t.Fatalf("exec environment: %q %v", got, err)
-	}
-}
-
-func TestImportValidJSONStillValidatesCredentials(t *testing.T) {
-	if _, err := invokeCLI(t, `{}`, "import", "--helper", "/unused"); err == nil || err.Error() != "invalid_protected_account_identity" {
-		t.Fatalf("import bypassed identity validation: %v", err)
-	}
-	if _, err := invokeCLI(t, "", "request", "--endpoint", "http://invalid", "--repos", "alice/repo", "--permissions", "contents:read"); err == nil {
-		t.Fatal("invalid endpoint accepted")
 	}
 }
 

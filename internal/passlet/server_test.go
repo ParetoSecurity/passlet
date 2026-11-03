@@ -275,8 +275,8 @@ func TestRequestValidationIncludesMetadata(t *testing.T) {
 	if r.Validate() != nil {
 		t.Fatal("validate")
 	}
-	if r.Permissions["metadata"] != "read" || !strings.Contains(r.Prompt(Caller{Name: "node\nforged"}), "metadata: read") {
-		t.Fatal("metadata missing")
+	if r.Permissions["metadata"] != "read" || strings.Contains(r.Prompt(Caller{Name: "node\nforged"}), "metadata: read") {
+		t.Fatal("metadata must remain in the scope without appearing in the prompt")
 	}
 	if strings.Contains(r.Prompt(Caller{Name: "node\nforged"}), "node\nforged") {
 		t.Fatal("caller control injection")

@@ -16,6 +16,7 @@ const ClientDeadline = 130 * time.Second
 const ConnectDeadline = 5 * time.Second
 
 type Request struct {
+	Agent        string            `json:"agent,omitempty"`
 	Organization string            `json:"organization,omitempty"`
 	Account      string            `json:"account,omitempty"`
 	Repositories []string          `json:"repositories"`
@@ -57,6 +58,9 @@ func (c Credentials) Validate() error {
 var component = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
 
 func (r *Request) Validate() error {
+	if len(r.Agent) > 40 || r.Agent != strings.TrimSpace(r.Agent) || r.Agent != safeLabel(r.Agent) {
+		return errors.New("invalid_agent_label")
+	}
 	if len(r.Repositories) > 100 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
 		return errors.New("invalid_request")
 	}
@@ -144,28 +148,35 @@ func (r Request) Prompt(c Caller) string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	lines := []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Repositories:"}
-	if r.Organization != "" {
-		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Organization: " + r.Organization, "Organization-wide access", "All installed repositories: metadata read only"}
+	agent := r.Agent
+	if agent == "" {
+		agent = "Shell"
 	}
-	if r.Account != "" {
-		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Account: " + r.Account, "Account-wide access", "All installed repositories: metadata read only"}
+	location := c.displayName()
+	if c.Transport == "unix" {
+		location = "local"
 	}
-	if len(r.Repositories) > 0 {
-		owner, _, _ := strings.Cut(r.Repositories[0], "/")
-		lines = []string{fmt.Sprintf("grant %s GitHub access", c.displayName()), "", "Owner: " + owner, "Repositories:"}
+	lines := []string{fmt.Sprintf("grant access to GitHub for:\n• %s from %s\n• 8 hours", agent, location), ""}
+	switch {
+	case r.Organization != "":
+		lines = append(lines, "Organization: "+r.Organization, "Organization-wide access", "All installed repositories: metadata read only")
+	case r.Account != "":
+		lines = append(lines, "Account: "+r.Account, "Account-wide access", "All installed repositories: metadata read only")
+	default:
+		lines = append(lines, "Repositories:")
 	}
 	suffix := []string{"", "Permissions:"}
 	for _, k := range keys {
 		suffix = append(suffix, "• "+k+": "+r.Permissions[k])
 	}
-	suffix = append(suffix, "", "GitHub sets expiry at issuance (approximately 8 hours)")
 	for shown := len(r.Repositories); ; shown-- {
 		body := append([]string(nil), lines...)
 		for _, repo := range r.Repositories[:shown] {
 			body = append(body, "• "+repo)
 		}
 		if remaining := len(r.Repositories) - shown; remaining > 0 {
+			owner, _, _ := strings.Cut(r.Repositories[0], "/")
+			body = append(body, "Owner: "+owner)
 			body = append(body, fmt.Sprintf("and %d additional repositories", remaining))
 		}
 		prompt := strings.Join(append(body, suffix...), "\n")

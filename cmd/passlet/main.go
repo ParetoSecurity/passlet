@@ -108,7 +108,7 @@ func runWithOverview(showOverview func(context.Context)) error {
 				return errors.New("grant_expired_or_invalid")
 			}
 		} else {
-			requested := passlet.Request{Organization: *org, Account: *account, Permissions: map[string]string{}}
+			requested := passlet.Request{Agent: inferAgentName(), Organization: *org, Account: *account, Permissions: map[string]string{}}
 			if *repos != "" {
 				requested.Repositories = strings.Split(*repos, ",")
 			}

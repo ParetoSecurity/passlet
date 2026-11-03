@@ -189,7 +189,7 @@ brew install paretosecurity/passlet/passlet-agent
 
 ### Connect Agent to Conductor
 
-Follow the [SSH forwarding instructions](SETUP.md#ssh-server-configuration) to forward your Mac's Conductor socket into the remote account. Use a separate Unix account and private socket directory for each person. The SSH connection must remain open when requesting new credentials.
+Configure [SSH tunnel labels](SETUP.md#ssh-tunnel-labels), then follow the [SSH forwarding instructions](SETUP.md#ssh-server-configuration) to forward the matching Conductor socket into the remote account. Use a separate Unix account and private socket directory for each person. The SSH connection must remain open when requesting new credentials.
 
 On the remote machine, point Agent at the forwarded socket. For example, with a Linux account named `alice`:
 

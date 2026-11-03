@@ -93,7 +93,7 @@ func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
 		t.Fatalf("incorrect repository count: %s", prompt)
 	}
 	for name, level := range r.Permissions {
-		if !strings.Contains(prompt, "• "+name+": "+level+"\n") {
+		if !strings.Contains(prompt+"\n", "• "+name+": "+level+"\n") {
 			t.Fatalf("missing permission %s", name)
 		}
 	}
@@ -107,15 +107,39 @@ func TestApprovalUsesDeviceNameWithoutChangingAuditIdentity(t *testing.T) {
 		{"tailscale", "cruncher.tailnet.ts.net.", "cruncher"},
 		{"tailscale", "cruncher", "cruncher"},
 		{"tailscale", "cruncher\n.tailnet.ts.net.", "cruncher"},
-		{"unix", "local/SSH socket client", "local/SSH socket client"},
+		{"unix", "local/SSH socket client", "local"},
+		{"ssh", "cruncher", "cruncher"},
 	} {
 		caller := Caller{Transport: tc.transport, Name: tc.name, NodeID: "node"}
 		prompt := (Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}).Prompt(caller)
-		if !strings.HasPrefix(prompt, "grant "+tc.want+" GitHub access\n") {
+		if !strings.HasPrefix(prompt, "grant access to GitHub for:\n• Shell from "+tc.want+"\n") {
 			t.Fatal(prompt)
 		}
 		if caller.Name != tc.name || caller.NodeID != "node" {
 			t.Fatal("display altered audit identity")
 		}
+	}
+}
+
+func TestAgentLabelValidation(t *testing.T) {
+	for _, label := range []string{"Claude\nPermissions: admin", " Claude", "Claude ", "Cl\x00aude", strings.Repeat("a", 41)} {
+		r := Request{Agent: label, Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}
+		if err := r.Validate(); err == nil || err.Error() != "invalid_agent_label" {
+			t.Fatalf("accepted invalid app label %q: %v", label, err)
+		}
+	}
+}
+
+func TestLabeledPromptPreservesOwnerWhenRepositoriesAreTruncated(t *testing.T) {
+	r := Request{Agent: "Claude", Permissions: map[string]string{"contents": "read"}}
+	for i := 0; i < 100; i++ {
+		r.Repositories = append(r.Repositories, fmt.Sprintf("alice/repository-%03d", i))
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	prompt := r.Prompt(Caller{Transport: "ssh", Name: "cruncher"})
+	if len(prompt) > 650 || !strings.Contains(prompt, "Owner: alice") || !strings.Contains(prompt, "additional repositories") || !strings.Contains(prompt, "• contents: read") {
+		t.Fatalf("incomplete truncated prompt: %s", prompt)
 	}
 }

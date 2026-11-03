@@ -17,7 +17,7 @@ let
         home.username = "alice";
         home.homeDirectory = if platformPkgs.stdenv.hostPlatform.isDarwin then "/Users/alice" else "/home/alice";
         home.stateVersion = "25.05";
-        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; }
+        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; service.ssh = if tailscale then [ "cruncher" ] else [ ]; }
           // lib.optionalAttrs (service != null) { service.enable = service; };
       } ];
     }).config;
@@ -42,8 +42,14 @@ assert lib.hasInfix "<string>Aqua</string>" plist;
 assert lib.hasInfix "<integer>63</integer>" plist;
 assert lib.hasInfix "<string>/usr/bin:/bin</string>" plist;
 assert !(lib.hasInfix "/bin/sh" plist);
-assert lib.hasInfix "<string>--tailscale=false</string>" plist;
-assert lib.hasInfix "<string>--tailscale=true</string>" tailscale.programs.passlet.service.plist.text;
+assert !(lib.hasInfix "--tailscale" plist);
+assert builtins.fromJSON mac.xdg.configFile."passlet/conductor.json".text == { ssh = [ ]; tailscale = false; };
+assert builtins.fromJSON tailscale.xdg.configFile."passlet/conductor.json".text == { ssh = [ "cruncher" ]; tailscale = true; };
+assert lib.hasInfix "<key>PassletConfiguration</key>" plist;
+assert plist != tailscale.programs.passlet.service.plist.text;
+assert builtins.elem "linkGeneration" mac.home.activation.passletAgent.after;
+assert !(linux.xdg.configFile ? "passlet/conductor.json");
+assert !(client.xdg.configFile ? "passlet/conductor.json");
 assert lib.hasInfix "/bin:/usr/bin:/bin</string>" tailscale.programs.passlet.service.plist.text;
 assert plist != updated.programs.passlet.service.plist.text;
 assert lib.hasInfix "launchctl bootstrap" activation;

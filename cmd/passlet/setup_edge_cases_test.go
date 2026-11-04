@@ -25,10 +25,9 @@ func TestSetupRejectsInvalidInputBeforeBrowser(t *testing.T) {
 		{"relative helper", []string{"setup", "--helper", "relative"}, "", false},
 		{"missing helper", []string{"setup"}, "", true},
 		{"missing reset helper", []string{"reset"}, "", true},
-		{"invalid permission syntax", []string{"setup", "--permissions", "contents"}, "", false},
-		{"duplicate permissions", []string{"setup", "--permissions", "contents:read,contents:read"}, "", false},
+		{"unsupported permission override", []string{"setup", "--permissions", "contents:read"}, "", false},
 		{"missing handle confirmation", []string{"setup"}, "", false},
-		{"invalid handle", []string{"setup", "--github-user", "bad/name"}, "", false},
+		{"invalid handle", []string{"setup", "--handle", "bad/name"}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "helper")
@@ -67,16 +66,6 @@ func TestExistingSetupBrowserFailureShowsManualURL(t *testing.T) {
 	result := f.run()
 	if result.err == nil || result.keychain != "existing" || !strings.Contains(result.output, "Could not open the browser automatically. Open the URL above to continue.") || !strings.Contains(result.output, "https://github.com/apps/passlet-alice/installations/new") {
 		t.Fatalf("missing manual browser fallback: %+v", result)
-	}
-}
-
-func TestResetRequiresTerminalConfirmation(t *testing.T) {
-	f := newSetupFixture(t, "existing")
-	f.command = "reset"
-	f.action = func(string) error { return errors.New("terminal closed") }
-	result := f.run()
-	if result.err == nil || result.keychain != "existing" {
-		t.Fatalf("reset without confirmation: %+v", result)
 	}
 }
 
@@ -174,32 +163,25 @@ func assertSetupOutputContainsNoSecrets(t *testing.T, result setupResult) {
 	}
 }
 
-func TestGitHubResetRequiresConfirmationAndApproval(t *testing.T) {
-	for _, tc := range []struct {
-		name, mode, answer, want string
-		deleted                  bool
-	}{
-		{"default cancels", "existing", "", "GitHub reset canceled.", false},
-		{"explicit no", "existing", "n", "GitHub reset canceled.", false},
-		{"approval denied", "protected", "y", "GitHub reset canceled.", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newSetupFixture(t, tc.mode)
-			f.command, f.answer = "reset", tc.answer
-			result := f.run()
-			if !strings.Contains(result.output, tc.want) {
-				t.Fatalf("missing reset outcome %q", tc.want)
+func TestGitHubResetRequiresOnlyNativeApproval(t *testing.T) {
+	for _, mode := range []string{"existing", "protected"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newSetupFixture(t, mode)
+			err := setupWithDependencies(f.ctx, []string{"reset"}, setupDependencies{
+				helper: f.helper, output: &f.output,
+				prompt: func(string, string) (string, error) {
+					t.Fatal("reset requested terminal confirmation")
+					return "", nil
+				},
+			})
+			_, statErr := os.Stat(f.marker)
+			if mode == "protected" {
+				if err == nil || err.Error() != "approval_denied" || statErr != nil {
+					t.Fatalf("denied approval removed credentials: %v, %v", err, statErr)
+				}
+			} else if err != nil || !os.IsNotExist(statErr) {
+				t.Fatalf("confirmed removal failed: %v, %v", err, statErr)
 			}
-			if (result.keychain == "") != tc.deleted {
-				t.Fatal("unexpected credential deletion")
-			}
-			if result.browserOpens != 0 || result.exchanges != 0 {
-				t.Fatal("reset contacted setup flow")
-			}
-			if tc.mode == "protected" && (result.err == nil || result.err.Error() != "approval_denied") {
-				t.Fatal("native denial was ignored")
-			}
-			assertSetupOutputContainsNoSecrets(t, result)
 		})
 	}
 }

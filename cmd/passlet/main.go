@@ -18,6 +18,7 @@ import (
 )
 
 var version = "dev"
+var errSetupOnAgent = errors.New("github_setup_requires_local_conductor")
 var errGitHubAppNameTaken = errors.New("github_app_name_taken")
 
 func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
@@ -27,6 +28,9 @@ func main() { // coverage-ignore: Process exit adapter; command behavior is test
 	}
 }
 func writeCommandError(out io.Writer, err error) {
+	if errors.Is(err, errSetupOnAgent) {
+		return
+	}
 	var connectionErr connectionError
 	if errors.As(err, &connectionErr) {
 		_, _ = fmt.Fprintln(out, connectionErr)
@@ -42,7 +46,12 @@ func run() error {
 	return runWithOverview(overview)
 }
 
-func runWithOverview(showOverview func(context.Context)) error {
+func runWithOverview(showOverview func(context.Context)) (result error) {
+	defer func() {
+		if errors.Is(result, flag.ErrHelp) {
+			result = nil
+		}
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if len(os.Args) < 2 {
@@ -66,40 +75,32 @@ func runWithOverview(showOverview func(context.Context)) error {
 		return nil
 	case "conductor":
 		return conductor(ctx, os.Args[2:])
-	case "import":
-		fs := flag.NewFlagSet("import", flag.ContinueOnError)
-		helper := fs.String("helper", "", "signed helper executable")
-		if err := fs.Parse(os.Args[2:]); err != nil {
-			return err
-		}
-		if !filepath.IsAbs(*helper) {
-			return errors.New("absolute --helper required")
-		}
-		var c passlet.Credentials
-		d := json.NewDecoder(io.LimitReader(os.Stdin, 65536))
-		d.DisallowUnknownFields()
-		if d.Decode(&c) != nil {
-			return errors.New("invalid_credentials_json")
-		}
-		return passlet.ImportCredentials(ctx, *helper, c)
 	case "request", "exec":
-		fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
-		endpoint := fs.String("endpoint", "", "override the environment, saved endpoint, or default local socket")
-		repos := fs.String("repos", "", "comma-separated owner/repository list")
-		org := fs.String("org", "", "organization-wide permission target (exclusive with --repos/--account)")
-		account := fs.String("account", "", "account-wide permission target (exclusive with --repos/--org)")
-		perms := fs.String("permissions", "", "comma-separated permission:read|write|admin list")
-		out := fs.String("out", "", "write grant JSON to a new mode-0600 file (request only)")
-		grantFile := fs.String("grant", "", "existing grant JSON file (exec only)")
+		description := "Request scoped access from your Conductor. After approval, print the grant as JSON or save it with --out for later use with passlet exec."
+		if os.Args[1] == "exec" {
+			description = "Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --."
+		}
+		fs := commandFlags(os.Args[1], description, "endpoint")
+		var endpoint, repos, org, account, perms, out, grantFile string
+		if os.Args[1] == "request" {
+			fs.StringVar(&endpoint, "endpoint", "", "override the environment, saved endpoint, or default local socket")
+			fs.StringVar(&repos, "repos", "", "comma-separated owner/repository list")
+			fs.StringVar(&org, "org", "", "organization-wide permission target (exclusive with --repos/--account)")
+			fs.StringVar(&account, "account", "", "account-wide permission target (exclusive with --repos/--org)")
+			fs.StringVar(&perms, "permissions", "", "comma-separated permission:read|write|admin list")
+			fs.StringVar(&out, "out", "", "write grant JSON to a new mode-0600 file")
+		} else {
+			fs.StringVar(&grantFile, "grant", "", "grant JSON file or process-substitution path (required)")
+		}
 		if err := fs.Parse(os.Args[2:]); err != nil {
 			return err
 		}
 		var grant passlet.Grant
-		if *grantFile != "" {
-			if os.Args[1] != "exec" || *repos != "" || *perms != "" || *org != "" || *account != "" {
-				return errors.New("--grant is exclusive with request scope flags")
+		if os.Args[1] == "exec" {
+			if grantFile == "" {
+				return errors.New("exec requires --grant")
 			}
-			f, err := os.Open(*grantFile)
+			f, err := os.Open(grantFile)
 			if err != nil {
 				return err
 			}
@@ -108,11 +109,11 @@ func runWithOverview(showOverview func(context.Context)) error {
 				return errors.New("grant_expired_or_invalid")
 			}
 		} else {
-			requested := passlet.Request{Agent: inferAgentName(), Organization: *org, Account: *account, Permissions: map[string]string{}}
-			if *repos != "" {
-				requested.Repositories = strings.Split(*repos, ",")
+			requested := passlet.Request{Agent: inferAgentName(), Organization: org, Account: account, Permissions: map[string]string{}}
+			if repos != "" {
+				requested.Repositories = strings.Split(repos, ",")
 			}
-			for _, p := range strings.Split(*perms, ",") {
+			for _, p := range strings.Split(perms, ",") {
 				kv := strings.Split(p, ":")
 				if len(kv) != 2 {
 					return errors.New("permissions must be comma-separated name:read|write|admin")
@@ -123,19 +124,19 @@ func runWithOverview(showOverview func(context.Context)) error {
 				requested.Permissions[kv[0]] = kv[1]
 			}
 			var err error
-			*endpoint, err = passlet.ResolveEndpoint(*endpoint)
+			endpoint, err = passlet.ResolveEndpoint(endpoint)
 			if err != nil {
 				return err
 			}
-			grant, err = passlet.RequestGrant(ctx, *endpoint, requested)
+			grant, err = passlet.RequestGrant(ctx, endpoint, requested)
 			if err != nil {
 				return err
 			}
 		}
 		fmt.Fprintf(os.Stderr, "Grant %s for %s expires %s\n", grant.ID, grant.User, grant.ExpiresAt.Format(time.RFC3339))
 		if os.Args[1] == "request" {
-			if *out != "" {
-				f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+			if out != "" {
+				f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 				if err != nil {
 					return err
 				}
@@ -143,9 +144,6 @@ func runWithOverview(showOverview func(context.Context)) error {
 				return json.NewEncoder(f).Encode(grant)
 			}
 			return json.NewEncoder(os.Stdout).Encode(grant)
-		}
-		if *out != "" {
-			return errors.New("--out is request-only")
 		}
 		args := fs.Args()
 		if len(args) == 0 {

@@ -61,7 +61,6 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - Version-era leftovers: `docs/INSTALLATION.md:10` ("upcoming CLI-only release ... v0.2.0 uses the older menu-bar app"), `docs/SETUP.md:3` ("signed v0.2 bundle"), `docs/VALIDATION.md` ("# v0.2 validation", "Tomorrow's manual checklist", v0.2 steps), `docs/RELEASING.md` ("Repository settings have not been applied by this branch", "Local preparation results" quoting 77.4% and 0% coverage against today's enforced 100%, "v0.2 controls", "maintainer-policy settings proposal" although `docs/REVIEW-POLICY.md` now records verified settings).
 - `packaging/README.md:29,31` point at `nix/package.nix` and `nix/home-manager.nix`. The files live in `packaging/nix/`.
 - `docs/release-notes.md` is referenced by nothing: `release.yml` uses `--generate-notes` and the release skill writes its own notes file. Wire it in or delete it.
-- `passlet import` is listed in the usage string (`cmd/passlet/main.go:38`) but documented nowhere. Setup calls `passlet.ImportCredentials` directly. Document it as a maintainer command or hide it from usage. Removing it would change the feature set.
 - `runSetupBrowser` (`internal/passlet/setup.go:487`) is only called from tests. Move it to a `_test.go` file.
 - Stale version defaults: `scripts/build-macos.sh:5` defaults to `0.2.0` (development builds report it), `nix/test-package.nix:4` says `0.2.0-test`.
 - `.gitignore` lists eight paths that do not exist (`prototypes/`, `RESULTS.md`, `scripts/import-test-credentials.py`, `scripts/live-remote.py`, `scripts/test-cruncher.sh`, `internal/passlet/live_test.go`, `packaging/cruncher.nix`, `passlet-zupo-test-client-secret`). Ignoring a `_test.go` path can hide a real test from Git. Move personal ignores to `.git/info/exclude`.
@@ -92,7 +91,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `cmd/passlet/diagnostics.go` writes twelve `fmt.Println` lines straight to process stdout, so tests must redirect `os.Stdout` to read them. Pass an `io.Writer`. Make `Fprint` error handling consistent: `serve.go:86-88` and `main.go:116,189` are bare while the rest use `_, _ =`.
 - `exec` flattens any child failure to exit code 1 (`command_failed`), and on Ctrl-C `exec.CommandContext` SIGKILLs the child. Propagate the child's status from `*exec.ExitError` and set `cmd.Cancel` and `WaitDelay` so Git and gh receive SIGTERM first. Judgment call: exit codes are observable, but today's behavior discards information agents act on.
 - Tests: `TestGitHubSetupFeatures` is a 400-line closure with a dozen captured variables. Turn it into a step-definition struct. Two helper fixtures (`TestHelperProcess`, `TestSetupHelperFixture`) model the same Swift protocol, so keep one. The `*_errors_test.go` split scatters one subject's tests across files. Regroup by subject.
-- New tests: `Request.Prompt` on an unvalidated request (today's dead branch), `readProxy` with TLVs and more IPv6 cases beyond the two happy paths, `safeLabel` with multibyte input, `ReadAudit` at the limit boundary of 1000, `serve` precedence of `--tailscale-listen` over `serve.json` (the `fs.Visit` logic), and `StateDir` and `DefaultEndpoint` with `HOME` unset. Fuzzers for `Request.Validate` plus `Prompt` (invariants: prompt within 650 bytes and the helper's 1000-character limit), `GitHubAppName`, and `endpointURL`.
+- New tests: `Request.Prompt` on an unvalidated request (today's dead branch), `readProxy` with TLVs and more IPv6 cases beyond the two happy paths, `safeLabel` with multibyte input, `ReadAudit` at the limit boundary of 1000, `StateDir` and `DefaultEndpoint` with `HOME` unset. Fuzzers for `Request.Validate` plus `Prompt` (invariants: prompt within 650 bytes and the helper's 1000-character limit), `GitHubAppName`, and `endpointURL`.
 - Swift: move `credentialData`, the `--status`/`--import` argument handling, and Keychain query construction out of top-level script code into types compiled into `macos/tests`, as `ApprovalState` already is. This feeds the Swift-coverage item above.
 
 #### Security
@@ -101,7 +100,6 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `OpenAudit` passes the raw path to `sql.Open("sqlite", path)` while `ReadAudit` builds a `file:` URL with `mode=ro`. A path containing `?` or `#` is parsed as DSN options. Use the URL form with explicit `_pragma` options in both.
 - `exec` scrubs credential and config variables but inherits TLS-weakening Git variables (`GIT_SSL_NO_VERIFY`, `GIT_SSL_CAINFO`, `GIT_SSL_CAPATH`, `GIT_PROXY_SSL_*`) and proxy variables. Either scrub them or state in the docs that the agent's environment is fully trusted. Keep the scrub list as one named slice shared with `TestExecReplacesAmbientCredentials`, which hard-codes the same names today.
 - `passlet request --out` creates the file 0600 with `O_EXCL` but never looks at the parent directory, while README and the skill tell agents to `mktemp -d` and `chmod 700`. Warn on stderr when the parent is group- or world-accessible, mirroring `CheckPrivateDir`.
-- Audit stores `Caller.Name`, `Caller.User`, and `Caller.Tags` from `tailscale whois` verbatim, and `safeLabel` sanitizes only the prompt. `passlet audit` prints that JSON to a terminal, so a hostile node name can carry control sequences. Sanitize at ingestion.
 - CI: give every job an explicit `permissions:` block (`ci.yml` relies on the workflow default) and add `timeout-minutes` to the steps that may build Nix closures from source.
 
 #### Dead code, rough edges, and stale comments or docs
@@ -131,12 +129,12 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `Request.Prompt` rebuilds the whole body in a shrinking loop (quadratic for 100 repositories). Build it in one pass against a byte budget.
 - Two login validators coexist: the `githubHandle` regex in `setup.go` and the `component` regex in `types.go` (also used for `AccountInfo.Login`) accept different sets. Use one `validLogin`. `AccountInfo.Validate` detects a bad app URL by comparing `GitHubAppSettingsURL(...)` against the fallback string. Return `(slug string, ok bool)` instead.
 - `StateDir` ignores `os.UserHomeDir` errors and returns a relative path when `HOME` is unset, which surfaces later as `socket_requires_absolute_path...`. Return an error or fail fast in `main`.
-- `cmd/passlet/serve.go` detects an explicit `--tailscale-listen` with `fs.Visit`. A custom `flag.Value` that records whether it was set is clearer. `githubCommand` and `setupWithDependencies` both validate `setup|reset` (`cmd/passlet/setup.go:23-25` and `66-68`).
+- `githubCommand` and `setupWithDependencies` both validate `setup|reset` (`cmd/passlet/setup.go:23-25` and `66-68`).
 - `exec` strips variables with `strings.HasPrefix(k, "GH_HOST")` (`cmd/passlet/main.go:158`). Use exact matches from the shared scrub list.
 - `helperSession.Close` hard-codes a one-second kill grace, and `ClientDeadline` (130 s) should be derived from `ServerDeadline` with the reasoning in one comment.
 - Python: add type hints. `scripts/github-permissions.py` writes to a cwd-relative path and embeds its scope classification sets inline. Use a `ROOT`-relative path like `package-release.py` and move the classification into a JSON file beside the catalog. `test-launchd-packaging.py` and `test-homebrew-packaging.py` use bare `assert` statements (stripped under `-O`). Use unittest assertions.
 - Swift: `macos/main.swift` is 160 lines of top-level script mixing argument parsing, Keychain queries, LocalAuthentication, and the AppKit lifecycle. Split into `KeychainStore.swift`, `Helper.swift`, and `main.swift`. `reply()` exits 1 silently when JSON serialization fails.
-- Nix: `packaging/nix/home-manager.nix` always appends `--tailscale-listen ""` and `nix/packaging-test.nix` asserts that trailing empty argument. Emit the flag only when set. `AssociatedBundleIdentifiers = [ "dev.passlet.app" ]` is hard-coded while `scripts/app-metadata.py` derives the bundle id from the provisioning profile. Carry the bundle id in `packaging/release.json`.
+- Nix: `AssociatedBundleIdentifiers = [ "dev.passlet.app" ]` is hard-coded while `scripts/app-metadata.py` derives the bundle id from the provisioning profile. Carry the bundle id in `packaging/release.json`.
 - Test fixtures use real accounts and repositories (`zupo`, `teamniteo/ops`, and others) in `server_test.go`, `github_test.go`, and `repository_groups_test.go` while other tests use `alice` and `acme`. Standardize on neutral names.
 - `devenv.nix` `enterTest` repeats `make check` and `make build` (which is `check-all` without `lint`). Point it at `check-all`.
 
@@ -160,3 +158,31 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `docs/SETUP.md` "Repository groups" and "Administrative access" duplicate paragraphs from `skills/passlet/SKILL.md`. Keep operational detail in SETUP.md and link from the skill, which ships to agents and should stay short.
 - Plugin installation instructions live in README "Agent plugins" and are linked back to from `docs/INSTALLATION.md` twice. Give them one home.
 - `Casks/passlet.rb` and `Formula/passlet-agent.rb` are generated artifacts committed for the tap layout. Add a "generated by scripts/package-release.py, do not edit" header to the templates so the committed files carry it.
+
+## Organization installation awaiting owner approval
+
+Confirm the request callback in a live GitHub walkthrough before implementing this behavior. Reference: https://sparkwing.dev/docs/github-app/.
+
+```gherkin
+Scenario: Organization installation needs owner approval
+    Given Keychain contains credentials for `passlet-alice` authorized as `alice`
+    And `ACME` requires an organization owner to approve app installations
+    When I run `passlet github setup`
+    Then Passlet asks me to unlock its Keychain item
+    When I approve with Touch ID
+    Then my browser opens "https://github.com/apps/passlet-alice/installations/new"
+    When I request installation of `passlet-alice` for `ACME` on GitHub
+    And GitHub redirects my browser to "http://127.0.0.1:17402/github/installed?setup_action=request" without an installation ID
+    Then the terminal shows:
+      """
+      Organization owner approval is required. This request has not enabled repository access.
+      You can close this terminal. Check the installation request on GitHub for approval.
+      """
+    And the browser shows:
+      """
+      Organization owner approval is required.
+      You can close this tab. Check the installation request on GitHub for approval.
+      """
+    And the existing Keychain credentials remain unchanged
+    And the command exits unsuccessfully
+```

@@ -4,7 +4,7 @@ Use the signed v0.2 bundle on each approving Mac and the matching CLI on the age
 
 ## GitHub onboarding
 
-Run `passlet github setup` on the Mac and enter your GitHub handle, or use `passlet github setup --github-user alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. Setup checks for an existing app with that name before opening the browser and stops with a settings link if found. GitHub still validates names during creation. The loopback listener runs until setup completes or the setup process stops. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
+Run `passlet github setup` on the Mac configured as your Conductor and enter your GitHub handle, or use `passlet github setup --handle alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. Setup checks for an existing app with that name before opening the browser and stops with a settings link if found. GitHub still validates names during creation. The loopback listener runs until setup completes or the setup process stops. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
 
 After app creation and authorization, GitHub's authorization callback redirects the same browser tab to the installation page. Choose **All repositories** for the account or organization. The full default permission set requires an organization owner to approve installation on an organization. GitHub redirects to `http://127.0.0.1:17402/github/installed`; Passlet verifies that installation's app, user, permissions, and accessible repositories before saving credentials and showing success. The listener exists only during setup. If the port is occupied, setup stops before opening the browser; it never silently changes ports. The predictable installation callback is a signal to verify access, not proof of authorization. Manifest conversion and OAuth retain separate random state values, session paths, and PKCE. If GitHub rejects saved authorization, setup directs you to reset and configure again.
 
@@ -31,13 +31,11 @@ The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved ad
 
 ## SSH tunnel labels
 
-Configure the Conductor with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/conductor.json` and restart the service:
+Configure the Conductor with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/conductor.toml` and restart the service:
 
-```json
-{
-  "ssh": ["cruncher", "other-server"],
-  "tailscale": true
-}
+```toml
+ssh = ["cruncher", "other-server"]
+tailscale = true
 ```
 
 Tailscale is optional. Labels must be unique, start with a lowercase letter or digit, and contain only lowercase letters, digits, and hyphens, up to 32 characters. On startup, the Conductor creates `ssh-cruncher.sock` and `ssh-other-server.sock` beside its normal socket. Each socket has mode `0600` in the same private directory. All listeners share the approval gate. Removing a label and restarting stops that listener.
@@ -48,7 +46,7 @@ For Home Manager, declare the labels in your configuration and reactivate:
 programs.passlet.service.ssh = [ "cruncher" "other-server" ];
 ```
 
-Home Manager writes `~/.config/passlet/conductor.json` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated JSON file.
+Home Manager writes `~/.config/passlet/conductor.toml` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated TOML file.
 
 For an account named `alice`, add this to `~/.ssh/config` on the Conductor Mac:
 
@@ -89,7 +87,7 @@ Unix permissions isolate Alice from Bob, but not either from remote root or othe
 
 ## Tailscale
 
-For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/conductor.json` containing `{"tailscale":true}`, then reinstall the cask to restart it. This file contains no credentials. The `--tailscale` CLI setting takes precedence over the file; SSH labels are always read from the file. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet conductor --tailscale`.
+For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/conductor.toml` containing `tailscale = true`, then reinstall the cask to restart it. This file contains no credentials. Tailscale and SSH settings are read from this file on startup. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet conductor`.
 
 Passlet uses Tailscale Serve's HTTPS proxy to a dedicated mode-0600 Unix socket beside its normal local socket, with a `.tailscale` suffix. The sockets share one approval lock. Startup requires Tailscale 1.104.4 or newer, reuses matching forwarding on port `17400`, creates missing forwarding, and rejects conflicts. It does not configure Funnel, modify unrelated routes, invoke sudo, or alter tailnet HTTPS policy. A permission or HTTPS setup failure produces an actionable startup error.
 
@@ -115,7 +113,7 @@ Common failures:
 | Approval timeout/disconnect | Restore connectivity and make a new explicit request when the user is ready. |
 | Authorization expired/invalid | Perform fresh GitHub authorization; do not fall back to a PAT. |
 
-`passlet audit --limit 20` reads recent structured records from the Mac. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. Use `--path /absolute/path/audit.sqlite` for another existing database; the command never creates one. Keep support excerpts limited to needed metadata, even though credentials are excluded.
+`passlet audit --limit 20` shows recent events in a readable format. Add `--json` to output the complete structured records for scripts. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. The Conductor stores its audit log at `~/.local/share/passlet/audit.sqlite`. The audit command reads that file and never creates it. Keep support excerpts limited to needed metadata, even though credentials are excluded.
 
 Corrupted entries are skipped with a warning on stderr; stdout remains JSON. The
 limit bounds the recent rows inspected, so corruption can result in fewer entries.
@@ -137,7 +135,7 @@ the abbreviated display does not broaden or reduce access.
 
 Repository administration uses `--repos owner/repository --permissions administration:write`. Organization permissions require `--org organization`, for example `--org teamniteo --permissions members:write`. Account permissions require `--account your-handle`, for example `--account alice --permissions git_ssh_keys:write`. These three scopes are mutually exclusive. Account requests must match the authenticated GitHub user. Levels are validated per permission, including `admin` where GitHub supports it.
 
-Organization and account requests explicitly approve wide access plus metadata read access to all repositories in that target's installation. They cannot include repository content permissions. The prompt, delivered grant, client validation, and audit record retain the scope. All grants still require exact permission matching, an expiring token, and native approval. Narrow requests remain bounded to fit the native prompt; broad app permissions do not mean an agent can request every permission at once.
+Organization and account requests explicitly approve wide access plus metadata read access to all repositories in that target's installation. They cannot include repository content permissions. The prompt identifies the scope and requested permissions. The intrinsic `metadata: read` permission is omitted from the prompt but retained in the grant, client validation, and audit record. All grants still require exact permission matching, an expiring token, and native approval. Narrow requests remain bounded to fit the native prompt; broad app permissions do not mean an agent can request every permission at once.
 
 `internal/passlet/github_permissions.json` is generated from GitHub's public `app-permissions` OpenAPI schema using `python3 scripts/github-permissions.py path/to/api.github.com.json`. Review the catalog diff and scope classifications before committing updates. The source hash is recorded. Metadata is overridden to read-only; single-file access needs a separate path design, and enterprise-only permissions are excluded. Account permissions are authorized by the user, not an installation's permission map. New organization/account scoped-token combinations require live GitHub validation; API fixtures alone do not establish provider support.
 
@@ -151,6 +149,6 @@ For an existing account, setup unlocks the protected credentials with native app
 
 ### Reset GitHub credentials
 
-Run `passlet github reset` to remove the protected GitHub credential item. Confirmation defaults to no. Confirming requires native approval before deletion. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
+Run `passlet github reset` to remove the protected GitHub credential item. Confirm removal with Touch ID or your password. There is no separate terminal confirmation. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
 
-Setup reserves localhost port 17402 before prompting for a handle or opening Keychain. If it is occupied, close the application using the port and retry. Denied authorization, an unexpected GitHub identity, and failed Keychain storage never report completion. Errors include recovery instructions without exposing credentials. Organization approval remains planned and is excluded from automated BDD execution until the live callback has been verified.
+Setup reserves localhost port 17402 before prompting for a handle or opening Keychain. If it is occupied, close the application using the port and retry. Denied authorization, an unexpected GitHub identity, and failed Keychain storage never report completion. Errors include recovery instructions without exposing credentials. Organization approval remains planned in the roadmap until the live callback has been verified.

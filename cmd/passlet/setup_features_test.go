@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -16,14 +17,8 @@ import (
 )
 
 func TestGitHubSetupFeatures(t *testing.T) {
-	tags := "~@planned"
-	if os.Getenv("PASSLET_TEST_PLANNED") == "1" {
-		tags = ""
-	} else {
-		t.Log("@planned scenarios are excluded until implemented and verified")
-	}
 	suite := godog.TestSuite{
-		Options: &godog.Options{Format: "pretty", Paths: []string{"features/github.feature"}, Tags: tags, Strict: true, TestingT: t},
+		Options: &godog.Options{Format: "pretty", Paths: []string{"features/github.feature"}, Strict: true, TestingT: t},
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
 			type event struct{ action, output string }
 			var f *setupFixture
@@ -97,6 +92,50 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				return nil
 			})
+			s.Step(`^this (Linux|Mac) has no local Conductor configured$`, func(machine string) {
+				f.agent = true
+				f.hostOS = "darwin"
+				if machine == "Linux" {
+					f.hostOS = "linux"
+				}
+			})
+			s.Step(`^PASSLET_ENDPOINT is "([^"]*)"$`, func(endpoint string) { t.Setenv("PASSLET_ENDPOINT", endpoint) })
+			s.Step(`^no GitHub handle is requested$`, func() error {
+				if err := await(); err != nil {
+					return err
+				}
+				if f.prompts != 0 {
+					return fmt.Errorf("unexpected terminal prompt")
+				}
+				return nil
+			})
+			s.Step(`^no GitHub callback listener starts$`, func() error {
+				if err := await(); err != nil {
+					return err
+				}
+				if f.listenerStarts != 0 {
+					return fmt.Errorf("Agent started a callback listener")
+				}
+				return nil
+			})
+			s.Step(`^no Keychain access or approval is requested$`, func() error {
+				if err := await(); err != nil {
+					return err
+				}
+				if _, err := os.Stat(filepath.Join(f.dir, "helper-invoked")); !os.IsNotExist(err) {
+					return fmt.Errorf("Agent invoked the Keychain helper: %v", err)
+				}
+				return nil
+			})
+			s.Step(`^no setup request is sent to the remote Conductor$`, func() error {
+				if err := await(); err != nil {
+					return err
+				}
+				if result.err != errSetupOnAgent || f.github.requests.Load() != 0 {
+					return fmt.Errorf("Agent did not stop before setup")
+				}
+				return nil
+			})
 			s.Step("^Git's `github.user` setting is `alice`$", func() { f.suggestedHandle = "alice" })
 			start := func(command string) {
 				started = true
@@ -137,7 +176,7 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				if err := await(); err != nil {
 					return err
 				}
-				if pending.action != "handle" && pending.action != "browser" && pending.action != "reset" {
+				if pending.action != "handle" && pending.action != "browser" {
 					return fmt.Errorf("no terminal prompt awaiting Enter")
 				}
 				return act(pending.action)
@@ -159,6 +198,9 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				if f.startURL != "" {
 					u, _ := url.Parse(f.startURL)
 					text = strings.ReplaceAll(text, "{session}", strings.Split(strings.TrimPrefix(u.Path, "/"), "/")[0])
+				}
+				if f.agent && pending.output != text+"\n" {
+					return fmt.Errorf("unexpected Agent setup output: %q; want %q", pending.output, text+"\n")
 				}
 				return contains(pending.output, text)
 			})
@@ -350,8 +392,6 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				switch pending.action {
 				case "handle":
 					f.handle = value
-				case "reset":
-					f.answer = value
 				default:
 					return fmt.Errorf("not at an input prompt")
 				}

@@ -38,19 +38,7 @@ and Swift-helper fixtures. Run them with:
 go test -v -run '^TestGitHubSetupFeatures$' ./cmd/passlet
 ```
 
-They also run in `make check` and CI. Scenarios tagged `@planned` describe the
-organization-approval flow awaiting live verification; they are excluded from the
-default suite, not counted as passing. To include them and see undefined steps
-fail strictly, run:
-
-```sh
-PASSLET_TEST_PLANNED=1 go test -v -run '^TestGitHubSetupFeatures$' ./cmd/passlet
-```
-
-When implementing a planned scenario, bind its steps to real behavior and remove
-its `@planned` tag (split it into a separate feature if needed). Never replace a
-missing implementation with a passing placeholder. These fixtures do not test
-real Touch ID or macOS Keychain protection.
+They also run in `make check` and CI. Agent-machine scenarios verify that setup stops before asking for a handle, opening a browser or callback listener, or invoking the Keychain helper. Organization-owner approval is tracked in `docs/ROADMAP.md` until its live callback has been verified. These fixtures do not test real Touch ID or macOS Keychain protection.
 
 Inside `nix-shell`, run `make check-all`. On macOS also run `make check-macos`. The latter compiles the native helper for both Mac architectures, tests credential validation and lifecycle/cancellation/rotation state, runs the compiled helper against malformed and out-of-order pipe requests, and builds the UI smoke runner. The process tests exercise invalid imports, invalid prompts, store/delete before approval, non-pipe stdin, EOF, and duplicate error suppression. They never send a valid approval request or import real credentials. `./scripts/check-macos.sh --tests-only` compiles the helper for the current architecture and runs the same tests in macOS CI. Go tests cover prompt/scoping logic, provider responses, browser setup state and PKCE, identity, Unix sockets, cancellation, diagnostics, and credential handling.
 
@@ -62,7 +50,9 @@ nix-build nix/tests.nix --argstr system aarch64-linux --no-out-link
 
 The test uses three isolated NixOS VMs: Alice and Bob's approvers plus a shared remote host. Real SSH reverse socket forwarding, Unix users, Git HTTP and gh operate against a test-only GitHub/approval fixture. It covers routing, concurrent independent requests, cross-user socket/file denial, read/write and repository scoping, busy/denied requests, cancellation, crash recovery, audit redaction, token use after tunnel closure, and provider expiry. Fixture keys and certificates are synthetic Nix build outputs, not production secrets. No fixture flags exist in the shipped CLI or Swift helper.
 
-Approval text scenarios in `cmd/passlet/features/approval.feature` run the real request CLI and Conductor against a helper fixture. They assert the complete approval message sent over the helper pipe, including local, SSH, and Tailscale caller labels, repository scope, and permissions. The expected text includes the English macOS prefix `Passlet is trying to ` and final period. The test adds that documented wrapper to the captured helper message for comparison, it does not inspect native rendering or verify other system languages. The fixture always denies the request, so these tests do not open Touch ID, access Keychain, or issue a token. macOS controls the surrounding dialog title, buttons, and rendering; those remain part of the native UI checks. Run these scenarios with `go test -v -run '^TestApprovalFeatures$' ./cmd/passlet`.
+Approval text scenarios in `cmd/passlet/features/approval.feature` run the real request CLI and Conductor against a helper fixture. They assert the complete approval message sent over the helper pipe, including local, SSH, and Tailscale caller labels, repository, organization, and account scopes, long repository lists, and permissions. The expected text includes the English macOS prefix `Passlet is trying to ` and final period. The test adds that documented wrapper to the captured helper message for comparison, it does not inspect native rendering or verify other system languages. The fixture always denies the request, so these tests do not open Touch ID, access Keychain, or issue a token. macOS controls the surrounding dialog title, buttons, and rendering; those remain part of the native UI checks. Run these scenarios with `go test -v -run '^TestApprovalFeatures$' ./cmd/passlet`.
+
+Command-help scenarios in `cmd/passlet/features/help.feature` assert the full output for top-level help and every command. The fixture supplies invalid service configuration and an invalid endpoint, checks successful exit, and rejects creation of local service state. GitHub setup/reset help is available on Linux, while those operations still require a Mac. Run the scenarios with `go test -v -run '^TestHelpFeatures$' ./cmd/passlet`.
 
 ## Native UI smoke
 
@@ -102,7 +92,7 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 5. Leave a request unapproved for the 120-second server deadline. Confirm the native prompt disappears and no grant is delivered. Repeat by cancelling the requesting CLI or closing its SSH tunnel. A late interaction must never produce a grant for a cancelled request.
 6. On the remote host, set up separate Alice and Bob Unix accounts and separate SSH tunnels from their own Macs. Each user onboards their own GitHub App/account. Request concurrently; each prompt must appear on the correct Mac and GitHub actions must be attributed to the corresponding user. Bob must be unable to connect to Alice's socket or read her grant as an ordinary user. Root is deliberately trusted.
 7. Use a read grant for `gh api` and Git clone in disposable repository A. Verify writing fails and repository B content is denied. Use a separately approved write grant to push a disposable branch and create a PR; confirm user attribution. Reuse the grant after closing SSH and taking the Mac offline; Git/gh must continue until expiry without contacting the Mac.
-8. Run local Claude on the Mac with no `PASSLET_ENDPOINT`; verify it uses the private socket. Enable `--tailscale` and verify startup creates HTTPS forwarding to the private socket. Verify the device name in approval prompts and the full hostname/node ID in audit events. Confirm forwarded identity headers are accepted only on the dedicated socket and never on the normal local socket.
+8. Run local Claude on the Mac with no `PASSLET_ENDPOINT`; verify it uses the private socket. Set `tailscale = true` in `~/.config/passlet/conductor.toml` and verify startup creates HTTPS forwarding to the private socket. Verify the device name in approval prompts and the full hostname/node ID in audit events. Confirm forwarded identity headers are accepted only on the dedicated socket and never on the normal local socket.
 9. Put the Mac to sleep, confirm an agent handles unavailability without retries, wake it, and make a fresh explicit request. Verify login service and the chosen transport recover; re-establish SSH explicitly if it closed.
 10. Check `passlet audit --limit 30`: request, requested/granted scope, approval/denial/cancellation, expiry, and delivery outcomes must be present without tokens. Run `doctor` while Keychain is locked, approve with Touch ID or password, and confirm it verifies GitHub identity without issuing an agent token. Denial must fail the check.
 11. Uninstall through Homebrew or disable Passlet in Home Manager and reactivate and confirm login startup stops while protected credentials and audit history remain. Remove only test grants, disposable branches/PRs, and deliberately created test apps/accounts when finished.
@@ -123,4 +113,8 @@ Use a disposable Mac account for both package managers separately. Install a sig
 
 Automated fixture tests and Home Manager evaluation do not substitute for this signed-release lifecycle test. Record unperformed checks as not run.
 
-For the CLI setup changes, use a disposable app and Keychain item to check `passlet github reset`: Enter cancels, `y` followed by native approval deletes only Passlet’s credentials, and a second reset exits without prompting. Denying native approval must retain the item. Run setup again after reset and verify the existing app name is detected before the browser opens. These native checks have not been performed by the automated BDD suite.
+For the CLI setup changes, use a disposable app and Keychain item to check `passlet github reset`: native approval deletes only Passlet’s credentials, and a second reset exits without prompting. Denying native approval must retain the item. Run setup again after reset and verify the existing app name is detected before the browser opens. These native checks have not been performed by the automated BDD suite.
+
+`TestExecProcessSubstitutionPreservesStdin` runs the real request and exec dispatchers in Bash process substitution against a local Conductor HTTP fixture. It verifies that the child receives both the scoped token and its original stdin, and that a failed request prevents the child from running.
+
+Audit scenarios in `cmd/passlet/features/audit.feature` assert complete terminal output for readable events, newest-first ordering, limits, JSON export, empty logs, missing databases, and corrupted-record warnings. Warnings stay on stderr so JSON stdout remains parseable. They use a private SQLite fixture with fixed timestamps and an invalid Conductor endpoint. Successful exit is checked after each scenario unless failure is explicitly expected. Run them with `go test -v -run '^TestAuditFeatures$' ./cmd/passlet`.

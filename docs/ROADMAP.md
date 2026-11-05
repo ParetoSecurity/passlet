@@ -8,8 +8,8 @@ Ideas for future features, in no particular order. Inclusion here is not a commi
 - Fly.io, AWS, Cloudflare, and Vercel providers.
 - Native approval on Linux and Windows. Agents already run on macOS and Linux, while approval currently requires macOS.
 - iOS and Android companion apps for reviewing and approving requests.
-- Agent authentication with replay protection. Pair each Agent with the Conductor and verify signed requests bound to that Conductor, the requested scope, and a fresh single-use challenge. Reject reused or expired requests before prompting for approval, including after a Conductor restart. Show the authenticated Agent in approval prompts and audit history. Design key storage, rotation, and revocation explicitly; processes sharing an Agent’s Unix account remain within the same trust boundary.
-- Encrypt token responses for the requesting Agent. Bind the recipient key and encrypted response to the authenticated request so only that Agent can decrypt the token, even when Tailscale Serve or another proxy terminates HTTPS. Authenticate the Conductor’s response and reject responses belonging to another request.
+- Agent authentication with replay protection. Pair each Agent with the Approver and verify signed requests bound to that Approver, the requested scope, and a fresh single-use challenge. Reject reused or expired requests before prompting for approval, including after an Approver restart. Show the authenticated Agent in approval prompts and audit history. Design key storage, rotation, and revocation explicitly; processes sharing an Agent’s Unix account remain within the same trust boundary.
+- Encrypt token responses for the requesting Agent. Bind the recipient key and encrypted response to the authenticated request so only that Agent can decrypt the token, even when Tailscale Serve or another proxy terminates HTTPS. Authenticate the Approver’s response and reject responses belonging to another request.
 - Detect ambient credentials with `passlet doctor`. Check the machine running doctor for tokens in environment variables, dotfiles, and credential configuration used by `gh`, Git, and similar tools. Report variable names and file locations without printing token values, explain how these credentials could bypass Passlet’s scoped grants, and suggest removal or revocation without changing credentials automatically.
 - Harden and document the release process, including signing approvals, Nix cache configuration, artifact validation, package metadata publication, and recovery from failed or partial releases.
 
@@ -41,7 +41,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - Name the byte limits (65536/65537, 8192, 4096/4097, 1<<20, 4<<20 spread over `main.go`, `serve_config.go`, `helper.go`, `client.go`, `server.go`, `transport.go`, `github.go`). Derive `WriteTimeout: 125 * time.Second` in `cmd/passlet/serve.go:81` from `ServerDeadline`. The Swift helper's 120-second fail-closed timer (`macos/main.swift:82`) and the README's 5/120/130-second numbers encode the same constants. Cross-reference them in comments.
 - Use `http.Status*` constants in `internal/passlet/server.go` (ten literal status codes, including the non-standard 499) and `client.go`.
 - Test robustness: wall-clock assertions in `internal/passlet/helper_test.go:110` (fails above 2 s) and `server_test.go:343` (fails below 80 ms) and the sleep-polling loops in `local_test.go` and `cmd/passlet/serve_test.go` are flake sources. Use `synctest` or channels. Extract one helper for the three `GORACE=atexit_sleep_ms=0 ... exec self -test.run` launcher scripts and one for the five `os.MkdirTemp("/tmp", ...)` short-socket-path helpers (`internal/passlet` already has `socketPath`).
-- `setupWithDependencies` binds the production port 45821 itself, so the BDD suite binds the real port and collides with a running `passlet github setup` or a parallel `go test`. Inject the listener (or address) through `setupDependencies` so tests use `127.0.0.1:0`.
+- `setupWithDependencies` binds the production port 45821 itself, so the BDD suite binds the real port and collides with a running `passlet approver github setup` or a parallel `go test`. Inject the listener (or address) through `setupDependencies` so tests use `127.0.0.1:0`.
 - Put the test-only fixture processes behind a build tag: `TestHelperProcess`, `TestSetupHelperFixture`, `TestVMFixture` (which pulls `net/http/cgi` into every unit-test binary), and the `PASSLET_CLI_FIXTURE` `init()`. This makes the "no fixture flags exist in production" claim structural rather than conventional.
 - Missing tests: `plugin.json` and `.claude-plugin/plugin.json` share version and description (README says to bump both together, nothing checks). The committed `Casks/passlet.rb` and `Formula/passlet-agent.rb` equal `scripts/package-release.py` output for `packaging/release.json` (drift detection). `.github/rulesets/main.json` required-check names equal the `ci.yml` job names. `scripts/github-permissions.py` has no test at all (a small OpenAPI fixture is enough).
 
@@ -57,7 +57,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 
 #### Dead code, rough edges, and stale comments or docs
 
-- README: the preview-comment bot paragraph (line 222) describes `.github/workflows/preview-comment.yml`, removed in #25. "The first CLI-only release must publish package metadata before these installation commands are available" (line 57, and `packaging/README.md:9`) predates the committed v0.3.1 metadata. "At most three repositories" (line 194) contradicts the code, `docs/SETUP.md`, and the skill, which all say 100. "`setup github`" (line 59) is `passlet github setup`. "`updates/projects.yaml` still needs a Passlet entry" (line 214) is done in teamniteo/ops. "### Download a development build" is nested under "## License".
+- README: the preview-comment bot paragraph (line 222) describes `.github/workflows/preview-comment.yml`, removed in #25. "The first CLI-only release must publish package metadata before these installation commands are available" (line 57, and `packaging/README.md:9`) predates the committed v0.3.1 metadata. "At most three repositories" (line 194) contradicts the code, `docs/SETUP.md`, and the skill, which all say 100. "`setup github`" (line 59) is `passlet approver github setup`. "`updates/projects.yaml` still needs a Passlet entry" (line 214) is done in teamniteo/ops. "### Download a development build" is nested under "## License".
 - Version-era leftovers: `docs/INSTALLATION.md:10` ("upcoming CLI-only release ... v0.2.0 uses the older menu-bar app"), `docs/SETUP.md:3` ("signed v0.2 bundle"), `docs/VALIDATION.md` ("# v0.2 validation", "Tomorrow's manual checklist", v0.2 steps), `docs/RELEASING.md` ("Repository settings have not been applied by this branch", "Local preparation results" quoting 77.4% and 0% coverage against today's enforced 100%, "v0.2 controls", "maintainer-policy settings proposal" although `docs/REVIEW-POLICY.md` now records verified settings).
 - `packaging/README.md:29,31` point at `nix/package.nix` and `nix/home-manager.nix`. The files live in `packaging/nix/`.
 - `docs/release-notes.md` is referenced by nothing: `release.yml` uses `--generate-notes` and the release skill writes its own notes file. Wire it in or delete it.
@@ -104,7 +104,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 
 #### Dead code, rough edges, and stale comments or docs
 
-- Terminology drift: `docs/INSTALLATION.md` says Conductor and Agent (28 and 16 mentions), README uses each once and otherwise says service and helper, and `docs/SETUP.md`, `skills/passlet/SKILL.md`, and `docs/release-notes.md` never use them. Pick one vocabulary and add a glossary.
+- Terminology drift: `docs/INSTALLATION.md` says Approver and Agent (28 and 16 mentions), README uses each once and otherwise says service and helper, and `docs/SETUP.md`, `skills/passlet/SKILL.md`, and `docs/release-notes.md` never use them. Pick one vocabulary and add a glossary.
 - `Event.Approver` is always `"human"` (`internal/passlet/server.go:102`). Keep it for schema stability and document it, or stop writing it.
 - `docs/REVIEW-POLICY.md` still carries the "replace `Test (ubuntu-24.04)` with `Test (ubuntu-26.04)`" migration note although `ci.yml` and `rulesets/main.json` already use 26.04. Confirm the live ruleset and delete the note. `docs/VALIDATION.md` mixes dated log entries ("2026-10-31: live browser testing ...") into a checklist. Move logs into issues or a dated validation log.
 - README "Development and validation" is one 400-word paragraph covering the ops updater, caches, Cachix, and `vendorHash`. Move it to `CONTRIBUTING.md` or `docs/DEVELOPMENT.md` and keep README for usage.
@@ -117,7 +117,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 
 - `govet` `fieldalignment` and a struct-ordering pass: `Event` in `audit.go` and `Grant` in `types.go` put `GrantedOrganization`/`Organization` ahead of `RequestID`/`ID`, and `SetupFlow` mixes 14 fields of five kinds. Group fields by role.
 - `depguard` to keep `net/http/cgi`, `os/exec`, and `database/sql` inside the packages that own them after the Round 2 split, and `gochecknoglobals` with an allowlist for the embedded catalog, templates, and CSP hash.
-- `vale` with a project vocabulary (Passlet, Conductor, Agent, Touch ID, Keychain, Home Manager) so the Round 2 terminology decision holds in CI.
+- `vale` with a project vocabulary (Passlet, Approver, Agent, Touch ID, Keychain, Home Manager) so the Round 2 terminology decision holds in CI.
 - A `CHANGELOG.md` maintained per release (`docs/release-notes.md` is a static blurb), generated with `git-cliff` or written by hand and applied through `gh release edit --notes-file`.
 - Swift coverage from `swift test --enable-code-coverage`, uploaded as a CI artifact beside the Go coverage.
 - A self-documenting `make help` and a single `make lint` that maps one-to-one onto CI so README and `docs/VALIDATION.md` stop listing individual commands.
@@ -167,7 +167,7 @@ Confirm the request callback in a live GitHub walkthrough before implementing th
 Scenario: Organization installation needs owner approval
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
     And `ACME` requires an organization owner to approve app installations
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then Passlet asks me to unlock its Keychain item
     When I approve with Touch ID
     Then my browser opens "https://github.com/apps/passlet-alice/installations/new"

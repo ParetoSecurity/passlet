@@ -27,7 +27,7 @@ func TestDoctorClientFailures(t *testing.T) {
 	}{
 		{"invalid JSON", `oops`, "invalid_doctor_response", 200},
 		{"missing identity", `{}`, "invalid_doctor_response", 200},
-		{"old conductor", `{"error":"not_found"}`, "doctor_requires_updated_conductor", 404},
+		{"old approver", `{"error":"not_found"}`, "doctor_requires_updated_approver", 404},
 		{"untrusted error", `{"error":"raw-secret"}`, "doctor_failed", 500},
 		{"approval denied", `{"error":"approval_denied"}`, "approval_denied", 403},
 	} {

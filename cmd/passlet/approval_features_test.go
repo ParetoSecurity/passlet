@@ -37,7 +37,7 @@ func TestApprovalFeatures(t *testing.T) {
 			s.Step(`^the request is made from Codex$`, func() {
 				t.Setenv("CODEX_THREAD_ID", "fixture-thread")
 			})
-			s.Step("^(?:an Agent on this Mac|a Conductor configured for GitHub account `alice`)$", func() {
+			s.Step("^(?:an Agent on this Mac|an Approver configured for GitHub account `alice`)$", func() {
 				caller = passlet.Caller{Transport: "unix", Name: "local/SSH socket client"}
 			})
 			s.Step(`^an Agent connected through the "([^"]*)" SSH tunnel$`, func(label string) {

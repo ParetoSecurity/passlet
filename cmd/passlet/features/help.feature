@@ -1,110 +1,128 @@
 Feature: Show command help
 
-  Scenario: Explicit help does not inspect service configuration
-    When I run `passlet --help`
-    Then the terminal shows:
-      """
-      Give your remote agents scoped access to services, approved on-the-fly from your laptop. Run passlet without arguments to see how this machine is configured.
+  Rule: Passlet commands
 
-      Usage: passlet <command>
+    Scenario: Version is printed
+      When I run `passlet --version`
+      Then the terminal shows:
+        """
+        passlet {version}
+        """
 
-      Commands:
-        connect       Check and save a Conductor endpoint
-        github setup  Configure GitHub access on your Conductor Mac
-        github reset  Remove saved GitHub credentials
-        conductor     Run the Conductor
-        request       Request scoped access
-        exec          Run a command with scoped access
-        doctor        Verify Conductor and GitHub access with approval
-        audit         Show local audit history
+    Scenario: Show connect help
+      When I run `passlet connect --help`
+      Then the terminal shows:
+        """
+        Tell Passlet Agent how to connect to Passlet Approver. Run once on each Agent machine. The connection is saved in ~/.config/passlet/endpoint for future commands.
 
-      Run passlet <command> --help for command options.
-      """
+        Local and SSH socket agents connect to `unix://$HOME/.local/share/passlet/passlet.sock` by default.
 
-  Scenario: Show connect help
-    When I run `passlet connect --help`
-    Then the terminal shows:
-      """
-      Tell Passlet Agent how to connect to Passlet Conductor. Run once on each Agent machine. The connection is saved in ~/.config/passlet/endpoint for future commands.
+        Usage: passlet connect <https://host:port or unix:///absolute/socket>
+        """
 
-      Usage: passlet connect <https://host:port or unix:///absolute/socket>
-      """
+    Scenario: Show doctor help
+      When I run `passlet doctor --help`
+      Then the terminal shows:
+        """
+        Check your Approver connection and verify GitHub access. Requires approval on your Approver Mac.
 
-  Scenario: Show github setup help
-    When I run `passlet github setup --help`
-    Then the terminal shows:
-      """
-      Set up GitHub access on your Conductor Mac in your browser. Credentials are saved in the macOS Keychain. Run again to add another organization.
+        Usage of doctor:
+          --endpoint string
+                override the environment, saved endpoint, or default local socket
+        """
 
-      Usage of github setup:
-        --handle string
-              GitHub handle used to pre-fill the App name (prompted if omitted)
-      """
+    Scenario: Show exec help
+      When I run `passlet exec --help`
+      Then the terminal shows:
+        """
+        Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
 
-  Scenario: Show github reset help
-    When I run `passlet github reset --help`
-    Then the terminal shows:
-      """
-      Remove saved GitHub credentials from this Conductor Mac. Your GitHub App and its installations remain on GitHub.
-      """
+        Example:
+          passlet request --repos alice/repo --permissions contents:read --out grant.json
+          passlet exec --grant grant.json -- gh repo view alice/repo
 
-  Scenario: Show conductor help
-    When I run `passlet conductor --help`
-    Then the terminal shows:
-      """
-      Run Passlet Conductor service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.
-      """
+        Usage of exec:
+          --grant string
+                grant JSON file or process-substitution path (required)
+        """
 
-  Scenario: Show request help
-    When I run `passlet request --help`
-    Then the terminal shows:
-      """
-      Request scoped access from your Conductor. After approval, print the grant as JSON or save it with --out for later use with passlet exec.
+    Scenario: Show request help
+      When I run `passlet request --help`
+      Then the terminal shows:
+        """
+        Request scoped access from your Approver. After approval, print the grant as JSON or save it with --out for later use with `passlet exec`.
 
-      Usage of request:
-        --account string
-              account-wide permission target (exclusive with --repos/--org)
-        --org string
-              organization-wide permission target (exclusive with --repos/--account)
-        --out string
-              write grant JSON to a new mode-0600 file
-        --permissions string
-              comma-separated permission:read|write|admin list
-        --repos string
-              comma-separated owner/repository list
-      """
+        Save and use a grant:
+          passlet request --repos alice/repo --permissions contents:read --out grant.json
+          passlet exec --grant grant.json -- gh repo view alice/repo
 
-  Scenario: Show exec help
-    When I run `passlet exec --help`
-    Then the terminal shows:
-      """
-      Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+        One-time grant use directly with exec (Bash/Zsh):
+          passlet exec --grant <(passlet request --repos alice/repo --permissions contents:read) -- gh repo view alice/repo
 
-      Usage of exec:
-        --grant string
-              grant JSON file or process-substitution path (required)
-      """
+        Usage of request:
+          --account string
+                account-wide permission target (exclusive with --repos/--org)
+          --org string
+                organization-wide permission target (exclusive with --repos/--account)
+          --out string
+                write grant JSON to a new mode-0600 file
+          --permissions string
+                comma-separated permission:read|write|admin list
+          --repos string
+                comma-separated owner/repository list
+        """
 
-  Scenario: Show doctor help
-    When I run `passlet doctor --help`
-    Then the terminal shows:
-      """
-      Check your Conductor connection and verify GitHub access. Requires approval on your Conductor Mac. No agent token is issued.
+  Rule: Approver commands
 
-      Usage of doctor:
-        --endpoint string
-              override the environment, saved endpoint, or default local socket
-      """
+    Scenario: Show audit help
+      When I run `passlet approver audit --help`
+      Then the terminal shows:
+        """
+        Show recent access events from the local audit log.
 
-  Scenario: Show audit help
-    When I run `passlet audit --help`
-    Then the terminal shows:
-      """
-      Show recent access events from the local audit log. Run on your Conductor Mac to review requests and approval decisions.
+        Usage of approver audit:
+          --json
+                print structured records as JSON
+          --limit int
+                recent events, 1–1000 (default 20)
+        """
 
-      Usage of audit:
-        --json
-              print structured records as JSON
-        --limit int
-              recent events, 1–1000 (default 20)
-      """
+    Scenario: Show doctor help
+      When I run `passlet approver doctor --help`
+      Then the terminal shows:
+        """
+        Check service health and credentials on this Mac. Inspects local, SSH socket and Tailscale connections.
+
+        Requires Touch ID approval to verify saved credentials.
+        """
+
+    Scenario: Show approver start help
+      When I run `passlet approver start --help`
+      Then the terminal shows:
+        """
+        Run Passlet Approver service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.
+        """
+
+  Rule: Approver GitHub commands
+
+    Scenario: Show github reset help
+      When I run `passlet approver github reset --help`
+      Then the terminal shows:
+        """
+        Remove saved GitHub credentials from this Approver Mac. Your GitHub App and its installations remain on GitHub.
+        """
+
+    Scenario: Show github setup help
+      When I run `passlet approver github setup --help`
+      Then the terminal shows:
+        """
+        Set up GitHub access on your Approver Mac in your browser.
+
+        Credentials are saved in the macOS Keychain.
+
+        Run again to add another organization.
+
+        Usage of approver github setup:
+          --handle string
+                GitHub handle used to pre-fill the App name (prompted if omitted)
+        """

@@ -21,10 +21,10 @@ import (
 
 func githubCommand(ctx context.Context, args []string) error { // coverage-ignore: OS adapter assembles native terminal/browser dependencies; setupWithDependencies is exercised on both platforms.
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "reset") {
-		return errors.New("usage: passlet github setup | reset")
+		return errors.New("usage: passlet approver github setup | reset")
 	}
 	return setupWithDependencies(ctx, args, setupDependencies{
-		hostOS: runtime.GOOS, command: overviewOutput, input: bufio.NewReader(os.Stdin), output: os.Stdout, provider: passlet.NewGitHub(),
+		hostOS: runtime.GOOS, input: bufio.NewReader(os.Stdin), output: os.Stdout, provider: passlet.NewGitHub(),
 		helper:  defaultHelper(),
 		suggest: configuredGitHubHandle,
 		prompt:  promptSetupLine,
@@ -36,7 +36,6 @@ func githubCommand(ctx context.Context, args []string) error { // coverage-ignor
 
 // Dependencies are supplied by the command, never by environment-based test modes.
 type setupDependencies struct {
-	command  overviewCommand
 	listen   func(string, string) (net.Listener, error)
 	hostOS   string
 	approve  func(context.Context, string) (passlet.CredentialSession, error)
@@ -64,22 +63,22 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		}
 	}()
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "reset") {
-		return errors.New("usage: passlet github setup | reset")
+		return errors.New("usage: passlet approver github setup | reset")
 	}
-	fs := flag.NewFlagSet("github "+args[0], flag.ContinueOnError)
+	fs := flag.NewFlagSet("approver github "+args[0], flag.ContinueOnError)
 	fs.SetOutput(deps.output)
 	var githubHandle string
 	if args[0] == "setup" {
 		fs.StringVar(&githubHandle, "handle", "", "GitHub handle used to pre-fill the App name (prompted if omitted)")
 	}
 	fs.Usage = func() {
-		description := "Set up GitHub access on your Conductor Mac in your browser. Credentials are saved in the macOS Keychain. Run again to add another organization."
+		description := "Set up GitHub access on your Approver Mac in your browser.\n\nCredentials are saved in the macOS Keychain.\n\nRun again to add another organization."
 		if args[0] == "reset" {
-			description = "Remove saved GitHub credentials from this Conductor Mac. Your GitHub App and its installations remain on GitHub."
+			description = "Remove saved GitHub credentials from this Approver Mac. Your GitHub App and its installations remain on GitHub."
 		}
 		_, _ = fmt.Fprintln(deps.output, description)
 		if args[0] == "setup" {
-			_, _ = fmt.Fprintln(deps.output, "\nUsage of github setup:")
+			_, _ = fmt.Fprintln(deps.output, "\nUsage of approver github setup:")
 			_, _ = fmt.Fprintln(deps.output, "  --handle string\n        GitHub handle used to pre-fill the App name (prompted if omitted)")
 		}
 	}
@@ -87,16 +86,9 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if args[0] == "setup" && deps.hostOS != "" {
-		home, _ := os.UserHomeDir()
-		socket, _ := overviewConductor(ctx, deps.hostOS, home, deps.command)
-		if socket == "" {
-			_, _ = fmt.Fprintln(deps.output, "This machine is configured as an Agent.\nRun `passlet github setup` on the Mac configured as your Conductor.")
-			return errSetupOnAgent
-		}
-	}
 	if deps.hostOS != "" && deps.hostOS != "darwin" {
-		return errors.New("run_setup_on_your_Mac")
+		_, _ = fmt.Fprintln(deps.output, "GitHub credentials must be configured on a Mac.\nRun `passlet approver github "+args[0]+"` on your Approver Mac.")
+		return errSetupRequiresMac
 	}
 	if fs.NArg() != 0 || !filepath.IsAbs(*helper) {
 		return errors.New("setup_requires_absolute_helper")
@@ -110,7 +102,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 	}
 	listener, err := listen("tcp4", "127.0.0.1:17402")
 	if err != nil {
-		writeSetupText(deps.output, "Cannot start GitHub setup because localhost port 17402 is already in use.\nClose the application using that port, then run `passlet github setup` again.")
+		writeSetupText(deps.output, "Cannot start GitHub setup because localhost port 17402 is already in use.\nClose the application using that port, then run `passlet approver github setup` again.")
 		return errors.New("setup_listener_unavailable")
 	}
 	defer func() { _ = listener.Close() }()
@@ -131,13 +123,13 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		account := credentials.Account
 		session.Close()
 		if err := account.Validate(); err != nil {
-			writeSetupText(deps.output, "The saved Passlet credentials have invalid or incomplete account information.\nRun `passlet github reset`, then `passlet github setup` to set up again. Reset removes only this Mac's saved credentials. Your GitHub App and its installations remain on GitHub.")
+			writeSetupText(deps.output, "The saved Passlet credentials have invalid or incomplete account information.\nRun `passlet approver github reset`, then `passlet approver github setup` to set up again. Reset removes only this Mac's saved credentials. Your GitHub App and its installations remain on GitHub.")
 			return err
 		}
 
 		if err := deps.provider.VerifyIdentity(ctx, credentials, account.Login); err != nil {
 			if err.Error() == "github_http_401" {
-				writeSetupText(deps.output, fmt.Sprintf("GitHub no longer accepts the saved credentials for %s. The app may have been deleted or its authorization revoked.\nRun `passlet github reset`, then `passlet github setup` to set up again.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/")))
+				writeSetupText(deps.output, fmt.Sprintf("GitHub no longer accepts the saved credentials for %s. The app may have been deleted or its authorization revoked.\nRun `passlet approver github reset`, then `passlet approver github setup` to set up again.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/")))
 			}
 			return err
 		}
@@ -145,7 +137,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		writeSetupText(deps.output, fmt.Sprintf("Using your GitHub App: %s\nSigned in as: %s", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
 		writeSetupText(deps.output, "Choose an organization in your browser, then select \"All repositories\".")
 		return passlet.RunInstallationSetup(ctx, listener, credentials, deps.provider, func(_ context.Context, verified passlet.AccountInfo) error {
-			writeSetupText(deps.output, fmt.Sprintf("GitHub access enabled for %s.\n\nRun `passlet github setup` again to add another organization.", verified.InstallationOwner))
+			writeSetupText(deps.output, fmt.Sprintf("GitHub access enabled for %s.\n\nRun `passlet approver github setup` again to add another organization.", verified.InstallationOwner))
 			return nil
 		}, func(u string) error {
 			writeSetupText(deps.output, fmt.Sprintf("If your browser didn't open:\n%s", u))
@@ -182,7 +174,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		return err
 	}
 	if exists {
-		writeSetupText(deps.output, fmt.Sprintf("A GitHub App named %s already exists, but its credentials aren't saved in this Mac's Keychain. Passlet cannot reconnect to an existing app.\n\nTo create a replacement:\n1. Open https://github.com/settings/apps/%s/advanced\n2. Click \"Delete GitHub App\" and confirm. This deletes the app and its installations.\n3. Run `passlet github setup` again to create the app and grant it access to your repositories.", name, name))
+		writeSetupText(deps.output, fmt.Sprintf("A GitHub App named %s already exists, but its credentials aren't saved in this Mac's Keychain. Passlet cannot reconnect to an existing app.\n\nTo create a replacement:\n1. Open https://github.com/settings/apps/%s/advanced\n2. Click \"Delete GitHub App\" and confirm. This deletes the app and its installations.\n3. Run `passlet approver github setup` again to create the app and grant it access to your repositories.", name, name))
 		return errGitHubAppNameTaken
 	}
 	writeSetupIntroduction(deps.output)
@@ -206,7 +198,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 			return err
 		}
 
-		writeSetupText(deps.output, fmt.Sprintf("GitHub setup complete.\n\nApp: %s\nAccount: %s\n\nRun `passlet github setup` again to add another organization.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
+		writeSetupText(deps.output, fmt.Sprintf("GitHub setup complete.\n\nApp: %s\nAccount: %s\n\nRun `passlet approver github setup` again to add another organization.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
 		return nil
 	}, open, func(ctx context.Context) error {
 		writeInstallationInstructions(deps.output)
@@ -220,7 +212,7 @@ This GitHub App is yours alone. Its credentials are stored in your Mac’s Keych
 
 Agents get only the short-lived, scoped access you approve with Touch ID—never your app’s full credentials.
 
-Passlet will start a temporary listener on localhost to receive GitHub's callbacks and verify your app setup. The listener runs only while ` + "`passlet github setup`" + ` is running.
+Passlet will start a temporary listener on localhost to receive GitHub's callbacks and verify your app setup. The listener runs only while ` + "`passlet approver github setup`" + ` is running.
 
 Press Enter to create your personal GitHub App in your browser.`
 
@@ -271,6 +263,6 @@ func resetGitHub(ctx context.Context, helper string, deps setupDependencies) err
 	if err != nil {
 		return err
 	}
-	writeSetupText(deps.output, "GitHub credentials removed. Run `passlet github setup` to set up again.\n\nYour GitHub App remains on GitHub: "+passlet.GitHubAppSettingsURL(account.AppURL))
+	writeSetupText(deps.output, "GitHub credentials removed. Run `passlet approver github setup` to set up again.\n\nYour GitHub App remains on GitHub: "+passlet.GitHubAppSettingsURL(account.AppURL))
 	return nil
 }

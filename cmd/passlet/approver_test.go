@@ -12,9 +12,9 @@ import (
 	"passlet.dev/passlet/internal/passlet"
 )
 
-func conductorTestPaths(t *testing.T) (string, string) {
+func approverTestPaths(t *testing.T) (string, string) {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "passlet-conductor-")
+	dir, err := os.MkdirTemp("/tmp", "passlet-approver-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +28,8 @@ func conductorTestPaths(t *testing.T) (string, string) {
 	return dir, helper
 }
 
-func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
-	dir, helper := conductorTestPaths(t)
+func TestApproverRejectsUnsafeConfiguration(t *testing.T) {
+	dir, helper := approverTestPaths(t)
 	plain := filepath.Join(dir, "not-executable")
 	if err := os.WriteFile(plain, nil, 0600); err != nil {
 		t.Fatal(err)
@@ -40,8 +40,8 @@ func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
 		want string
 	}{
 		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
-		{"relative helper", []string{"--helper", "relative"}, "conductor_requires_absolute_helper"},
-		{"positional argument", []string{"--helper", helper, "unexpected"}, "conductor_requires_absolute_helper"},
+		{"relative helper", []string{"--helper", "relative"}, "approver_requires_absolute_helper"},
+		{"positional argument", []string{"--helper", helper, "unexpected"}, "approver_requires_absolute_helper"},
 		{"missing helper", []string{"--helper", filepath.Join(dir, "missing")}, "helper_unavailable"},
 		{"directory helper", []string{"--helper", dir}, "helper_unavailable"},
 		{"nonexecutable helper", []string{"--helper", plain}, "helper_unavailable"},
@@ -50,7 +50,7 @@ func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			socket := passlet.DefaultSocket()
 			args := tc.args
-			err := conductor(context.Background(), args)
+			err := approver(context.Background(), args)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v; want %s", err, tc.want)
 			}
@@ -61,19 +61,19 @@ func TestConductorRejectsUnsafeConfiguration(t *testing.T) {
 	}
 }
 
-func TestConductorReadsConfigurationBeforeBinding(t *testing.T) {
-	dir, helper := conductorTestPaths(t)
+func TestApproverReadsConfigurationBeforeBinding(t *testing.T) {
+	dir, helper := approverTestPaths(t)
 	t.Setenv("HOME", dir)
 	configDir := filepath.Join(dir, ".config", "passlet")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	config := filepath.Join(configDir, "conductor.toml")
+	config := filepath.Join(configDir, "approver.toml")
 	if err := os.WriteFile(config, []byte(`unexpected = true`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	args := []string{"--helper", helper}
-	if err := conductor(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid_conductor_config") {
+	if err := approver(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid_approver_config") {
 		t.Fatalf("invalid config: %v", err)
 	}
 	if _, err := os.Stat(passlet.DefaultSocket()); !os.IsNotExist(err) {
@@ -81,10 +81,10 @@ func TestConductorReadsConfigurationBeforeBinding(t *testing.T) {
 	}
 }
 
-func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
+func TestApproverStartupFailuresReleaseSocket(t *testing.T) {
 	for _, mode := range []string{"socket occupied", "audit unavailable", "SSH socket occupied", "Tailscale socket occupied", "Tailscale unavailable"} {
 		t.Run(mode, func(t *testing.T) {
-			dir, helper := conductorTestPaths(t)
+			dir, helper := approverTestPaths(t)
 			socket := passlet.DefaultSocket()
 			enabled := false
 			switch mode {
@@ -115,7 +115,7 @@ func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
 				}
 			}
 			writeSshConfig(t, dir, enabled)
-			err := conductor(context.Background(), []string{"--helper", helper})
+			err := approver(context.Background(), []string{"--helper", helper})
 			if err == nil {
 				t.Fatal("startup unexpectedly succeeded")
 			}
@@ -143,10 +143,10 @@ func TestConductorStartupFailuresReleaseSocket(t *testing.T) {
 	}
 }
 
-func TestConductorHealthAndCancellation(t *testing.T) {
+func TestApproverHealthAndCancellation(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		t.Run("Tailscale="+strconv.FormatBool(enabled), func(t *testing.T) {
-			dir, helper := conductorTestPaths(t)
+			dir, helper := approverTestPaths(t)
 			socket := passlet.DefaultSocket()
 			writeSshConfig(t, dir, enabled)
 			installTailscaleFixture(t, tailscaleSocket(socket))
@@ -155,7 +155,7 @@ func TestConductorHealthAndCancellation(t *testing.T) {
 			done := make(chan error, 1)
 			go func() {
 				defer close(done)
-				done <- conductor(ctx, []string{"--helper", helper})
+				done <- approver(ctx, []string{"--helper", helper})
 			}()
 			t.Cleanup(func() {
 				cancel()
@@ -217,7 +217,7 @@ func writeSshConfig(t *testing.T, home string, tailscale bool) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), []byte("ssh = [\"cruncher\", \"other-server\"]\ntailscale = "+strconv.FormatBool(tailscale)), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("ssh = [\"cruncher\", \"other-server\"]\ntailscale = "+strconv.FormatBool(tailscale)), 0600); err != nil {
 		t.Fatal(err)
 	}
 }

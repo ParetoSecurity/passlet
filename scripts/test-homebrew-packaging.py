@@ -40,8 +40,8 @@ def main():
         # Run the generated fixture through the system shell. This test does not
         # exercise Gatekeeper or execute an unsigned downloaded app directly.
         script = script.replace('-insert ProgramArguments.0 -string "$app/Contents/MacOS/passlet"', '-insert ProgramArguments.0 -string /bin/sh')
-        script = script.replace('-insert ProgramArguments.1 -string conductor', '-insert ProgramArguments.1 -string "$app/Contents/MacOS/passlet"')
-        script = script.replace('-insert ProgramArguments.2 -string --helper', '-insert ProgramArguments.2 -string conductor')
+        script = script.replace('-insert ProgramArguments.1 -string approver', '-insert ProgramArguments.1 -string "$app/Contents/MacOS/passlet"')
+        script = script.replace('-insert ProgramArguments.2 -string start', '-insert ProgramArguments.2 -string approver')
         (app / "Contents/Resources/homebrew-service.sh").write_text(script)
 
         def publish_fixture(version):

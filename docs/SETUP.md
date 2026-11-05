@@ -4,11 +4,11 @@ Use the signed v0.2 bundle on each approving Mac and the matching CLI on the age
 
 ## GitHub onboarding
 
-Run `passlet github setup` on the Mac configured as your Conductor and enter your GitHub handle, or use `passlet github setup --handle alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. Setup checks for an existing app with that name before opening the browser and stops with a settings link if found. GitHub still validates names during creation. The loopback listener runs until setup completes or the setup process stops. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
+Run `passlet approver github setup` on your Approver Mac and enter your GitHub handle, or use `passlet approver github setup --handle alice`. The app name is pre-filled as `passlet-alice` and remains editable on GitHub. Long handles are shortened to fit GitHub’s 34-character app-name limit. Setup checks for an existing app with that name before opening the browser and stops with a settings link if found. GitHub still validates names during creation. The loopback listener runs until setup completes or the setup process stops. It uses independent state values for manifest conversion and OAuth, a random callback path, and PKCE. Browser confirmation is required for app registration, installation, and user authorization. The app belongs to that person; install it in any organizations where it should operate. Installing an app does not grant the user access they did not already have.
 
 After app creation and authorization, GitHub's authorization callback redirects the same browser tab to the installation page. Choose **All repositories** for the account or organization. The full default permission set requires an organization owner to approve installation on an organization. GitHub redirects to `http://127.0.0.1:17402/github/installed`; Passlet verifies that installation's app, user, permissions, and accessible repositories before saving credentials and showing success. The listener exists only during setup. If the port is occupied, setup stops before opening the browser; it never silently changes ports. The predictable installation callback is a signal to verify access, not proof of authorization. Manifest conversion and OAuth retain separate random state values, session paths, and PKCE. If GitHub rejects saved authorization, setup directs you to reset and configure again.
 
-If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials, setup asks for Touch ID/password to read the configured app identity and opens GitHub’s installation page without replacing credentials. Use `passlet github reset` to deliberately remove local credentials before starting over; protected items may not appear in Keychain Access.
+If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials, setup asks for Touch ID to read the configured app identity and opens GitHub’s installation page without replacing credentials. Use `passlet approver github reset` to deliberately remove local credentials before starting over; protected items may not appear in Keychain Access.
 
 App/account identity and tokens are stored together in one protected Keychain item. There is no separate metadata file. Noninteractive status checks do not unlock credentials or display account identity.
 
@@ -19,26 +19,26 @@ App/account identity and tokens are stored together in one protected Keychain it
 
 Run `passlet doctor` to check availability. For launchd details use `launchctl print gui/$(id -u)/dev.passlet.agent`. If startup fails, verify you are in the logged-in Mac's graphical session and check this output for its last exit status. Reinstall the Homebrew cask or reactivate Home Manager after correcting the problem.
 
-To troubleshoot in the foreground, stop the managed service with `launchctl bootout gui/$(id -u)/dev.passlet.agent`, then run `passlet conductor`. This is a temporary diagnostic command, not an installation method. Reinstall/reactivate the package when finished. A private lock prevents two approvers from replacing each other's active socket. Never delete a live socket or its lock to work around an error.
+To troubleshoot in the foreground, stop the managed service with `launchctl bootout gui/$(id -u)/dev.passlet.agent`, then run `passlet approver start`. This is a temporary diagnostic command, not an installation method. Reinstall/reactivate the package when finished. A private lock prevents two approvers from replacing each other's active socket. Never delete a live socket or its lock to work around an error.
 
 Uninstalling through the package manager removes startup while retaining credentials and audit history. Sleep temporarily makes the Mac unavailable; delivered tokens remain usable.
 
 ## Agent connection
 
-Run `passlet connect <endpoint>` on the agent machine to check the Conductor's health and save its address in `~/.config/passlet/endpoint`. For example, use `passlet connect https://your-mac.your-tailnet.ts.net:17400` for Tailscale or `passlet connect unix:///home/alice/.local/share/passlet/mac.sock` for SSH forwarding. Keep the tunnel open while connecting through SSH. A failed health check leaves the saved address unchanged and never requests approval or accesses credentials.
+Run `passlet connect <endpoint>` on the agent machine to check the Approver's health and save its address in `~/.config/passlet/endpoint`. For example, use `passlet connect https://your-mac.your-tailnet.ts.net:17400` for Tailscale or `passlet connect unix:///home/alice/.local/share/passlet/passlet.sock` for SSH forwarding. Keep the tunnel open while connecting through SSH. A failed health check leaves the saved address unchanged and never requests approval or accesses credentials.
 
-The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved address. Without any of these, requests use the default local socket. If a saved address cannot be read or is invalid, correct it with `passlet connect`; commands do not silently switch to the local socket. Use `passlet` to see the effective address and `passlet doctor` to verify GitHub access.
+The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved address. Without any of these, requests use the default local socket. If a saved address cannot be read or is invalid, correct it with `passlet connect`; commands do not silently switch to the local socket. Use `passlet doctor` to inspect the effective address and verify GitHub access. Use `passlet approver doctor` on your Mac to check the local service regardless of the selected endpoint.
 
 ## SSH tunnel labels
 
-Configure the Conductor with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/conductor.toml` and restart the service:
+Configure the Approver with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/approver.toml` and restart the service:
 
 ```toml
 ssh = ["cruncher", "other-server"]
 tailscale = true
 ```
 
-Tailscale is optional. Labels must be unique, start with a lowercase letter or digit, and contain only lowercase letters, digits, and hyphens, up to 32 characters. On startup, the Conductor creates `ssh-cruncher.sock` and `ssh-other-server.sock` beside its normal socket. Each socket has mode `0600` in the same private directory. All listeners share the approval gate. Removing a label and restarting stops that listener.
+Tailscale is optional. Labels must be unique, start with a lowercase letter or digit, and contain only lowercase letters, digits, and hyphens, up to 32 characters. On startup, the Approver creates `ssh-cruncher.sock` and `ssh-other-server.sock` beside its normal socket. Each socket has mode `0600` in the same private directory. All listeners share the approval gate. Removing a label and restarting stops that listener.
 
 For Home Manager, declare the labels in your configuration and reactivate:
 
@@ -46,20 +46,22 @@ For Home Manager, declare the labels in your configuration and reactivate:
 programs.passlet.service.ssh = [ "cruncher" "other-server" ];
 ```
 
-Home Manager writes `~/.config/passlet/conductor.toml` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated TOML file.
+Home Manager writes `~/.config/passlet/approver.toml` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated TOML file.
 
-For an account named `alice`, add this to `~/.ssh/config` on the Conductor Mac:
+For an account named `alice`, add this to `~/.ssh/config` on the Approver Mac:
 
 ```sshconfig
 Host cruncher
     User alice
-    RemoteForward /home/alice/.local/share/passlet/mac.sock /Users/alice/.local/share/passlet/ssh-cruncher.sock
+    RemoteForward /home/alice/.local/share/passlet/passlet.sock /Users/alice/.local/share/passlet/ssh-cruncher.sock
     ExitOnForwardFailure yes
 ```
 
-The first socket is created on Cruncher by SSH, and its parent directory must already exist with mode `0700`. The second socket is created on the Mac by the Conductor. It must be listening when a request arrives, although SSH can establish the tunnel before it exists. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. For another server, use another Host entry and the matching Mac-side socket.
+The first socket is created on Cruncher by SSH, and its parent directory must already exist with mode `0700`. The second socket is created on the Mac by the Approver. It must be listening when a request arrives, although SSH can establish the tunnel before it exists. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. For another server, use another Host entry and the matching Mac-side socket.
 
 Approval prompts say “cruncher,” and audit events record `transport: "ssh"` and `name: "cruncher"`. These values come from the configured listener; request headers cannot change them. The label identifies the route, not an authenticated remote host, Unix user, or process. Other processes with access to that route can request approval too. Forwarding the normal `passlet.sock` still works, but its approval prompts display “local” and its audit records say “local/SSH socket client”. That socket cannot distinguish a local caller from an SSH forward; use a named SSH socket to display the route.
+
+The Mac's `passlet approver doctor` reports whether each configured SSH socket is listening. If a configured socket is missing or refuses connections, it prints the socket path and links to the relevant setup documentation. Permission failures and timeouts are reported separately. It cannot tell whether the SSH tunnel is connected. Run `passlet doctor` on the remote machine to check the complete path. A missing forwarded socket suggests the tunnel may not be running; a stale socket that refuses connections suggests restarting the tunnel. Permission errors get separate guidance. If the socket responds without a healthy Approver reply, check the service on your Mac and the forwarding target. These checks run only when requested, with no background process or heartbeat protocol.
 
 ## SSH server configuration
 
@@ -78,16 +80,18 @@ After configuring the `cruncher` label, Alice runs this from her Mac:
 
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
-  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" alice@cruncher
+  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" alice@cruncher
 ```
 
-Bob uses `/home/bob/.local/share/passlet/mac.sock` and `bob@cruncher` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/mac.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
+Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/passlet.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
 
 Unix permissions isolate Alice from Bob, but not either from remote root or other processes sharing their account. Never describe this as attesting the agent executable. Root can request approval through either socket and read delivered tokens. A compromised same-user process can also request approval; examine the scopes in the native prompt.
 
 ## Tailscale
 
-For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/conductor.toml` containing `tailscale = true`, then reinstall the cask to restart it. This file contains no credentials. Tailscale and SSH settings are read from this file on startup. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet conductor`.
+`passlet approver doctor` reports when Tailscale is stopped, Serve has no forwarding on port 17400, or forwarding targets a different socket. It shows the actual and expected socket targets for a mismatch and links to these setup instructions. These checks do not change Tailscale configuration. Local doctor exits unsuccessfully if any configured listener or Tailscale forwarding check fails.
+
+For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/approver.toml` containing `tailscale = true`, then reinstall the cask to restart it. This file contains no credentials. Tailscale and SSH settings are read from this file on startup. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet approver start`.
 
 Passlet uses Tailscale Serve's HTTPS proxy to a dedicated mode-0600 Unix socket beside its normal local socket, with a `.tailscale` suffix. The sockets share one approval lock. Startup requires Tailscale 1.104.4 or newer, reuses matching forwarding on port `17400`, creates missing forwarding, and rejects conflicts. It does not configure Funnel, modify unrelated routes, invoke sudo, or alter tailnet HTTPS policy. A permission or HTTPS setup failure produces an actionable startup error.
 
@@ -97,7 +101,7 @@ Use the Mac's actual `.ts.net` HTTPS hostname and port. Tailscale network policy
 
 ## Diagnostics
 
-`passlet doctor` checks the selected Conductor, requests native approval on its Mac, unlocks Keychain, refreshes authorization when needed, saves rotated credentials, and verifies the GitHub identity. It uses the same approval lock and deadline as credential requests, including when called remotely. It returns a failure for denied approval, invalid credentials, or failed verification, and never issues an agent token. Both the Agent and Conductor must support the diagnostic endpoint; an older Conductor reports that an update is required.
+`passlet doctor` checks the selected Approver, requests native approval on its Mac, unlocks Keychain, refreshes authorization when needed, saves rotated credentials, and verifies the GitHub identity. It uses the same approval lock and deadline as credential requests, including when called remotely. It returns a failure for denied approval, invalid credentials, or failed verification, and never issues an agent token. Both the Agent and Approver must support the diagnostic endpoint; an older Approver reports that an update is required.
 
 Common failures:
 
@@ -106,14 +110,14 @@ Common failures:
 | Approver unavailable | Start the Mac login service; for SSH verify the tunnel and remote socket path; for HTTPS verify Serve and network policy. |
 | Directory is not private | Check ownership and set the socket directory to 0700. Do not share it between users. |
 | Helper unavailable | Use the signed app bundle and keep CLI/helper together. |
-| GitHub setup missing | Run `passlet github setup` on the approving Mac. |
+| GitHub setup missing | Run `passlet approver github setup` on the approving Mac. |
 | Repository unavailable | Check the app installation, pending organization approvals, and the user's repository access. |
 | GitHub denies permission | Confirm the operation and app's maximum permissions; request only the specific missing scope. |
 | Approver busy | Complete or cancel the existing request; do not poll or retry automatically. |
 | Approval timeout/disconnect | Restore connectivity and make a new explicit request when the user is ready. |
 | Authorization expired/invalid | Perform fresh GitHub authorization; do not fall back to a PAT. |
 
-`passlet audit --limit 20` shows recent events in a readable format. Add `--json` to output the complete structured records for scripts. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. The Conductor stores its audit log at `~/.local/share/passlet/audit.sqlite`. The audit command reads that file and never creates it. Keep support excerpts limited to needed metadata, even though credentials are excluded.
+`passlet approver audit --limit 20` shows recent events in a readable format. Add `--json` to output the complete structured records for scripts. An agent using a remote endpoint cannot fetch the Mac's audit history through the transport. The Approver stores its audit log at `~/.local/share/passlet/audit.sqlite`. The audit command reads that file and never creates it. Keep support excerpts limited to needed metadata, even though credentials are excluded.
 
 Corrupted entries are skipped with a warning on stderr; stdout remains JSON. The
 limit bounds the recent rows inspected, so corruption can result in fewer entries.
@@ -143,12 +147,12 @@ GitHub’s token API schema and app registration accept different permission set
 
 ### Terminal-led onboarding
 
-`passlet github setup` suggests an editable handle from Git's `github.user`, then GitHub CLI account metadata if needed. It never obtains or uses a token from those tools. Press Enter to accept the handle, read the explanation, then press Enter to open GitHub. The terminal also prints a fallback URL. The local page automatically POSTs the manifest to GitHub; create and authorize the app, then install it for an account or organization. Installation verification and Keychain storage proceed automatically after GitHub's callback. Ctrl-C cancels setup and stops the localhost listener. No credentials are saved before verification.
+`passlet approver github setup` suggests an editable handle from Git's `github.user`, then GitHub CLI account metadata if needed. It never obtains or uses a token from those tools. Press Enter to accept the handle, read the explanation, then press Enter to open GitHub. The terminal also prints a fallback URL. The local page automatically POSTs the manifest to GitHub; create and authorize the app, then install it for an account or organization. Installation verification and Keychain storage proceed automatically after GitHub's callback. Ctrl-C cancels setup and stops the localhost listener. No credentials are saved before verification.
 
 For an existing account, setup unlocks the protected credentials with native approval, starts the same temporary localhost listener, and opens the existing app’s installation page. It waits for GitHub’s callback and verifies the installation without replacing credentials. Recovery after installing while Passlet was stopped remains a separate follow-up scenario. The random OAuth callback is only for the original authorization.
 
 ### Reset GitHub credentials
 
-Run `passlet github reset` to remove the protected GitHub credential item. Confirm removal with Touch ID or your password. There is no separate terminal confirmation. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
+Run `passlet approver github reset` to remove the protected GitHub credential item. Confirm removal with Touch ID. There is no separate terminal confirmation. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
 
 Setup reserves localhost port 17402 before prompting for a handle or opening Keychain. If it is occupied, close the application using the port and retry. Denied authorization, an unexpected GitHub identity, and failed Keychain storage never report completion. Errors include recovery instructions without exposing credentials. Organization approval remains planned in the roadmap until the live callback has been verified.

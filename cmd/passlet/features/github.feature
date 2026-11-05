@@ -4,7 +4,7 @@ Feature: Set up a personal GitHub App
   Scenario: Set up GitHub for the first time
     Given Keychain contains no Passlet credentials
     And Git's `github.user` setting is `alice`
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then the terminal prompts "Please enter your GitHub handle:"
     And the input is prefilled with `alice`
     When I press Enter
@@ -16,7 +16,7 @@ Feature: Set up a personal GitHub App
 
       Agents get only the short-lived, scoped access you approve with Touch ID—never your app’s full credentials.
 
-      Passlet will start a temporary listener on localhost to receive GitHub's callbacks and verify your app setup. The listener runs only while `passlet github setup` is running.
+      Passlet will start a temporary listener on localhost to receive GitHub's callbacks and verify your app setup. The listener runs only while `passlet approver github setup` is running.
 
       Press Enter to create your personal GitHub App in your browser.
       """
@@ -61,7 +61,7 @@ Feature: Set up a personal GitHub App
       App: passlet-alice
       Account: alice
 
-      Run `passlet github setup` again to add another organization.
+      Run `passlet approver github setup` again to add another organization.
       """
     And the command exits successfully
 
@@ -74,7 +74,7 @@ Feature: Set up a personal GitHub App
       GitHub authorization was denied. No credentials were saved.
 
       Your GitHub App still exists at https://github.com/settings/apps/passlet-alice/advanced.
-      To start over, click "Delete GitHub App", then run `passlet github setup` again.
+      To start over, click "Delete GitHub App", then run `passlet approver github setup` again.
       """
     And the browser shows:
       """
@@ -93,7 +93,7 @@ Feature: Set up a personal GitHub App
       GitHub setup failed. Expected alice, but GitHub authorized bob. No credentials were saved.
 
       Your GitHub App still exists at https://github.com/settings/apps/passlet-alice/advanced.
-      To start over, click "Delete GitHub App", then run `passlet github setup` again and authorize as alice.
+      To start over, click "Delete GitHub App", then run `passlet approver github setup` again and authorize as alice.
       """
     And the browser shows:
       """
@@ -114,7 +114,7 @@ Feature: Set up a personal GitHub App
       Could not save credentials in your Mac's Keychain. GitHub setup failed.
 
       Your GitHub App still exists at https://github.com/settings/apps/passlet-alice/advanced.
-      To start over, click "Delete GitHub App", then run `passlet github setup` again.
+      To start over, click "Delete GitHub App", then run `passlet approver github setup` again.
       """
     And the browser shows:
       """
@@ -145,7 +145,7 @@ Feature: Set up a personal GitHub App
 
   Scenario: Install an existing GitHub App for an organization
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then Passlet asks me to unlock its Keychain item
     When I approve with Touch ID
     Then the terminal shows:
@@ -172,25 +172,25 @@ Feature: Set up a personal GitHub App
       """
       GitHub access enabled for Globex.
 
-      Run `passlet github setup` again to add another organization.
+      Run `passlet approver github setup` again to add another organization.
       """
     And the existing Keychain credentials remain unchanged
     And the command exits successfully
 
   Scenario: Localhost port is already occupied
     Given another process is listening on `127.0.0.1:17402`
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then the terminal shows:
       """
       Cannot start GitHub setup because localhost port 17402 is already in use.
-      Close the application using that port, then run `passlet github setup` again.
+      Close the application using that port, then run `passlet approver github setup` again.
       """
     And no browser opens
     And the command exits unsuccessfully
 
   Scenario: Cancel Keychain approval
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then Passlet asks me to unlock its Keychain item
     When I cancel the Keychain prompt
     Then the terminal shows:
@@ -204,7 +204,7 @@ Feature: Set up a personal GitHub App
   Scenario: GitHub App name is already taken
     Given Keychain contains no Passlet credentials
     And a GitHub App named `passlet-alice` already exists
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then the terminal prompts "Please enter your GitHub handle:"
     When I enter `alice` and press Enter
     Then the terminal shows:
@@ -214,7 +214,7 @@ Feature: Set up a personal GitHub App
       To create a replacement:
       1. Open https://github.com/settings/apps/passlet-alice/advanced
       2. Click "Delete GitHub App" and confirm. This deletes the app and its installations.
-      3. Run `passlet github setup` again to create the app and grant it access to your repositories.
+      3. Run `passlet approver github setup` again to create the app and grant it access to your repositories.
       """
     And no browser opens
     And Keychain contains no Passlet credentials
@@ -223,13 +223,13 @@ Feature: Set up a personal GitHub App
   Scenario: Saved GitHub credentials are no longer valid
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
     And GitHub rejects those credentials because the app was deleted or its authorization was revoked
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then Passlet asks me to unlock its Keychain item
     When I approve with Touch ID
     Then the terminal shows:
       """
       GitHub no longer accepts the saved credentials for passlet-alice. The app may have been deleted or its authorization revoked.
-      Run `passlet github reset`, then `passlet github setup` to set up again.
+      Run `passlet approver github reset`, then `passlet approver github setup` to set up again.
       """
     And no browser opens
     And the existing Keychain credentials remain unchanged
@@ -237,7 +237,7 @@ Feature: Set up a personal GitHub App
 
   Scenario: Reset with no saved GitHub credentials
     Given Keychain contains no Passlet credentials
-    When I run `passlet github reset`
+    When I run `passlet approver github reset`
     Then the terminal shows:
       """
       No GitHub credentials are saved in Keychain. Nothing to do.
@@ -247,7 +247,7 @@ Feature: Set up a personal GitHub App
 
   Scenario: Reset GitHub credentials
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
-    When I run `passlet github reset`
+    When I run `passlet approver github reset`
     Then the terminal shows:
       """
       This removes Passlet's GitHub credentials from your Mac's Keychain.
@@ -256,7 +256,7 @@ Feature: Set up a personal GitHub App
     And Keychain contains no Passlet credentials
     And the terminal shows:
       """
-      GitHub credentials removed. Run `passlet github setup` to set up again.
+      GitHub credentials removed. Run `passlet approver github setup` to set up again.
 
       Your GitHub App remains on GitHub: https://github.com/settings/apps/passlet-alice
       """
@@ -266,7 +266,7 @@ Feature: Set up a personal GitHub App
   Scenario: Refuse Keychain approval during reset
     Given Keychain contains credentials for `passlet-alice` authorized as `alice`
     And I will refuse the Keychain prompt
-    When I run `passlet github reset`
+    When I run `passlet approver github reset`
     Then the terminal shows:
       """
       GitHub reset canceled.
@@ -278,31 +278,35 @@ Feature: Set up a personal GitHub App
   Scenario: Override the suggested GitHub handle
     Given Keychain contains no Passlet credentials
     And Git's `github.user` setting is `alice`
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then the terminal prompts "Please enter your GitHub handle:"
     And the input is prefilled with `alice`
     When I enter `bob` and press Enter
     Then setup uses `bob` as my GitHub handle
 
-  Scenario Outline: Run GitHub setup on an Agent machine
-    Given this <machine> has no local Conductor configured
+  Scenario Outline: Run GitHub setup on Linux
+    Given Passlet is installed on Linux
     And PASSLET_ENDPOINT is "<endpoint>"
-    When I run `passlet github setup`
+    When I run `passlet approver github setup`
     Then the terminal shows:
       """
-      This machine is configured as an Agent.
-      Run `passlet github setup` on the Mac configured as your Conductor.
+      GitHub credentials must be configured on a Mac.
+      Run `passlet approver github setup` on your Approver Mac.
       """
     And no GitHub handle is requested
     And no browser opens
     And no GitHub callback listener starts
     And no Keychain access or approval is requested
-    And no setup request is sent to the remote Conductor
+    And no setup request is sent to the remote Approver
     And the command exits unsuccessfully
 
     Examples:
-      | machine      | endpoint                                         |
-      | Linux        | https://alice-mac.example.ts.net:17400             |
-      | Linux        | unix:///home/alice/.local/share/passlet/mac.sock   |
-      | Mac          | https://alice-mac.example.ts.net:17400             |
-      | Mac          | unix:///Users/alice/.local/share/passlet/mac.sock  |
+      | endpoint                                       |
+      | https://alice-mac.example.ts.net:17400           |
+      | unix:///home/alice/.local/share/passlet/mac.sock |
+
+  Scenario: Set up local GitHub access while connected to a remote Approver
+    Given Keychain contains no Passlet credentials
+    And PASSLET_ENDPOINT is "https://other-mac.example.ts.net:17400"
+    When I run `passlet approver github setup`
+    Then the terminal prompts "Please enter your GitHub handle:"

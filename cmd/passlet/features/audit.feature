@@ -1,12 +1,12 @@
 Feature: Review local audit history
-  Audit reads the Conductor's existing log without requesting approval or contacting GitHub.
+  Audit reads the Approver's existing log without requesting approval or contacting GitHub.
 
   Scenario: Review recent events
     Given the audit log contains:
       | time                 | request   | outcome   |
       | 2026-11-03T12:00:00Z  | request-1 | requested |
       | 2026-11-03T12:01:00Z  | request-1 | approved  |
-    When I run `passlet audit`
+    When I run `passlet approver audit`
     Then the terminal shows:
       """
       2026-11-03T12:01:00Z  approved
@@ -29,7 +29,7 @@ Feature: Review local audit history
       | time                 | request   | outcome   |
       | 2026-11-03T12:00:00Z  | request-1 | requested |
       | 2026-11-03T12:01:00Z  | request-1 | approved  |
-    When I run `passlet audit --limit 1`
+    When I run `passlet approver audit --limit 1`
     Then the terminal shows:
       """
       2026-11-03T12:01:00Z  approved
@@ -42,7 +42,7 @@ Feature: Review local audit history
 
   Scenario: Read an empty audit log
     Given the audit log is empty
-    When I run `passlet audit`
+    When I run `passlet approver audit`
     Then the terminal shows:
       """
       No audit events.
@@ -52,7 +52,7 @@ Feature: Review local audit history
     Given the audit log contains:
       | time                 | request   | outcome   |
       | 2026-11-03T12:00:00Z  | request-1 | requested |
-    When I run `passlet audit --json`
+    When I run `passlet approver audit --json`
     Then the terminal shows:
       """
       [{"at":"2026-11-03T12:00:00Z","event":{"request_id":"request-1","caller":{"transport":"ssh","node_id":"","name":"cruncher"},"requested":{"agent":"Claude","repositories":["alice/repo"],"permissions":{"contents":"write","metadata":"read"}},"outcome":"requested","approver":"human"}}]
@@ -60,7 +60,7 @@ Feature: Review local audit history
 
   Scenario: Export an empty audit log as JSON
     Given the audit log is empty
-    When I run `passlet audit --json`
+    When I run `passlet approver audit --json`
     Then the terminal shows:
       """
       []
@@ -68,10 +68,10 @@ Feature: Review local audit history
 
   Scenario: Read audit history before a database exists
     Given no audit database exists
-    When I run `passlet audit`
+    When I run `passlet approver audit`
     Then the terminal shows:
       """
-      passlet: audit_unavailable
+      error: audit_unavailable
       """
     And the command exits unsuccessfully
     And no audit database is created
@@ -81,7 +81,7 @@ Feature: Review local audit history
       | time                 | request   | outcome   |
       | 2026-11-03T12:00:00Z  | request-1 | requested |
     And the audit log contains a corrupted record
-    When I run `passlet audit`
+    When I run `passlet approver audit`
     Then the terminal shows:
       """
       Warning: audit log contains corrupted entries (1 skipped).
@@ -99,7 +99,7 @@ Feature: Review local audit history
       | time                 | request   | outcome   |
       | 2026-11-03T12:00:00Z  | request-1 | requested |
     And the audit log contains a corrupted record
-    When I run `passlet audit --json`
+    When I run `passlet approver audit --json`
     Then the terminal shows:
       """
       Warning: audit log contains corrupted entries (1 skipped).

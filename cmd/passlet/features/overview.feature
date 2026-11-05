@@ -1,67 +1,57 @@
-Feature: Understand how Passlet is configured
-  Running Passlet without arguments shows its role, reachability, and addresses with a hint for finding command help.
-  This overview never requests approval, unlocks credentials, or issues a pass.
+Feature: Get started with Passlet
+  Running Passlet shows the available commands.
 
   Scenario: Run Passlet for the first time
-    Given Passlet is installed and configured as Conductor
     When I run `passlet`
     Then the terminal shows:
       """
-      Configured as a Conductor. Agents send requests here for your approval.
+      Give your remote agents scoped access to services, approved on-the-fly from your Mac.
 
-      Local agents on this Mac connect automatically.
+      Run `passlet approver` on your Mac to manage approvals and credentials.
+      Your Agents then run `passlet request`.
 
-      See `passlet --help` for available commands.
+      Usage: passlet <command>
+
+      Commands:
+        approver      Manage the local Approver on your Mac
+        connect       Check and save an Approver endpoint
+        doctor        Check your connection and verify GitHub access
+        exec          Run a command with scoped access
+        request       Request scoped access
+
+      Run `passlet <command> --help` for command options.
       """
 
-  Scenario: Conductor with verified Tailscale forwarding
-    Given the Conductor is configured for Tailscale
-    When I run `passlet`
+  Scenario: Run Passlet Approver for the first time
+    When I run `passlet approver`
     Then the terminal shows:
       """
-      Configured as a Conductor. Agents send requests here for your approval.
+      An approval service you run on your Mac.
 
-      Local agents on this Mac connect automatically.
+      Agents request credentials from it, you approve them with Touch ID.
 
-      Tell remote agents how to connect:
-        passlet connect https://alice-mac.example.ts.net:17400
+      Usage: passlet approver <command>
 
-      See `passlet --help` for available commands.
+      Commands:
+        audit         Show audit history
+        doctor        Check service health and credentials
+        github        Manage GitHub credentials
+        start         Run the Approver service
+
+      Run `passlet approver <command> --help` for command options.
       """
 
-  Scenario: Run Agent for the first time
-    Given Passlet is installed
-    When I run `passlet`
+  Scenario: Run Passlet Approver GitHub for the first time
+    When I run `passlet approver github`
     Then the terminal shows:
       """
-      Configured as an Agent. Requests are sent to another Passlet running in Conductor mode for approval.
+      Manage GitHub credentials on your Approver Mac.
 
-      WARNING! No local Conductor found.
+      Usage: passlet approver github <command>
 
-      Run `passlet` on your Conductor machine to see how to connect.
-      """
+      Commands:
+        reset         Remove saved GitHub credentials
+        setup         Configure GitHub access
 
-  Scenario: Run Agent after connecting to a Conductor
-    Given I have run `passlet connect https://alice-mac.example.ts.net:17400`
-    When I run `passlet`
-    Then the terminal shows:
-      """
-      Configured as an Agent. Requests are sent to another Passlet running in Conductor mode for approval.
-
-      Sending requests to: https://alice-mac.example.ts.net:17400
-
-      See `passlet --help` for available commands.
-      """
-
-  Scenario: An Agent cannot reach its Conductor
-    Given Passlet is installed
-    And PASSLET_ENDPOINT is "https://alice-mac.example.ts.net:17400"
-    And the selected Conductor is unreachable
-    When I run `passlet`
-    Then the terminal shows:
-      """
-      Configured as an Agent. Requests are sent to another Passlet running in Conductor mode for approval.
-
-      WARNING! The Passlet Conductor is not reachable.
-      Run `passlet doctor` for more information.
+      Run `passlet approver github <command> --help` for command options.
       """

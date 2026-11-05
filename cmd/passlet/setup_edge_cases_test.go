@@ -76,7 +76,7 @@ func TestSetupDefaultApprovalAndNativeCommandWiring(t *testing.T) {
 		t.Fatalf("default native approval bypassed: %v", err)
 	}
 	// No real helper or browser is invoked: argument validation fails first.
-	_, err = invokeCLI(t, "", "github", "setup", "--helper", "relative")
+	_, err = invokeCLI(t, "", "approver", "github", "setup", "--helper", "relative")
 	if err == nil {
 		t.Fatal("native command accepted relative helper")
 	}
@@ -94,7 +94,7 @@ func TestSetupRejectsInvalidProtectedIdentity(t *testing.T) {
 	if err == nil || err.Error() != "invalid_protected_account_identity" {
 		t.Fatalf("invalid identity used: %v", err)
 	}
-	if !strings.Contains(f.output.String(), "passlet github reset") {
+	if !strings.Contains(f.output.String(), "passlet approver github reset") {
 		t.Fatal("missing account recovery guidance")
 	}
 }

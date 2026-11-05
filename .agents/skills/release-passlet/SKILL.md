@@ -26,7 +26,7 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
-- [ ] Verify the candidate is on `origin/main` and its required CI checks passed. Confirm it includes the intended Conductor, Agent, and package definitions.
+- [ ] Verify the candidate is on `origin/main` and its required CI checks passed. Confirm it includes the intended Approver, Agent, and package definitions.
 - [ ] Review release notes against changes since the previous release. Describe supported behavior and migrations accurately. Store multiline notes in a file for `gh --notes-file`.
 - [ ] Run applicable checks in `nix-shell`: `make check-all`, `nix-build nix/packaging-tests.nix --no-out-link`, and the relevant macOS/integration checks. Existing successful CI for the exact candidate can supply platform checks that cannot run locally. Distinguish passed, failed, and unperformed checks.
 - [ ] Verify production signing and manual validation prerequisites in `docs/RELEASING.md` and `docs/VALIDATION.md`. Do not treat preview signatures, fixtures, or older releases as proof of production Keychain behavior.
@@ -60,7 +60,7 @@ This is the step that enables Nix and Homebrew installation.
 - [ ] Inspect the generated `Casks/passlet.rb`, `Formula/passlet-agent.rb`, and `packaging/release.json`. Verify version, exact release URLs, and every SHA-256 hash against the published archives. Do not invent hashes or substitute `latest`, `:no_check`, unsigned previews, or older incompatible binaries.
 - [ ] On a branch based on current `origin/main`, copy those three files to their matching repository paths. If the workflow artifact is unavailable, regenerate them from the verified downloaded archives with `python3 scripts/package-release.py X.Y.Z <archive-directory> <output-directory>` inside the development shell.
 - [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Build the real release package with `nix build .#packages.aarch64-darwin.default --no-link` on Apple Silicon, or the corresponding supported system. Verify that the installed CLI reports the selected version and the macOS bundle retains its signature.
-- [ ] Exercise Conductor installation and service lifecycle in a disposable Mac account as described in `packaging/README.md`. Verify Agent on Linux. Do not replace the maintainer's working installation or credentials as an implicit test.
+- [ ] Exercise Approver installation and service lifecycle in a disposable Mac account as described in `packaging/README.md`. Verify Agent on Linux. Do not replace the maintainer's working installation or credentials as an implicit test.
 - [ ] Open a draft package-update PR with the release/run links and validation results. Follow repository commit/PR conventions. Do not merge it without authorization.
 
 The release tag precedes this metadata commit. Consumers must pin a repository revision containing the metadata, such as main after the package-update PR is merged. Pinning the release tag itself may still select missing or previous package metadata.

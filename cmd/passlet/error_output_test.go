@@ -12,9 +12,9 @@ func TestCommandErrorOutput(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"explained Agent setup", errSetupOnAgent, ""},
+		{"explained platform requirement", errSetupRequiresMac, ""},
 		{"explained app conflict", errGitHubAppNameTaken, "\n"},
-		{"unexpected error", errors.New("connection failed"), "passlet: connection failed\n"},
+		{"unexpected error", errors.New("connection failed"), "error: connection failed\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer

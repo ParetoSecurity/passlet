@@ -42,7 +42,7 @@ func Doctor(ctx context.Context, endpoint string) (DoctorResult, error) {
 		case "refresh_failed", "invalid_credentials", "helper_failed", "request_cancelled", "approval_denied", "approval_cancelled", "approval_timeout", "approver_busy", "identity_unavailable", "credentials_missing", "audit_unavailable", "reauthorization_required", "invalid_protected_account_identity", "credential_rotation_not_saved", "github_identity_verification_failed", "helper_unavailable", "keychain_unavailable":
 			return DoctorResult{}, errors.New(reply.Error)
 		case "not_found":
-			return DoctorResult{}, errors.New("doctor_requires_updated_conductor")
+			return DoctorResult{}, errors.New("doctor_requires_updated_approver")
 		default:
 			return DoctorResult{}, errors.New("doctor_failed")
 		}

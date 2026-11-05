@@ -95,7 +95,7 @@ func TestEndpointFilesystemFailures(t *testing.T) {
 		if _, err := ResolveEndpoint(""); err == nil {
 			t.Fatal("missing home accepted")
 		}
-		if err := SaveEndpoint("unix:///tmp/conductor.sock"); err == nil {
+		if err := SaveEndpoint("unix:///tmp/approver.sock"); err == nil {
 			t.Fatal("saved without a home")
 		}
 	})
@@ -108,7 +108,7 @@ func TestEndpointFilesystemFailures(t *testing.T) {
 		if _, err := ResolveEndpoint(""); err == nil {
 			t.Fatal("unreadable config accepted")
 		}
-		if err := SaveEndpoint("unix:///tmp/conductor.sock"); err == nil {
+		if err := SaveEndpoint("unix:///tmp/approver.sock"); err == nil {
 			t.Fatal("saved inside a file")
 		}
 	})
@@ -121,7 +121,7 @@ func TestEndpointFilesystemFailures(t *testing.T) {
 		if _, err := ResolveEndpoint(""); err == nil {
 			t.Fatal("read directory as endpoint")
 		}
-		if err := SaveEndpoint("unix:///tmp/conductor.sock"); err == nil {
+		if err := SaveEndpoint("unix:///tmp/approver.sock"); err == nil {
 			t.Fatal("replaced directory")
 		}
 		entries, err := os.ReadDir(filepath.Dir(path))
@@ -143,7 +143,7 @@ func TestEndpointFilesystemFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.Chmod(dir, 0700)
-		if err := SaveEndpoint("unix:///tmp/conductor.sock"); err == nil {
+		if err := SaveEndpoint("unix:///tmp/approver.sock"); err == nil {
 			t.Fatal("saved in read-only directory")
 		}
 	})

@@ -59,7 +59,7 @@ func TestConnectFeatures(t *testing.T) {
 				}
 				return ctx, cleanupErr
 			})
-			s.Step(`^a reachable Conductor$`, func() error {
+			s.Step(`^a reachable Approver$`, func() error {
 				socket := filepath.Join(dir, "socket")
 				listener, err := passlet.ListenUnix(socket)
 				if err != nil {
@@ -86,9 +86,9 @@ func TestConnectFeatures(t *testing.T) {
 				previous = saved
 				return passlet.SaveEndpoint(saved)
 			})
-			s.Step(`^that Conductor stops$`, func() error { expectedHealth = 0; return server.Close() })
+			s.Step(`^that Approver stops$`, func() error { expectedHealth = 0; return server.Close() })
 			s.Step(`^the service does not return Passlet health information$`, func() { unrelated.Store(true) })
-			s.Step(`^PASSLET_ENDPOINT selects another Conductor$`, func() { t.Setenv("PASSLET_ENDPOINT", override); expectedHealth = 0 })
+			s.Step(`^PASSLET_ENDPOINT selects another Approver$`, func() { t.Setenv("PASSLET_ENDPOINT", override); expectedHealth = 0 })
 			s.Step("^I run `passlet connect \\{endpoint\\}`$", func() {
 				output, result = invokeCLICommand(t, "", func() error {
 					err := run()

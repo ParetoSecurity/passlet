@@ -23,7 +23,7 @@ in {
       default = [ ];
       description = "SSH tunnel labels, each creating a private ssh-<label>.sock beside the local socket.";
     };
-    service.tailscale = lib.mkEnableOption "Expose the Conductor through Tailscale Serve on port 17400";
+    service.tailscale = lib.mkEnableOption "Expose the Approver through Tailscale Serve on port 17400";
     # macOS names a background item after the program launchd spawns and groups
     # it under the app with the same signing team. Home Manager's launchd.agents
     # wraps every program in /bin/sh, which shows up as "sh" from an unidentified
@@ -41,7 +41,7 @@ in {
         LimitLoadToSessionType = "Aqua";
         # A settings change must restart the service even when its arguments match.
         PassletConfiguration = builtins.toJSON settings;
-        ProgramArguments = [ executable "conductor" "--helper" helper ];
+        ProgramArguments = [ executable "approver" "start" "--helper" helper ];
         RunAtLoad = true;
         ThrottleInterval = 10;
         Umask = 63;
@@ -50,8 +50,8 @@ in {
   };
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    xdg.configFile."passlet/conductor.toml" = lib.mkIf cfg.service.enable {
-      source = (pkgs.formats.toml { }).generate "passlet-conductor.toml" settings;
+    xdg.configFile."passlet/approver.toml" = lib.mkIf cfg.service.enable {
+      source = (pkgs.formats.toml { }).generate "passlet-approver.toml" settings;
     };
     assertions = [{
       assertion = !cfg.service.enable || pkgs.stdenv.hostPlatform.isDarwin;

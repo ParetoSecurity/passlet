@@ -9,8 +9,8 @@ import (
 )
 
 func TestPackageServiceSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "conductor.toml")
-	if got, err := readConductorConfig(path); got.Tailscale != false || err != nil {
+	path := filepath.Join(t.TempDir(), "approver.toml")
+	if got, err := readApproverConfig(path); got.Tailscale != false || err != nil {
 		t.Fatal("missing config must leave Tailscale disabled", err)
 	}
 	for _, tt := range []struct {
@@ -28,54 +28,54 @@ func TestPackageServiceSettings(t *testing.T) {
 		if err := os.WriteFile(path, []byte(tt.contents), 0600); err != nil {
 			t.Fatal(err)
 		}
-		got, err := readConductorConfig(path)
+		got, err := readApproverConfig(path)
 		if (err == nil) != tt.valid || got.Tailscale != tt.want {
 			t.Fatalf("incorrect config result: %v %v", got, err)
 		}
-		if err != nil && err.Error() != "invalid_conductor_config_use_tailscale_and_ssh_labels" {
+		if err != nil && err.Error() != "invalid_approver_config_use_tailscale_and_ssh_labels" {
 			t.Fatal("configuration error may expose contents")
 		}
 	}
 }
 
-func TestConfiguredConductor(t *testing.T) {
+func TestConfiguredApprover(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if got, err := configuredConductor(); err != nil || got.Tailscale != false {
+	if got, err := configuredApprover(); err != nil || got.Tailscale != false {
 		t.Fatalf("default should disable Tailscale: %v %v", got, err)
 	}
 	dir := filepath.Join(home, ".config", "passlet")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), []byte(`tailscale = true`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "approver.toml"), []byte(`tailscale = true`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := configuredConductor(); err != nil || got.Tailscale != true {
+	if got, err := configuredApprover(); err != nil || got.Tailscale != true {
 		t.Fatalf("configured listener: %v %v", got, err)
 	}
 	t.Setenv("HOME", "")
-	if _, err := configuredConductor(); err == nil {
+	if _, err := configuredApprover(); err == nil {
 		t.Fatal("accepted unavailable home")
 	}
 }
 
-func TestConductorConfigIOErrors(t *testing.T) {
+func TestApproverConfigIOErrors(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := readConductorConfig(dir); err == nil || err.Error() != "cannot_read_conductor_config" {
+	if _, err := readApproverConfig(dir); err == nil || err.Error() != "cannot_read_approver_config" {
 		t.Fatalf("directory read: %v", err)
 	}
 	loop := filepath.Join(dir, "loop")
 	if err := os.Symlink(loop, loop); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := readConductorConfig(loop); err == nil || err.Error() != "cannot_read_conductor_config" {
+	if _, err := readApproverConfig(loop); err == nil || err.Error() != "cannot_read_approver_config" {
 		t.Fatalf("symlink loop: %v", err)
 	}
 }
 
-func TestConductorSshLabels(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "conductor.toml")
+func TestApproverSshLabels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "approver.toml")
 	for _, tc := range []struct {
 		name, contents string
 		want           []string
@@ -96,7 +96,7 @@ func TestConductorSshLabels(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.contents), 0600); err != nil {
 				t.Fatal(err)
 			}
-			got, err := readConductorConfig(path)
+			got, err := readApproverConfig(path)
 			if (err == nil) != tc.valid || !reflect.DeepEqual(got.Ssh, tc.want) {
 				t.Fatalf("config=%+v err=%v", got, err)
 			}

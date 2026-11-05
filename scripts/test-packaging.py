@@ -89,7 +89,7 @@ esac
         result = self.run_service("install")
         self.assertEqual(result.returncode, 0, result.stderr)
         plist = plistlib.loads(self.file.read_bytes())
-        self.assertEqual(plist["ProgramArguments"], [str(self.app / "Contents/MacOS/passlet"), "conductor", "--helper", str(self.app / "Contents/MacOS/PassletHelper")])
+        self.assertEqual(plist["ProgramArguments"], [str(self.app / "Contents/MacOS/passlet"), "approver", "start", "--helper", str(self.app / "Contents/MacOS/PassletHelper")])
         self.assertNotIn("--tailscale", plist["ProgramArguments"])
         self.assertEqual(plist["LimitLoadToSessionType"], "Aqua")
         self.assertEqual(plist["AssociatedBundleIdentifiers"], ["dev.passlet.app"])

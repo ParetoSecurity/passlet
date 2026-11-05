@@ -180,9 +180,7 @@ codex plugin add passlet@passlet
 
 Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents save their Approver address with `passlet connect`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
 
-Plugin versions are independent of app releases. When changing the bundled
-skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
-managers can identify the update.
+The app and both agent plugins share the same version. The release process generates both plugin manifests alongside the Homebrew/Nix metadata, and the package-update PR publishes them together. Do not bump plugin versions separately.
 
 ## Updating
 

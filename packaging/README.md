@@ -4,9 +4,9 @@ Homebrew and Nix/Home Manager are the supported installation paths. They own ser
 
 ## Release metadata
 
-After signing, notarization and archive creation, `scripts/release.sh` generates `build/package-updates/`. The tag-triggered release workflow uploads this directory as `passlet-package-updates` before publishing the draft GitHub release. It uploads signed assets while the release is still a draft, so release immutability can remain enabled. It contains `Casks/passlet.rb`, `Formula/passlet-agent.rb` and `packaging/release.json`, all pinned to the exact uploaded archives and SHA-256 digests.
+After signing, notarization and archive creation, `scripts/release.sh` generates `build/package-updates/`. The tag-triggered release workflow uploads this directory as `passlet-package-updates` before publishing the draft GitHub release. It uploads signed assets while the release is still a draft, so release immutability can remain enabled. It contains `Casks/passlet.rb`, `Formula/passlet-agent.rb` and `packaging/release.json`, pinned to the exact uploaded archives and SHA-256 digests, plus `plugin.json` and `.claude-plugin/plugin.json` with the same release version.
 
-Open a package-update PR containing these three generated files after the artifacts have been published. Merge it through the repository's normal review requirements. Do not use `latest`, `:no_check`, invented hashes, or metadata for an unpublished release. The first CLI-only release must complete this step before the installation commands are available. Package definitions are intentionally not generated from unsigned CI previews.
+Open a package-update PR containing all five generated files after the artifacts have been published. Merge it through the repository's normal review requirements. Do not use `latest`, `:no_check`, invented hashes, or metadata for an unpublished release. The first CLI-only release must complete this step before the installation commands are available. Package definitions are intentionally not generated from unsigned CI previews.
 
 For a local release build, prepare the same update with:
 

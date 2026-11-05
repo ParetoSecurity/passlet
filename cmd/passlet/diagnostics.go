@@ -35,6 +35,9 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 	}
 	fmt.Println("Endpoint:", *endpoint)
 	if err := passlet.Health(ctx, *endpoint); err != nil {
+		if *endpoint == "unix://"+passlet.DefaultSocket() {
+			return errors.New("local Conductor service is not running")
+		}
 		fmt.Println("Conductor: unavailable. Check the service on your Mac and your SSH tunnel or Tailscale endpoint.")
 		return errors.New("doctor_found_problems")
 	}
@@ -48,6 +51,9 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 	fmt.Println("Approve the diagnostic check on your Mac with Touch ID or your password.")
 	result, err := passlet.Doctor(ctx, *endpoint)
 	if err != nil {
+		if err.Error() == "approval_denied" {
+			return err
+		}
 		fmt.Println("GitHub credentials: verification failed (" + err.Error() + ").")
 		if err.Error() == "credentials_missing" {
 			fmt.Println("Run passlet github setup on your Mac.")

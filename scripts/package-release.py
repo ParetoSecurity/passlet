@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate pinned Homebrew and Nix metadata from completed release artifacts."""
+"""Generate plugin versions and pinned package metadata from release artifacts."""
 import argparse
 import hashlib
 import json
@@ -33,6 +33,10 @@ def generate(version, artifacts, output):
         for key, value in replacements.items():
             text = text.replace(key, value)
         files[destination] = text
+    for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+        plugin = json.loads((ROOT / name).read_text())
+        plugin["version"] = version
+        files[name] = json.dumps(plugin, indent=2) + "\n"
     for name, content in files.items():
         path = output / name
         path.parent.mkdir(parents=True, exist_ok=True)

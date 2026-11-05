@@ -5,7 +5,7 @@ description: Prepare and publish a Passlet release, validate signed artifacts, a
 
 # Release Passlet
 
-Work from the Passlet repository. A release is installable only after both the signed GitHub release artifacts and the generated package metadata are published. A merged implementation PR or a successful signing job alone is not enough.
+Work from the Passlet repository. A release is installable only after the signed GitHub release artifacts, generated package metadata, and matching plugin manifests are published. The app and both plugins always share the same release version. A merged implementation PR or a successful signing job alone is not enough.
 
 Creating or editing this skill does not authorize a release. For a readiness request, perform checks and report outstanding work. For a release request, establish the intended unused `vX.Y.Z` version and target commit. If publication is not already authorized, prepare the version, exact SHA, release notes, and check results before asking for approval. Do not publish, merge PRs, or activate someone's machine merely to test the workflow.
 
@@ -57,8 +57,8 @@ For a failed run, report the failing stage and any draft or published assets. If
 This is the step that enables Nix and Homebrew installation.
 
 - [ ] Download `passlet-package-updates` from the successful Release workflow run, for example `gh run download <run-id> --repo ParetoSecurity/passlet --name passlet-package-updates --dir <metadata-directory>` through the grant.
-- [ ] Inspect the generated `Casks/passlet.rb`, `Formula/passlet-agent.rb`, and `packaging/release.json`. Verify version, exact release URLs, and every SHA-256 hash against the published archives. Do not invent hashes or substitute `latest`, `:no_check`, unsigned previews, or older incompatible binaries.
-- [ ] On a branch based on current `origin/main`, copy those three files to their matching repository paths. If the workflow artifact is unavailable, regenerate them from the verified downloaded archives with `python3 scripts/package-release.py X.Y.Z <archive-directory> <output-directory>` inside the development shell.
+- [ ] Inspect the generated `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. Verify both plugin versions equal the release version, and verify exact release URLs and every SHA-256 hash against the published archives. Do not invent hashes or substitute `latest`, `:no_check`, unsigned previews, or older incompatible binaries.
+- [ ] On a branch based on current `origin/main`, copy all five files to their matching repository paths. If the workflow artifact is unavailable, regenerate them from the verified downloaded archives with `python3 scripts/package-release.py X.Y.Z <archive-directory> <output-directory>` inside the development shell.
 - [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Build the real release package with `nix build .#packages.aarch64-darwin.default --no-link` on Apple Silicon, or the corresponding supported system. Verify that the installed CLI reports the selected version and the macOS bundle retains its signature.
 - [ ] Exercise Approver installation and service lifecycle in a disposable Mac account as described in `packaging/README.md`. Verify Agent on Linux. Do not replace the maintainer's working installation or credentials as an implicit test.
 - [ ] Open a draft package-update PR with the release/run links and validation results. Follow repository commit/PR conventions. Do not merge it without authorization.
@@ -67,7 +67,7 @@ The release tag precedes this metadata commit. Consumers must pin a repository r
 
 ## 4. Verify availability and hand off
 
-- [ ] After the metadata PR is merged, verify main contains the intended `packaging/release.json` and package definitions.
+- [ ] After the metadata PR is merged, verify main contains the intended `packaging/release.json`, package definitions, and both plugin manifests at the release version.
 - [ ] Check that the documented Nix and Homebrew entry points resolve the intended release. For Nix users, `nix flake update passlet` advances their pin before their normal activation command. Do not update or activate user configurations unless requested.
 - [ ] Report the tag, candidate SHA, release URL, workflow result, metadata PR state, validation performed, and any remaining blockers. Say explicitly whether the release is installable through the package managers yet.
 

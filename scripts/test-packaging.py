@@ -31,8 +31,20 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(artifact["sha256"], digest)
                 self.assertIn("/releases/download/v1.2.3/", artifact["url"])
                 self.assertIn(digest, cask if platform == "macos_universal" else formula)
+            for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+                plugin = json.loads((root / "out" / name).read_text())
+                original = json.loads((ROOT / name).read_text())
+                self.assertEqual(plugin.pop("version"), manifest["version"])
+                original.pop("version")
+                self.assertEqual(plugin, original)
             self.assertNotIn("@VERSION@", cask + formula)
             self.assertNotIn(":no_check", cask + formula)
+
+    def test_published_plugins_match_package_version(self):
+        version = json.loads((ROOT / "packaging/release.json").read_text())["version"]
+        for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+            with self.subTest(manifest=name):
+                self.assertEqual(json.loads((ROOT / name).read_text())["version"], version)
 
     def test_missing_artifacts_and_invalid_versions_write_nothing(self):
         with tempfile.TemporaryDirectory() as directory:

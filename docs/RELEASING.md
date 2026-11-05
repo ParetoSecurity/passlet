@@ -59,7 +59,7 @@ After checking that the tag still resolves to the verified SHA, the workflow cre
 For a published release with missing assets, use a new version. Do not move or reuse an immutable tag or disable immutability to work around the failure. Release titles and notes can still be edited after publication.
 
 Verify the uploaded release artifacts and checksums, then
-publish the generated Homebrew/Nix package metadata in a reviewed PR after verifying the assets are available. The release workflow uploads the `passlet-package-updates` artifact for this purpose. See [package maintenance](../packaging/README.md). End users install through Homebrew or Nix/Home Manager, not by extracting archives manually.
+publish the generated Homebrew/Nix package metadata and both plugin manifests in one reviewed PR after verifying the assets are available. The release workflow uploads the `passlet-package-updates` artifact for this purpose. See [package maintenance](../packaging/README.md). End users install through Homebrew or Nix/Home Manager, not by extracting archives manually.
 
 Keep the CLI and helper together inside the signed bundle.
 `PassletHelper` stays the main executable because macOS accepts the Keychain

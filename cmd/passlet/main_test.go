@@ -85,7 +85,7 @@ func TestExecRejectsExpiredGrant(t *testing.T) {
 	}
 }
 
-func TestDoctorUsesSelectedConductor(t *testing.T) {
+func TestDoctorUsesSelectedApprover(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "passlet-cli-")
 	if err != nil {
 		t.Fatal(err)

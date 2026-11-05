@@ -77,7 +77,7 @@ func TestAuditFeatures(t *testing.T) {
 				_, err = db.Exec(`INSERT INTO events(at,request_id,outcome,data) VALUES('2026-11-03T12:01:00Z','broken','requested','corrupted-fixture')`)
 				return err
 			})
-			s.Step("^I run `passlet (audit[^`]*)`$", func(command string) error {
+			s.Step("^I run `passlet (approver audit[^`]*)`$", func(command string) error {
 				errorFile, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
 				if err != nil {
 					return err

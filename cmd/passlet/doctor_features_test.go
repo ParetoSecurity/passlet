@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,9 @@ func TestDoctorFeatures(t *testing.T) {
 			var result error
 			var expectFailure, reachable bool
 			var cleanup func()
+			var showStatus func(context.Context) error
+			var tailscaleFixture *overviewFixture
+			var socketListeners map[string]net.Listener
 			var providerCalls atomic.Int32
 			s.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 				var err error
@@ -35,6 +39,9 @@ func TestDoctorFeatures(t *testing.T) {
 				endpoint = "unix://" + filepath.Join(dir, "socket")
 				output, helperError = "", ""
 				result, cleanup = nil, nil
+				showStatus = overview
+				tailscaleFixture = nil
+				socketListeners = make(map[string]net.Listener)
 				expectFailure, reachable = false, false
 				providerCalls.Store(0)
 				t.Setenv("HOME", dir)
@@ -54,7 +61,7 @@ func TestDoctorFeatures(t *testing.T) {
 					return ctx, fmt.Errorf("diagnostic did not request approval: %v", err)
 				}
 				if !reachable && !os.IsNotExist(err) {
-					return ctx, fmt.Errorf("unreachable Conductor requested approval: %v", err)
+					return ctx, fmt.Errorf("unreachable Approver requested approval: %v", err)
 				}
 				want := int32(0)
 				if reachable && helperError == "" {
@@ -65,12 +72,43 @@ func TestDoctorFeatures(t *testing.T) {
 				}
 				return ctx, nil
 			})
-			s.Step(`^the selected Conductor is unreachable$`, func() {})
-			s.Step(`^the local Conductor service is stopped$`, func() error {
+			s.Step(`^I am checking the local Approver$`, func() error {
+				endpoint = "unix://" + passlet.DefaultSocket()
+				t.Setenv("PASSLET_ENDPOINT", "invalid-ignored-endpoint")
+				return passlet.SaveEndpoint("https://other.example.ts.net:17400")
+			})
+			s.Step(`^the (?:forwarded|local) socket is stale$`, func() error {
+				if err := os.MkdirAll(filepath.Dir(strings.TrimPrefix(endpoint, "unix://")), 0700); err != nil {
+					return err
+				}
+				listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: strings.TrimPrefix(endpoint, "unix://"), Net: "unix"})
+				if err != nil {
+					return err
+				}
+				listener.SetUnlinkOnClose(false)
+				return listener.Close()
+			})
+			s.Step(`^the (?:forwarded|local) socket returns no healthy Approver response$`, func() error {
+				listener, err := passlet.ListenUnix(strings.TrimPrefix(endpoint, "unix://"))
+				if err != nil {
+					return err
+				}
+				server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != "GET" || r.URL.Path != "/v1/health" {
+						t.Error("requested more than health")
+					}
+					w.WriteHeader(http.StatusBadGateway)
+				})}
+				go func() { _ = server.Serve(listener) }()
+				cleanup = func() { _ = server.Close() }
+				return nil
+			})
+			s.Step(`^the selected Approver is unreachable$`, func() {})
+			s.Step(`^the local Approver service is stopped$`, func() error {
 				endpoint = "unix://" + passlet.DefaultSocket()
 				return passlet.SaveEndpoint(endpoint)
 			})
-			s.Step(`^a Conductor (with valid|without) GitHub credentials$`, func(state string) error {
+			s.Step(`^an Approver (with valid|without) GitHub credentials$`, func(state string) error {
 				reachable = true
 				if state == "without" {
 					helperError = "credentials_missing"
@@ -92,7 +130,7 @@ func TestDoctorFeatures(t *testing.T) {
 				cleanup = func() { api.Close(); _ = audit.Close() }
 				provider := &passlet.GitHub{HTTP: api.Client(), API: api.URL, OAuth: api.URL + "/unexpected-refresh"}
 				handler := passlet.NewServer(passlet.NativeHelper{Path: filepath.Join(dir, "helper")}, provider, audit)
-				listener, err := passlet.ListenUnix(filepath.Join(dir, "socket"))
+				listener, err := passlet.ListenUnix(strings.TrimPrefix(endpoint, "unix://"))
 				if err != nil {
 					return err
 				}
@@ -106,12 +144,65 @@ func TestDoctorFeatures(t *testing.T) {
 				cleanup = func() { _ = server.Close(); api.Close(); _ = audit.Close() }
 				return nil
 			})
+			s.Step(`^the Approver has (?:a )?(listening|unavailable) (SSH and Tailscale sockets|Tailscale socket)$`, func(state, transports string) error {
+				configDir := filepath.Join(dir, ".config", "passlet")
+				if err := os.MkdirAll(configDir, 0700); err != nil {
+					return err
+				}
+				config := "tailscale = true\n"
+				sockets := []string{tailscaleSocket(passlet.DefaultSocket())}
+				if transports == "SSH and Tailscale sockets" {
+					config = "ssh = [\"lima\", \"orbstack\"]\n" + config
+					sockets = append(sockets,
+						filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-lima.sock"),
+						filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-orbstack.sock"),
+					)
+				}
+				if err := os.WriteFile(filepath.Join(configDir, "approver.toml"), []byte(config), 0600); err != nil {
+					return err
+				}
+				for _, socket := range sockets {
+					if state == "unavailable" {
+						continue
+					}
+					listener, err := passlet.ListenUnix(socket)
+					if err != nil {
+						return err
+					}
+					server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.Method != "GET" || r.URL.Path != "/v1/health" {
+							t.Error("listener check requested more than health")
+						}
+						fmt.Fprint(w, `{"status":"ready"}`)
+					})}
+					socketListeners[socket] = listener
+					go func() { _ = server.Serve(listener) }()
+					previousCleanup := cleanup
+					cleanup = func() { _ = server.Close(); previousCleanup() }
+				}
+				tailscaleFixture = &overviewFixture{socket: passlet.DefaultSocket(), dns: "alice-mac.example.ts.net"}
+				showStatus = func(ctx context.Context) error {
+					return writeOverview(ctx, os.Stdout, dir, tailscaleFixture.command, overviewHealth)
+				}
+				return nil
+			})
+			s.Step(`^the SSH listener for "([^"]*)" stops$`, func(label string) error {
+				socket := filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-"+label+".sock")
+				listener := socketListeners[socket]
+				if listener == nil {
+					return fmt.Errorf("no listener configured for %s", label)
+				}
+				return listener.Close()
+			})
+			s.Step(`^Tailscale (is not running|has no forwarding configured|forwards to a different socket)$`, func(condition string) {
+				tailscaleFixture.condition = "Tailscale " + condition
+			})
 			s.Step(`^I (approve|deny) the diagnostic check$`, func(decision string) {
 				if decision == "deny" {
 					helperError = "approval_denied"
 				}
 			})
-			s.Step("^I run `passlet doctor`$", func() error {
+			s.Step("^I run `passlet ((?:approver )?doctor)`$", func(command string) error {
 				credentials := passlet.Credentials{ClientID: "fixture-client", ClientSecret: "fixture-client-secret", AccessToken: "fixture-parent-secret", RefreshToken: "fixture-refresh-secret", ExpiresAt: time.Now().Add(time.Hour), Account: passlet.AccountInfo{Login: "alice", AppID: 123, AppURL: "https://github.com/apps/passlet-alice", VerifiedAt: time.Now()}}
 				reply := map[string]any{"ok": true, "credentials": credentials}
 				if helperError != "" {
@@ -126,12 +217,12 @@ func TestDoctorFeatures(t *testing.T) {
 					return err
 				}
 				output, result = invokeCLICommand(t, "", func() error {
-					err := run()
+					err := runWithOverview(showStatus)
 					if err != nil {
 						writeCommandError(os.Stdout, err)
 					}
 					return err
-				}, "doctor")
+				}, strings.Fields(command)...)
 				for _, secret := range []string{credentials.ClientSecret, credentials.AccessToken, credentials.RefreshToken} {
 					if strings.Contains(output, secret) {
 						return fmt.Errorf("protected credential leaked to terminal")
@@ -140,7 +231,7 @@ func TestDoctorFeatures(t *testing.T) {
 				return nil
 			})
 			s.Step(`^the terminal shows:$`, func(doc *godog.DocString) error {
-				want := strings.ReplaceAll(doc.Content, "{endpoint}", endpoint) + "\n"
+				want := strings.NewReplacer("{endpoint}", endpoint, "{state_dir}", passlet.StateDir()).Replace(doc.Content) + "\n"
 				if output != want {
 					return fmt.Errorf("terminal output:\n%s\nwant:\n%s", output, want)
 				}

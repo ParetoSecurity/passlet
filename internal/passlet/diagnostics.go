@@ -29,6 +29,13 @@ func (a AccountInfo) Validate() error {
 	return nil
 }
 
+type healthConnectionError struct{ cause error }
+
+func (e healthConnectionError) Error() string {
+	return "approver_unavailable_check_service_or_SSH_tunnel"
+}
+func (e healthConnectionError) Unwrap() error { return e.cause }
+
 func Health(ctx context.Context, endpoint string) error {
 	client, close, err := EndpointClient(endpoint)
 	if err != nil {
@@ -41,7 +48,7 @@ func Health(ctx context.Context, endpoint string) error {
 	req, _ := http.NewRequestWithContext(ctx, "GET", target, nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		return errors.New("approver_unavailable_check_service_or_SSH_tunnel")
+		return healthConnectionError{cause: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var health struct {

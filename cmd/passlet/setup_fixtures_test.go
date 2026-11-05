@@ -92,7 +92,6 @@ func TestSetupHelperFixture(t *testing.T) {
 // Only the signed Swift process, browser/user actions, and GitHub are simulated.
 type setupFixture struct {
 	hostOS              string
-	agent               bool
 	listenerStarts      int
 	command             string
 	prompts             int
@@ -163,12 +162,6 @@ func (f *setupFixture) run() setupResult {
 	f.t.Helper()
 	err := setupWithDependencies(f.ctx, []string{f.command}, setupDependencies{
 		hostOS: f.hostOS,
-		command: func(context.Context, string, ...string) ([]byte, error) {
-			if f.agent {
-				return nil, os.ErrNotExist
-			}
-			return []byte(`{"Label":"dev.passlet.agent","ProgramArguments":["/passlet","conductor"]}`), nil
-		},
 		listen: func(network, address string) (net.Listener, error) {
 			f.listenerStarts++
 			return net.Listen(network, address)

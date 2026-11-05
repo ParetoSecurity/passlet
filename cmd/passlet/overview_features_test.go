@@ -5,34 +5,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cucumber/godog"
-	"github.com/pelletier/go-toml/v2"
-	"passlet.dev/passlet/internal/passlet"
 )
 
 type overviewFixture struct {
-	hostOS, socket, dns, condition      string
-	tailscale                           bool
-	conductor                           bool
-	stopped, unavailable, healthTimeout bool
-	healthCalls                         []string
-	calls                               []string
+	tailUnavailable, sshUnavailable, unavailable bool
+	socket, dns, condition                       string
+	healthCalls, calls                           []string
 }
 
 func (f *overviewFixture) health(ctx context.Context, endpoint string) error {
 	f.healthCalls = append(f.healthCalls, endpoint)
-	if f.stopped {
-		return passlet.Health(ctx, endpoint)
+	if f.tailUnavailable && endpoint == "unix://"+tailscaleSocket(f.socket) {
+		return errors.New("offline")
 	}
-	if f.healthTimeout {
-		<-ctx.Done()
-		return ctx.Err()
+	if f.sshUnavailable && strings.Contains(endpoint, "ssh-") {
+		return errors.New("offline")
 	}
 	if f.unavailable {
 		return errors.New("unavailable")
@@ -43,22 +34,6 @@ func (f *overviewFixture) health(ctx context.Context, endpoint string) error {
 func (f *overviewFixture) command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	call := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, call)
-	if name == "/usr/bin/plutil" {
-		if !f.conductor {
-			return nil, errors.New("no LaunchAgent")
-		}
-		home := filepath.Dir(filepath.Dir(filepath.Dir(args[len(args)-1])))
-		dir := filepath.Join(home, ".config", "passlet")
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return nil, err
-		}
-		config, _ := toml.Marshal(conductorConfig{Tailscale: f.tailscale})
-		if err := os.WriteFile(filepath.Join(dir, "conductor.toml"), config, 0600); err != nil {
-			return nil, err
-		}
-		arguments := []string{"/passlet", "conductor"}
-		return json.Marshal(map[string]any{"Label": "dev.passlet.agent", "ProgramArguments": arguments})
-	}
 	if name != "tailscale" {
 		return nil, fmt.Errorf("unexpected command: %s", call)
 	}
@@ -98,167 +73,37 @@ func (f *overviewFixture) command(ctx context.Context, name string, args ...stri
 	})
 }
 
-func TestOverviewAndVersionFeatures(t *testing.T) {
+func TestOverviewFeatures(t *testing.T) {
 	suite := godog.TestSuite{
-		Options: &godog.Options{Format: "pretty", Paths: []string{"features/overview.feature", "features/version.feature"}, Strict: true, TestingT: t},
+		Options: &godog.Options{Format: "pretty", Paths: []string{"features/overview.feature"}, Strict: true, TestingT: t},
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
-			var f overviewFixture
 			var output string
-			var conductorDir, helper string
 			var result error
-			var overviewRequested bool
 			s.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-				f = overviewFixture{hostOS: "darwin", socket: "/Users/alice/.local/share/passlet/passlet.sock", dns: "alice-mac.example.ts.net"}
-				t.Setenv("PASSLET_ENDPOINT", "")
 				t.Setenv("HOME", t.TempDir())
+				t.Setenv("PASSLET_ENDPOINT", "invalid-ignored-endpoint")
 				output, result = "", nil
-				overviewRequested = false
-				conductorDir, helper = "", ""
 				return ctx, nil
 			})
-			s.Step(`^Passlet is installed$`, func() { f.hostOS = "linux"; f.unavailable = true })
-			s.Step(`^Passlet is installed and configured as Conductor$`, func() {
-				f.conductor = true
-				f.socket = passlet.DefaultSocket()
-			})
-			s.Step(`^the Conductor is configured for Tailscale$`, func() {
-				f.conductor = true
-				f.socket = passlet.DefaultSocket()
-				f.tailscale = true
-			})
-			s.Step(`^this (Linux|Mac) has no local Conductor configured$`, func(machine string) {
-				f.conductor = false
-				if machine == "Linux" {
-					f.hostOS = "linux"
-				}
-			})
-			s.Step("^I have run `passlet connect ([^`]+)`$", func(endpoint string) error {
-				f.hostOS = "linux"
-				return passlet.SaveEndpoint(endpoint)
-			})
-			s.Step(`^PASSLET_ENDPOINT is "([^"]*)"$`, func(v string) { t.Setenv("PASSLET_ENDPOINT", v) })
-			s.Step(`^the selected Conductor is unreachable$`, func() { f.unavailable = true })
-			s.Step(`^the local Conductor is stopped$`, func() error {
-				if !f.conductor {
-					return errors.New("configure a Conductor first")
-				}
-				conductorDir, helper = conductorTestPaths(t)
-				f.socket = passlet.DefaultSocket()
-				ctx, cancel := context.WithCancel(context.Background())
-				done := make(chan error, 1)
-				go func() {
-					defer close(done)
-					done <- conductor(ctx, []string{"--helper", helper})
-				}()
-				defer func() {
-					cancel()
-					select {
-					case <-done:
-					case <-time.After(5 * time.Second):
-						t.Error("test Conductor did not stop")
-					}
-				}()
-				deadline := time.Now().Add(5 * time.Second)
-				for {
-					healthCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-					err := passlet.Health(healthCtx, "unix://"+f.socket)
-					stop()
-					if err == nil {
-						break
-					}
-					select {
-					case err := <-done:
-						return fmt.Errorf("test Conductor exited before becoming reachable: %v", err)
-					default:
-					}
-					if time.Now().After(deadline) {
-						return fmt.Errorf("test Conductor never became reachable: %w", err)
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-				cancel()
-				select {
-				case err := <-done:
-					if err != nil {
-						return err
-					}
-				case <-time.After(5 * time.Second):
-					return errors.New("test Conductor shutdown timed out")
-				}
-				f.stopped = true
-				t.Setenv("PASSLET_ENDPOINT", "unix://"+f.socket)
-				if err := passlet.Health(context.Background(), "unix://"+f.socket); err == nil {
-					return errors.New("stopped Conductor is still reachable")
-				}
-				return nil
-			})
-			s.Step("^I run `passlet( --help| --version)?`$", func(arg string) {
-				overviewRequested = arg == ""
-				var args []string
-				if arg != "" {
-					args = []string{strings.TrimSpace(arg)}
-				}
+			s.Step("^I run `passlet(?: (approver(?: github)?))?`$", func(arg string) {
 				output, result = invokeCLICommand(t, "", func() error {
-					return runWithOverview(func(ctx context.Context) {
-						writeOverview(ctx, os.Stdout, f.hostOS, os.Getenv("HOME"), f.command, f.health)
+					return runWithOverview(func(ctx context.Context) error {
+						t.Error("command discovery inspected service configuration")
+						return nil
 					})
-				}, args...)
+				}, strings.Fields(arg)...)
 			})
 			s.Step(`^the terminal shows:$`, func(doc *godog.DocString) error {
-				if output != strings.NewReplacer("{socket}", f.socket, "{version}", version).Replace(doc.Content)+"\n" {
-					return fmt.Errorf("unexpected output: %q", output)
+				want := doc.Content + "\n"
+				if output != want {
+					return fmt.Errorf("output %q, want %q", output, want)
 				}
 				return nil
 			})
-			s.After(func(ctx context.Context, _ *godog.Scenario, scenarioErr error) (context.Context, error) {
-				if scenarioErr != nil {
-					return ctx, scenarioErr
-				}
-				if result != nil {
-					return ctx, fmt.Errorf("command failed: %w", result)
-				}
-				if overviewRequested && strings.Contains(output, "Commands:") {
-					return ctx, errors.New("overview must not include the command list")
-				}
-				if conductorDir != "" {
-					if _, err := os.Stat(filepath.Join(conductorDir, "invoked")); !os.IsNotExist(err) {
-						return ctx, errors.New("approval helper was invoked")
-					}
-				}
-				for _, call := range f.calls {
-					if !strings.HasPrefix(call, "/usr/bin/plutil ") && call != "tailscale status --json" && call != "tailscale serve status --json" {
-						return ctx, fmt.Errorf("unexpected operation: %s", call)
-					}
-				}
-				return ctx, nil
-			})
-			s.Step(`^no listening addresses are shown$`, func() error {
-				if strings.Contains(output, "Local agents on this Mac connect automatically.") || strings.Contains(output, "\n  unix://") || strings.Contains(output, "\n  passlet connect https://") {
-					return errors.New("unavailable Conductor advertised listening addresses")
-				}
-				return nil
-			})
-			s.Step(`^no request destination is shown$`, func() error {
-				if strings.Contains(output, "Sending requests to:") {
-					return errors.New("unreachable Conductor advertised as a request destination")
-				}
-				return nil
-			})
-			s.Step(`^the overview does not claim the Conductor is running or ready$`, func() error {
-				if strings.Contains(output, "Conductor: running") || strings.Contains(output, "Conductor: ready") {
-					return errors.New("claimed readiness")
-				}
-				return nil
-			})
-			s.Step(`^no local service or Tailscale configuration is queried$`, func() error {
-				if len(f.calls) != 0 || len(f.healthCalls) != 0 {
-					return fmt.Errorf("unexpected lookups: %v", f.calls)
-				}
-				return nil
-			})
+			s.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) { return ctx, result })
 		},
 	}
 	if suite.Run() != 0 {
-		t.Fatal("overview or version scenarios failed")
+		t.Fatal("overview scenarios failed")
 	}
 }

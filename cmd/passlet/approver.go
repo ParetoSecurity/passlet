@@ -26,10 +26,50 @@ func defaultHelper() string {
 	return filepath.Join(filepath.Dir(self), "PassletHelper")
 }
 
-func conductor(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("conductor", flag.ContinueOnError)
+const approverHelp = `An approval service you run on your Mac.
+
+Agents request credentials from it, you approve them with Touch ID.
+
+Usage: passlet approver <command>
+
+Commands:
+  audit         Show audit history
+  doctor        Check service health and credentials
+  github        Manage GitHub credentials
+  start         Run the Approver service
+
+Run ` + "`passlet approver <command> --help`" + ` for command options.
+`
+
+func approverCommand(ctx context.Context, args []string, showOverview func(context.Context) error) error {
+	if len(args) == 0 {
+		fmt.Print(approverHelp)
+		return nil
+	}
+	switch args[0] {
+	case "--help", "-h", "help":
+		fmt.Print(approverHelp)
+		return nil
+	case "start":
+		return approver(ctx, args[1:])
+	case "doctor":
+		if err := localDiagnostics(ctx, args[1:]); err != nil {
+			return err
+		}
+		return showOverview(ctx)
+	case "github":
+		return githubOverview(ctx, args[1:])
+	case "audit":
+		return auditCommand(args[1:])
+	default:
+		return errors.New("unknown approver command")
+	}
+}
+
+func approver(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("approver start", flag.ContinueOnError)
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), "Run Passlet Conductor service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.")
+		_, _ = fmt.Fprintln(fs.Output(), "Run Passlet Approver service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.")
 	}
 	socket := passlet.DefaultSocket()
 	helper := fs.String("helper", defaultHelper(), "absolute signed helper path")
@@ -37,12 +77,12 @@ func conductor(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 || !filepath.IsAbs(*helper) {
-		return errors.New("conductor_requires_absolute_helper_and_no_positional_arguments")
+		return errors.New("approver_requires_absolute_helper_and_no_positional_arguments")
 	}
 	if info, err := os.Stat(*helper); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 		return errors.New("helper_unavailable_reinstall_Passlet_through_Homebrew_or_Home_Manager")
 	}
-	config, err := configuredConductor()
+	config, err := configuredApprover()
 	if err != nil {
 		return err
 	}
@@ -99,4 +139,23 @@ func conductor(ctx context.Context, args []string) error {
 		return nil
 	}
 	return err
+}
+
+const githubHelp = `Manage GitHub credentials on your Approver Mac.
+
+Usage: passlet approver github <command>
+
+Commands:
+  reset         Remove saved GitHub credentials
+  setup         Configure GitHub access
+
+Run ` + "`passlet approver github <command> --help`" + ` for command options.
+`
+
+func githubOverview(ctx context.Context, args []string) error {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		fmt.Print(githubHelp)
+		return nil
+	}
+	return githubCommand(ctx, args)
 }

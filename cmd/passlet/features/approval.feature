@@ -52,7 +52,7 @@ Feature: Review a request in the Touch ID pane
       """
 
   Scenario: Request access to manage GitHub account SSH keys
-    Given a Conductor configured for GitHub account `alice`
+    Given an Approver configured for GitHub account `alice`
     And the request is made from Claude Code
     When I run `passlet request --account alice --permissions git_ssh_keys:write`
     Then the Touch ID pane shows:

@@ -92,13 +92,8 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				return nil
 			})
-			s.Step(`^this (Linux|Mac) has no local Conductor configured$`, func(machine string) {
-				f.agent = true
-				f.hostOS = "darwin"
-				if machine == "Linux" {
-					f.hostOS = "linux"
-				}
-			})
+			s.Step(`^Passlet is installed on Linux$`, func() { f.hostOS = "linux" })
+
 			s.Step(`^PASSLET_ENDPOINT is "([^"]*)"$`, func(endpoint string) { t.Setenv("PASSLET_ENDPOINT", endpoint) })
 			s.Step(`^no GitHub handle is requested$`, func() error {
 				if err := await(); err != nil {
@@ -114,7 +109,7 @@ func TestGitHubSetupFeatures(t *testing.T) {
 					return err
 				}
 				if f.listenerStarts != 0 {
-					return fmt.Errorf("Agent started a callback listener")
+					return fmt.Errorf("Linux setup started a callback listener")
 				}
 				return nil
 			})
@@ -123,16 +118,16 @@ func TestGitHubSetupFeatures(t *testing.T) {
 					return err
 				}
 				if _, err := os.Stat(filepath.Join(f.dir, "helper-invoked")); !os.IsNotExist(err) {
-					return fmt.Errorf("Agent invoked the Keychain helper: %v", err)
+					return fmt.Errorf("Linux setup invoked the Keychain helper: %v", err)
 				}
 				return nil
 			})
-			s.Step(`^no setup request is sent to the remote Conductor$`, func() error {
+			s.Step(`^no setup request is sent to the remote Approver$`, func() error {
 				if err := await(); err != nil {
 					return err
 				}
-				if result.err != errSetupOnAgent || f.github.requests.Load() != 0 {
-					return fmt.Errorf("Agent did not stop before setup")
+				if result.err != errSetupRequiresMac || f.github.requests.Load() != 0 {
+					return fmt.Errorf("Linux setup did not stop before setup")
 				}
 				return nil
 			})
@@ -156,7 +151,7 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				go func() { finished <- f.run() }()
 			}
-			s.Step("^I run `passlet github (setup|reset)`$", start)
+			s.Step("^I run `passlet approver github (setup|reset)`$", start)
 			s.Step(`^the terminal prompts "([^"]*)"$`, func(want string) error {
 				if err := await(); err != nil {
 					return err
@@ -199,8 +194,8 @@ func TestGitHubSetupFeatures(t *testing.T) {
 					u, _ := url.Parse(f.startURL)
 					text = strings.ReplaceAll(text, "{session}", strings.Split(strings.TrimPrefix(u.Path, "/"), "/")[0])
 				}
-				if f.agent && pending.output != text+"\n" {
-					return fmt.Errorf("unexpected Agent setup output: %q; want %q", pending.output, text+"\n")
+				if f.hostOS == "linux" && pending.output != text+"\n" {
+					return fmt.Errorf("unexpected Linux setup output: %q; want %q", pending.output, text+"\n")
 				}
 				return contains(pending.output, text)
 			})

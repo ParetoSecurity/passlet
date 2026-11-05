@@ -1,8 +1,8 @@
 Feature: Request and use scoped access
-  An Agent receives only the approved grant. Commands can use it without contacting the Conductor again.
+  An Agent receives only the approved grant. Commands can use it without contacting the Approver again.
 
   Background:
-    Given a Conductor with GitHub access for alice
+    Given an Approver with GitHub access for alice
 
   Scenario: Save and use an approved grant
     Given I approve the access request
@@ -14,10 +14,10 @@ Feature: Request and use scoped access
       Scoped credentials received
       """
 
-  Scenario: Reuse a grant while the Conductor is offline
+  Scenario: Reuse a grant while the Approver is offline
     Given I approve the access request
     When I run `passlet request --repos alice/repo --permissions contents:read --out {grant}`
-    And the Conductor goes offline
+    And the Approver goes offline
     And I run `passlet exec --grant {grant} -- check-access`
     Then the terminal shows:
       """

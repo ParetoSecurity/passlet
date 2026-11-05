@@ -62,7 +62,7 @@ func TestAccessFeatures(t *testing.T) {
 				}
 				return ctx, err
 			})
-			s.Step(`^a Conductor with GitHub access for alice$`, func() error {
+			s.Step(`^an Approver with GitHub access for alice$`, func() error {
 				api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					requests.Add(1)
 					w.Header().Set("Content-Type", "application/json")
@@ -189,7 +189,7 @@ cat
 				}
 				return nil
 			})
-			s.Step(`^the Conductor goes offline$`, func() error { return server.Close() })
+			s.Step(`^the Approver goes offline$`, func() error { return server.Close() })
 			s.Step(`^the saved grant expires$`, func() error {
 				if commandErr != nil {
 					return commandErr

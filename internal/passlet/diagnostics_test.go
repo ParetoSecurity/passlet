@@ -2,6 +2,7 @@ package passlet
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -131,5 +132,12 @@ func TestProtectedAccountIdentity(t *testing.T) {
 	account.AppURL = "https://attacker.invalid/apps/passlet-alice"
 	if account.Validate() == nil {
 		t.Fatal("accepted invalid app identity")
+	}
+}
+
+func TestHealthPreservesConnectionFailure(t *testing.T) {
+	err := Health(context.Background(), "unix://"+socketPath(t))
+	if !errors.Is(err, os.ErrNotExist) || err.Error() != "approver_unavailable_check_service_or_SSH_tunnel" {
+		t.Fatalf("lost connection cause: %v", err)
 	}
 }

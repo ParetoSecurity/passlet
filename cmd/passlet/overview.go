@@ -2,38 +2,35 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"passlet.dev/passlet/internal/passlet"
 )
 
-const overviewHelpHint = "See `passlet --help` for available commands.\n"
+const commandHelp = `Give your remote agents scoped access to services, approved on-the-fly from your Mac.
 
-const commandHelp = `Give your remote agents scoped access to services, approved on-the-fly from your laptop. Run passlet without arguments to see how this machine is configured.
+Run ` + "`passlet approver`" + ` on your Mac to manage approvals and credentials.
+Your Agents then run ` + "`passlet request`" + `.
 
 Usage: passlet <command>
 
 Commands:
-  connect       Check and save a Conductor endpoint
-  github setup  Configure GitHub access on your Conductor Mac
-  github reset  Remove saved GitHub credentials
-  conductor     Run the Conductor
-  request       Request scoped access
+  approver      Manage the local Approver on your Mac
+  connect       Check and save an Approver endpoint
+  doctor        Check your connection and verify GitHub access
   exec          Run a command with scoped access
-  doctor        Verify Conductor and GitHub access with approval
-  audit         Show local audit history
+  request       Request scoped access
 
-Run passlet <command> --help for command options.
+Run ` + "`passlet <command> --help`" + ` for command options.
 `
 
 type overviewCommand func(context.Context, string, ...string) ([]byte, error)
@@ -44,164 +41,138 @@ func overviewOutput(ctx context.Context, name string, args ...string) ([]byte, e
 	return cmd.Output()
 }
 
-func overview(ctx context.Context) {
+func overview(ctx context.Context) error {
 	home, _ := os.UserHomeDir()
-	writeOverview(ctx, os.Stdout, runtime.GOOS, home, overviewOutput, passlet.Health)
+	return writeOverview(ctx, os.Stdout, home, overviewOutput, overviewHealth)
 }
 
-func writeOverview(ctx context.Context, out io.Writer, hostOS, home string, command overviewCommand, health func(context.Context, string) error) {
+func writeOverview(ctx context.Context, out io.Writer, home string, command overviewCommand, health func(context.Context, string) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	socket, enabled := overviewConductor(ctx, hostOS, home, command)
-	endpoint, endpointErr := passlet.ResolveEndpoint("")
-	showHelp := endpointErr == nil
-	if socket == "" {
-		_, _ = fmt.Fprintln(out, "Configured as an Agent. Requests are sent to another Passlet running in Conductor mode for approval.")
-		configHome, _ := os.UserHomeDir()
-		_, savedErr := os.Stat(filepath.Join(configHome, ".config", "passlet", "endpoint"))
-		if endpointErr == nil && os.Getenv("PASSLET_ENDPOINT") == "" && os.IsNotExist(savedErr) {
-			if ctx.Err() == nil && health(ctx, endpoint) == nil {
-				_, _ = fmt.Fprintln(out, "\nSending requests to:", endpoint)
-			} else {
-				showHelp = false
-				_, _ = fmt.Fprintln(out, "\nWARNING! No local Conductor found.")
-				_, _ = fmt.Fprintln(out, "\nRun `passlet` on your Conductor machine to see how to connect.")
-			}
-		} else if endpointErr == nil {
-			showHelp = writeOverviewHealth(ctx, out, "", endpoint, "passlet doctor", health)
-			if showHelp {
-				_, _ = fmt.Fprintln(out, "\nSending requests to:", endpoint)
-			}
-		}
-	} else {
-		_, _ = fmt.Fprintln(out, "Configured as a Conductor. Agents send requests here for your approval.")
-		doctor := "passlet doctor"
-		if endpointErr != nil || endpoint != "unix://"+socket {
-			doctor += " --endpoint '" + strings.ReplaceAll("unix://"+socket, "'", "'\\''") + "'"
-		}
-		reachable := writeOverviewHealth(ctx, out, "", "unix://"+socket, doctor, health)
-		showHelp = showHelp && reachable
-		if reachable {
-			_, _ = fmt.Fprintln(out, "\nLocal agents on this Mac connect automatically.")
-			addresses := overviewRemoteAddresses(ctx, socket, enabled, command)
-			if len(addresses) != 0 {
-				_, _ = fmt.Fprintln(out, "\nTell remote agents how to connect:")
-				_, _ = fmt.Fprintln(out, "  passlet connect "+addresses[0])
-			}
-		}
-	}
-	if endpointErr != nil {
-		_, _ = fmt.Fprintln(out, "Request endpoint unavailable:", endpointErr)
-	} else if socket != "" && endpoint != "unix://"+socket {
-		reachable := writeOverviewHealth(ctx, out, "Selected Conductor", endpoint, "passlet doctor", health)
-		showHelp = showHelp && reachable
-		if reachable {
-			_, _ = fmt.Fprintln(out, "Sending requests to:", endpoint)
-		}
-	}
-	if showHelp {
-		_, _ = fmt.Fprintln(out)
-		_, _ = fmt.Fprint(out, overviewHelpHint)
-	}
-}
-
-func writeOverviewHealth(ctx context.Context, out io.Writer, label, endpoint, doctor string, health func(context.Context, string) error) bool {
-	if ctx.Err() != nil {
-		_, _ = fmt.Fprintf(out, "\nWARNING! The Passlet Conductor could not be checked before the overview timed out.\nRun `%s` for more information.\n", doctor)
-	} else if err := health(ctx, endpoint); err != nil {
-		_, _ = fmt.Fprintf(out, "\nWARNING! The Passlet Conductor is not reachable.\nRun `%s` for more information.\n", doctor)
-	} else {
-		if label != "" {
-			_, _ = fmt.Fprintf(out, "%s: reachable\n", label)
-		}
-		return true
-	}
-	return false
-}
-
-func overviewConductor(ctx context.Context, hostOS, home string, command overviewCommand) (string, bool) {
-	if hostOS != "darwin" || home == "" {
-		return "", false
-	}
-	path := filepath.Join(home, "Library", "LaunchAgents", "dev.passlet.agent.plist")
-	data, err := command(ctx, "/usr/bin/plutil", "-convert", "json", "-o", "-", path)
+	settings, err := readApproverConfig(filepath.Join(home, ".config", "passlet", "approver.toml"))
 	if err != nil {
-		return "", false
+		return fmt.Errorf("cannot read Approver configuration: %w", err)
 	}
-	var config struct {
-		Label            string
-		ProgramArguments []string
+	socket := passlet.DefaultSocket()
+	if health(ctx, "unix://"+socket) != nil {
+		return errors.New("local Approver is not reachable")
 	}
-	if json.Unmarshal(data, &config) != nil || config.Label != "dev.passlet.agent" {
-		return "", false
+	_, _ = fmt.Fprintln(out, "\n✓ Local socket: listening")
+	if len(settings.Ssh) == 0 {
+		_, _ = fmt.Fprintln(out, "  SSH sockets: disabled")
 	}
-
-	args := config.ProgramArguments
-	if len(args) == 3 && args[0] == "/bin/sh" && args[1] == "-c" {
-		const prefix = "/bin/wait4path /nix/store && exec "
-		if !strings.HasPrefix(args[2], prefix) {
-			return "", false
+	var socketProblems []string
+	sshUnavailable := false
+	for _, label := range settings.Ssh {
+		path := filepath.Join(filepath.Dir(socket), "ssh-"+label+".sock")
+		if err := health(ctx, "unix://"+path); err != nil {
+			socketProblems = append(socketProblems, listenerProblem(path, err))
+			sshUnavailable = true
+			_, _ = fmt.Fprintf(out, "  SSH socket (%s): unavailable\n", label)
+			continue
 		}
-		args = overviewShellArguments(strings.TrimPrefix(args[2], prefix))
+		_, _ = fmt.Fprintf(out, "✓ SSH socket (%s): listening\n", label)
 	}
-	if len(args) < 2 || args[1] != "conductor" {
-		return "", false
+	addresses, tailscaleProblem := overviewRemoteAddresses(ctx, socket, settings.Tailscale, command)
+	if !settings.Tailscale {
+		_, _ = fmt.Fprintln(out, "  Tailscale: disabled")
+	} else if err := health(ctx, "unix://"+tailscaleSocket(socket)); err != nil {
+		socketProblems = append(socketProblems, listenerProblem(tailscaleSocket(socket), err))
+		_, _ = fmt.Fprintln(out, "  Tailscale: unavailable")
+		addresses = nil
+	} else if len(addresses) == 0 {
+		_, _ = fmt.Fprintln(out, "  Tailscale: unavailable")
+		addresses = nil
+	} else {
+		_, _ = fmt.Fprintln(out, "✓ Tailscale: listening")
 	}
-	fs := flag.NewFlagSet("conductor", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.String("helper", "", "")
-	if fs.Parse(args[2:]) != nil || fs.NArg() != 0 {
-		return "", false
+	if len(settings.Ssh) == 0 || !settings.Tailscale {
+		_, _ = fmt.Fprintln(out)
 	}
-	settings, _ := readConductorConfig(filepath.Join(home, ".config", "passlet", "conductor.toml"))
-	return passlet.DefaultSocket(), settings.Tailscale
+	if len(settings.Ssh) == 0 {
+		_, _ = fmt.Fprintln(out, "Enable SSH sockets: https://github.com/ParetoSecurity/passlet/blob/main/docs/SETUP.md#ssh-tunnel-labels")
+	}
+	if !settings.Tailscale {
+		_, _ = fmt.Fprintln(out, "Enable Tailscale: https://github.com/ParetoSecurity/passlet/blob/main/docs/SETUP.md#tailscale")
+	}
+	for _, problem := range socketProblems {
+		_, _ = fmt.Fprintln(out, "\n"+problem)
+	}
+	if sshUnavailable {
+		_, _ = fmt.Fprintln(out, "\nSSH troubleshooting: https://github.com/ParetoSecurity/passlet/blob/main/docs/SETUP.md#ssh-tunnel-labels")
+	}
+	if tailscaleProblem != "" {
+		_, _ = fmt.Fprintln(out, "\n"+tailscaleProblem)
+	}
+	if settings.Tailscale && len(addresses) == 0 {
+		_, _ = fmt.Fprintln(out, "\nTailscale troubleshooting: https://github.com/ParetoSecurity/passlet/blob/main/docs/SETUP.md#tailscale")
+	}
+	if len(addresses) != 0 {
+		_, _ = fmt.Fprintln(out, "\nOn Tailscale agents, run this once:")
+		_, _ = fmt.Fprintln(out, "  passlet connect "+addresses[0])
+	}
+	if sshUnavailable || (settings.Tailscale && len(addresses) == 0) {
+		return errors.New("one or more configured listeners are unavailable")
+	}
+	return nil
 }
 
-func overviewRemoteAddresses(ctx context.Context, socket string, enabled bool, command overviewCommand) []string {
+func overviewRemoteAddresses(ctx context.Context, socket string, enabled bool, command overviewCommand) ([]string, string) {
 	if !enabled {
-		return nil
+		return nil, ""
 	}
 	status, err := tailscaleNode(ctx, command)
 	if err != nil {
-		return nil
+		if status.BackendState != "" && status.BackendState != "Running" {
+			return nil, fmt.Sprintf("Tailscale is not running (state: %s).", status.BackendState)
+		}
+		return nil, "Tailscale status could not be read or did not include a running node with a device name."
 	}
 	config, err := readTailscaleServe(ctx, command)
-	if err != nil || !config.forwardsTo(status.Self.DNSName, tailscaleSocket(socket)) {
-		return nil
+	if err != nil {
+		return nil, "Tailscale Serve configuration could not be read."
+	}
+	if !config.forwardsTo(status.Self.DNSName, tailscaleSocket(socket)) {
+		if !config.occupiesPort() {
+			return nil, "No Tailscale Serve forwarding is configured on port " + tailscalePort + "."
+		}
+		proxy := config.Web[status.Self.DNSName+":"+tailscalePort].Handlers["/"].Proxy
+		expected := "unix:" + tailscaleSocket(socket)
+		if strings.HasPrefix(proxy, "unix:") && proxy != expected {
+			return nil, fmt.Sprintf("Tailscale Serve forwards to %s instead of %s.", proxy, expected)
+		}
+		return nil, "Tailscale Serve configuration does not match the required private HTTPS forwarding on port " + tailscalePort + "."
 	}
 	address := "https://" + status.Self.DNSName + ":" + tailscalePort
 	if _, err := passlet.EndpointURL(address, "/v1/health"); err != nil {
-		return nil
+		return nil, "Tailscale reported an invalid device address."
 	}
-	return []string{address}
+	return []string{address}, ""
 }
 
-// Home Manager wraps launchd commands to wait for the Nix store at login.
-// Accept its literal argument quoting without evaluating shell expressions.
-func overviewShellArguments(script string) []string {
-	word := regexp.MustCompile(`^(?:[a-zA-Z0-9_./:=+,@%-]+|'[^']*'|\\')+`)
-	part := regexp.MustCompile(`'([^']*)'|\\'|[^'\\]+`)
-	var args []string
-	for script = strings.TrimSpace(script); script != ""; script = strings.TrimLeft(script, " \t") {
-		token := word.FindString(script)
-		if token == "" {
-			return nil
-		}
-		var value strings.Builder
-		for _, piece := range part.FindAllString(token, -1) {
-			if strings.HasPrefix(piece, "'") {
-				value.WriteString(piece[1 : len(piece)-1])
-			} else if piece == `\'` {
-				value.WriteByte('\'')
-			} else {
-				value.WriteString(piece)
-			}
-		}
-		args = append(args, value.String())
-		script = script[len(token):]
-		if script != "" && script[0] != ' ' && script[0] != '\t' {
-			return nil
-		}
+func overviewHealth(ctx context.Context, endpoint string) error {
+	if endpoint != "unix://"+tailscaleSocket(passlet.DefaultSocket()) {
+		return passlet.Health(ctx, endpoint)
 	}
-	return args
+	// Serve supplies identity headers, so a local readiness check only opens its private socket.
+	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", tailscaleSocket(passlet.DefaultSocket()))
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
+func listenerProblem(path string, err error) string {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return "Socket file is missing: " + path
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "No service is listening on socket: " + path
+	case errors.Is(err, os.ErrPermission):
+		return "Cannot access socket: " + path + "\nIts directory must be owned by you with mode 0700, and the socket with mode 0600."
+	case errors.Is(err, context.DeadlineExceeded):
+		return "Socket check timed out: " + path
+	default:
+		return "Socket did not return a healthy Approver response: " + path
+	}
 }

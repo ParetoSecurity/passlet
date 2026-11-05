@@ -37,7 +37,7 @@ func setupFailure(err error, appURL string) *SetupError {
 		e.Browser = "GitHub setup failed.\nCredentials could not be saved in your Mac's Keychain. Return to your terminal for next steps."
 	}
 	if appURL != "" {
-		e.Terminal += "\n\nYour GitHub App still exists at " + GitHubAppSettingsURL(appURL) + "/advanced.\nTo start over, click \"Delete GitHub App\", then run `passlet github setup` again."
+		e.Terminal += "\n\nYour GitHub App still exists at " + GitHubAppSettingsURL(appURL) + "/advanced.\nTo start over, click \"Delete GitHub App\", then run `passlet approver github setup` again."
 		if known != nil && known.ExpectedLogin != "" {
 			e.Terminal = strings.TrimSuffix(e.Terminal, ".") + " and authorize as " + known.ExpectedLogin + "."
 		}

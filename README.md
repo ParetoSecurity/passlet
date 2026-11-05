@@ -12,7 +12,7 @@
 
 ## About
 
-Give your coding agent GitHub access when it needs it. The agent asks for specific repositories and permissions, and you approve on your Mac with Touch ID or your password.
+Give your coding agent GitHub access when it needs it. The agent asks for specific repositories and permissions, and you approve on your Mac with Touch ID.
 
 Passlet delivers a short-lived token the agent can use with Git and `gh`, even after your Mac goes offline. Your long-lived credentials stay in your Mac's protected Keychain.
 
@@ -21,7 +21,7 @@ Passlet delivers a short-lived token the agent can use with Git and `gh`, even a
 | Feature | What it does |
 | --- | --- |
 | Scoped GitHub access | Approve the repositories and permissions needed for each task. |
-| Native approval | Review each request on your Mac and approve with Touch ID or your password. |
+| Native approval | Review each request on your Mac and approve with Touch ID. |
 | Protected credentials | Keep parent tokens, refresh tokens, and client secrets in your Mac's Keychain. Only the scoped token reaches the agent. |
 | Local and remote agents | Connect through a local socket, SSH forwarding, or opt-in Tailscale HTTPS. |
 | macOS and Linux agents | Run your agents on macOS or Linux. |
@@ -43,14 +43,14 @@ We're hoping to do these next:
 
 Approving requests requires macOS 14 or later and a logged-in graphical session.
 
-Install [Passlet Conductor on your Mac](docs/INSTALLATION.md#install-conductor-on-macos) to hold credentials and approve requests. Passlet Agent is included for local coding tools. The guide starts with Nix/Home Manager.
+Install [Passlet Approver on your Mac](docs/INSTALLATION.md#install-approver-on-macos) to hold credentials and approve requests. Passlet Agent is included for local coding tools. The guide starts with Nix/Home Manager.
 
 Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 
 ```sh
 brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
 brew install --cask paretosecurity/passlet/passlet
-passlet github setup
+passlet approver github setup
 passlet doctor
 ```
 
@@ -68,7 +68,7 @@ On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default
 
 ## Remote agents over SSH
 
-On your Conductor Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `"ssh": ["cruncher"]` to `~/.config/passlet/conductor.toml`, preserving any Tailscale setting, and restart the service. The Conductor creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
+On your Approver Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `ssh = ["cruncher"]` to `~/.config/passlet/approver.toml`, preserving any Tailscale setting, and restart the service. The Approver creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
 
 On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
@@ -82,28 +82,28 @@ From your Mac, keep this SSH connection open, substituting your actual remote us
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
   -o StreamLocalBindUnlink=yes \
-  -R /home/alice/.local/share/passlet/mac.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" \
+  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" \
   alice@cruncher
 ```
 
 On that remote account, before starting Claude:
 
 ```sh
-passlet connect unix:///home/alice/.local/share/passlet/mac.sock
+passlet connect unix:///home/alice/.local/share/passlet/passlet.sock
 passlet doctor
 ```
 
 The remote SSH server must permit Unix socket forwarding. See [SSH server configuration, stale sockets, and Alice/Bob setup](docs/SETUP.md). Bob uses his own remote Unix account, socket path, Mac, and GitHub App. Do not share a Unix account or use a shared `/tmp/passlet.sock`.
 
-## Choose a Conductor
+## Choose an Approver
 
-Run `passlet connect <endpoint>` once on each agent account to check reachability and save the Conductor address in `~/.config/passlet/endpoint`. It supports HTTPS endpoints and absolute Unix socket URLs, including SSH-forwarded sockets. The health check does not request approval or verify GitHub credentials. If it fails, the previous endpoint remains saved. Use `passlet doctor` for credential verification.
+Run `passlet connect <endpoint>` once on each agent account to check reachability and save the Approver address in `~/.config/passlet/endpoint`. It supports HTTPS endpoints and absolute Unix socket URLs, including SSH-forwarded sockets. The health check does not request approval or verify GitHub credentials. If it fails, the previous endpoint remains saved. Use `passlet doctor` for credential verification.
 
 ```sh
 passlet connect https://your-mac.your-tailnet.ts.net:17400
 ```
 
-Commands choose their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved endpoint, then the default local socket. `passlet connect` refuses to check or save a connection while `PASSLET_ENDPOINT` is set. Unset it before connecting. An unreadable or invalid saved setting produces an error rather than silently using another Conductor. Running `passlet` shows the effective endpoint.
+Commands choose their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved endpoint, then the default local socket. `passlet connect` refuses to check or save a connection while `PASSLET_ENDPOINT` is set. Unset it before connecting. An unreadable or invalid saved setting produces an error rather than silently using another Approver. `passlet doctor` shows and checks the effective endpoint.
 
 ## Request and use access
 
@@ -139,11 +139,11 @@ Use HTTPS Git remotes. `exec --grant` uses the delivered token without contactin
 
 ## Tailscale, explicitly opt-in
 
-Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `tailscale = true` in `~/.config/passlet/conductor.toml` for Homebrew and restart the service.
+Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `tailscale = true` in `~/.config/passlet/approver.toml` for Homebrew and restart the service.
 
 Passlet keeps its local socket and creates a separate private socket for Tailscale Serve. At startup it checks forwarding on HTTPS port `17400`, leaves matching configuration alone, and creates it when absent. It refuses conflicting configuration and preserves unrelated Serve routes. No loopback TCP listener or separate setup command is needed. Tailscale must be running, signed in, and version 1.104.4 or newer. Its permissions and tailnet HTTPS settings must allow Serve configuration.
 
-Run `passlet` on the Conductor Mac to see the connection instructions. Local agents connect automatically. On remote agents, use `passlet connect https://your-mac.your-tailnet.ts.net:17400`. Configure Tailscale network policy to allow intended callers on that port. Use Serve, not Funnel.
+Run `passlet approver doctor` on the Approver Mac to see the connection instructions. Local agents connect automatically. On remote agents, use `passlet connect https://your-mac.your-tailnet.ts.net:17400`. Configure Tailscale network policy to allow intended callers on that port. Use Serve, not Funnel.
 
 Only the separate private socket trusts Serve's forwarded peer address. Passlet verifies that address with `tailscale whois`, shows the device name in approval prompts, and records the full hostname and node ID in audit events. Normal local and SSH socket clients cannot select a Tailscale identity through HTTP headers.
 
@@ -178,7 +178,7 @@ codex plugin marketplace upgrade passlet
 codex plugin add passlet@passlet
 ```
 
-Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents save their Conductor address with `passlet connect`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
+Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents save their Approver address with `passlet connect`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
 
 Plugin versions are independent of app releases. When changing the bundled
 skill, bump both `plugin.json` and `.claude-plugin/plugin.json` together so plugin
@@ -190,18 +190,20 @@ Use `brew upgrade --cask paretosecurity/passlet/passlet`, or update your pinned 
 
 ## Diagnostics and audit
 
-Run `passlet` without arguments to see the configured Conductor or Agent role, reachability, and addresses, with a hint pointing to `passlet --help` for available commands when no setup or troubleshooting action is needed. On macOS, the overview reads the installed Passlet LaunchAgent, including when the service is stopped. Remote addresses appear only when Tailscale reports matching HTTPS forwarding to its private Tailscale socket. The overview checks Conductor health within a two-second lookup budget and reports unavailable services. A reachable local Conductor says local agents connect automatically and shows a `passlet connect` command for remote agents when Tailscale forwarding is verified. Use `passlet doctor` to see the endpoint for troubleshooting. An Agent with no configured endpoint checks the default local socket. If no local Conductor responds, it shows a warning and directs you to run `passlet` on the Conductor machine for connection instructions. An unavailable configured Conductor shows a warning and directs you to `passlet doctor` instead of advertising listening addresses. It does not request approval or verify credentials. Use `passlet --help` to show help without configuration lookups.
+Run `passlet` or `passlet --help` for the command list. Client commands stay at the top level: `connect`, `request`, `exec`, and `doctor`. Local service and credential commands live under `passlet approver`: `start`, `doctor`, `github setup`, `github reset`, and `audit`. A Mac can approve requests and also run client commands, without choosing an installation mode.
+
+Run `passlet approver` to discover commands for managing approvals and credentials. `passlet doctor` checks the selected endpoint, while `passlet approver doctor` always checks the local service, ignoring `PASSLET_ENDPOINT` and the saved connection. Both verify GitHub access with native approval and issue no token. A stopped local service fails without prompting. Local socket permission errors, timeouts, and unhealthy responses are reported separately. Denying approval stops diagnostics immediately. After successful verification, local diagnostics show socket and Tailscale listener status and connection instructions for verified Tailscale forwarding.
 
 ```sh
 passlet doctor
-passlet audit --limit 20
+passlet approver audit --limit 20
 ```
 
-`doctor` asks for Touch ID or password approval on the Conductor’s Mac, unlocks Keychain, refreshes authorization when needed, and verifies your GitHub identity. It works through local and remote endpoints and returns nonzero if verification fails. It never issues an agent token. `audit` reads an existing local SQLite database without creating one and shows readable event summaries. Use `audit --json` for complete structured events, including caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
+`doctor` asks for Touch ID approval on the Approver’s Mac, unlocks Keychain, refreshes authorization when needed, and verifies your GitHub identity. It works through local and remote endpoints and returns nonzero if verification fails. It never issues an agent token. `audit` reads an existing local SQLite database without creating one and shows readable event summaries. Use `audit --json` for complete structured events, including caller/transport, scopes, decisions, expiry, and delivery outcome, with no credentials.
 
 ## Trust and failure boundaries
 
-- Requests infer the app label from `CLAUDECODE=1` (Claude) or a nonempty `CODEX_THREAD_ID` (Codex). Missing or conflicting markers display “Shell”. Inference happens on the Agent machine for both `request` and `exec` when requesting access. This label is unverified and does not authenticate the requesting app. The Conductor determines the device or socket route separately.
+- Requests infer the app label from `CLAUDECODE=1` (Claude) or a nonempty `CODEX_THREAD_ID` (Codex). Missing or conflicting markers display “Shell”. Inference happens on the Agent machine for both `request` and `exec` when requesting access. This label is unverified and does not authenticate the requesting app. The Approver determines the device or socket route separately.
 - A socket connection proves access to the socket, not that Claude initiated it. SSH labels identify the configured socket route, not an authenticated remote host or process. A process running as your Mac user or root can access every route socket. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
 - Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The private Tailscale socket trusts Tailscale and processes with access to the same Unix account.
 - Every request requires native user presence. There are no queues, automatic request retries, client pairing, session keys, unattended approvals, or early revocation.

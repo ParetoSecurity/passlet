@@ -18,7 +18,7 @@ import (
 )
 
 var version = "dev"
-var errSetupOnAgent = errors.New("github_setup_requires_local_conductor")
+var errSetupRequiresMac = errors.New("github_setup_requires_Mac")
 var errGitHubAppNameTaken = errors.New("github_app_name_taken")
 
 func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
@@ -28,7 +28,7 @@ func main() { // coverage-ignore: Process exit adapter; command behavior is test
 	}
 }
 func writeCommandError(out io.Writer, err error) {
-	if errors.Is(err, errSetupOnAgent) {
+	if errors.Is(err, errSetupRequiresMac) {
 		return
 	}
 	var connectionErr connectionError
@@ -40,13 +40,13 @@ func writeCommandError(out io.Writer, err error) {
 		_, _ = fmt.Fprintln(out)
 		return
 	}
-	_, _ = fmt.Fprintln(out, "passlet:", err)
+	_, _ = fmt.Fprintln(out, "error:", err)
 }
 func run() error {
 	return runWithOverview(overview)
 }
 
-func runWithOverview(showOverview func(context.Context)) (result error) {
+func runWithOverview(showOverview func(context.Context) error) (result error) {
 	defer func() {
 		if errors.Is(result, flag.ErrHelp) {
 			result = nil
@@ -55,7 +55,7 @@ func runWithOverview(showOverview func(context.Context)) (result error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if len(os.Args) < 2 {
-		showOverview(ctx)
+		fmt.Print(commandHelp)
 		return nil
 	}
 	switch os.Args[1] {
@@ -64,21 +64,28 @@ func runWithOverview(showOverview func(context.Context)) (result error) {
 		return nil
 	case "connect":
 		return connect(ctx, os.Args[2:])
-	case "github":
-		return githubCommand(ctx, os.Args[2:])
 	case "doctor":
 		return diagnostics(ctx, os.Args[2:])
-	case "audit":
-		return auditCommand(os.Args[2:])
 	case "--version":
 		fmt.Println("passlet", version)
 		return nil
-	case "conductor":
-		return conductor(ctx, os.Args[2:])
+	case "approver":
+		return approverCommand(ctx, os.Args[2:], showOverview)
 	case "request", "exec":
-		description := "Request scoped access from your Conductor. After approval, print the grant as JSON or save it with --out for later use with passlet exec."
+		description := `Request scoped access from your Approver. After approval, print the grant as JSON or save it with --out for later use with ` + "`passlet exec`" + `.
+
+Save and use a grant:
+  passlet request --repos alice/repo --permissions contents:read --out grant.json
+  passlet exec --grant grant.json -- gh repo view alice/repo
+
+One-time grant use directly with exec (Bash/Zsh):
+  passlet exec --grant <(passlet request --repos alice/repo --permissions contents:read) -- gh repo view alice/repo`
 		if os.Args[1] == "exec" {
-			description = "Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --."
+			description = `Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+
+Example:
+  passlet request --repos alice/repo --permissions contents:read --out grant.json
+  passlet exec --grant grant.json -- gh repo view alice/repo`
 		}
 		fs := commandFlags(os.Args[1], description, "endpoint")
 		var endpoint, repos, org, account, perms, out, grantFile string

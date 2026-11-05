@@ -57,7 +57,11 @@ func TestCommandValidation(t *testing.T) {
 		want string
 	}{
 		{"unknown command", []string{"unknown"}, "unknown command"},
-		{"missing github action", []string{"github"}, "usage:"},
+		{"old service command", []string{"conductor"}, "unknown command"},
+		{"old setup command", []string{"github", "setup"}, "unknown command"},
+		{"old audit command", []string{"audit"}, "unknown command"},
+		{"unknown approver command", []string{"approver", "unknown"}, "unknown approver command"},
+		{"unknown github action", []string{"approver", "github", "unknown"}, "usage:"},
 		{"malformed permission", []string{"request", "--permissions", "contents"}, "permissions must be"},
 		{"duplicate permission", []string{"request", "--permissions", "contents:read,contents:write"}, "duplicate_permission"},
 		{"request cannot use grant", []string{"request", "--grant", "/unused"}, "flag provided but not defined"},
@@ -66,8 +70,8 @@ func TestCommandValidation(t *testing.T) {
 		{"missing grant", []string{"exec", "--grant", filepath.Join(t.TempDir(), "missing")}, "no such file"},
 		{"invalid request endpoint", []string{"request", "--endpoint", "http://invalid", "--repos", "alice/repo", "--permissions", "contents:read"}, "endpoint"},
 		{"unknown request flag", []string{"request", "--unknown"}, "flag provided but not defined"},
-		{"conductor routing", []string{"conductor", "--helper", "relative"}, "conductor_requires_absolute_helper"},
-		{"audit routing", []string{"audit", "--unknown"}, "flag provided but not defined"},
+		{"approver routing", []string{"approver", "start", "--helper", "relative"}, "approver_requires_absolute_helper"},
+		{"audit routing", []string{"approver", "audit", "--unknown"}, "flag provided but not defined"},
 		{"removed serve command", []string{"serve"}, "unknown command"},
 		{"removed status command", []string{"status"}, "unknown command"},
 		{"version is a flag", []string{"version"}, "unknown command"},

@@ -66,7 +66,7 @@ func TestConnectCannotSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := invokeCLI(t, "", "connect", endpoint)
-	if err == nil || !strings.Contains(err.Error(), "could not save endpoint") || strings.Contains(out, "Connected to Conductor") {
+	if err == nil || !strings.Contains(err.Error(), "could not save endpoint") || strings.Contains(out, "Connected to Approver") {
 		t.Fatalf("%q %v", out, err)
 	}
 }
@@ -106,7 +106,7 @@ func TestSavedEndpointUsedByCommands(t *testing.T) {
 		t.Fatalf("saved grant should work without endpoint config: %v", err)
 	}
 	out, err = invokeCLI(t, "")
-	if err != nil || !strings.Contains(out, "Request endpoint unavailable:") || strings.Contains(out, "Sending requests to:") {
-		t.Fatalf("invalid config overview: %q %v", out, err)
+	if err != nil || out != commandHelp {
+		t.Fatalf("help with invalid config: %q %v", out, err)
 	}
 }

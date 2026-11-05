@@ -126,3 +126,11 @@ Feature: Review a request in the Touch ID pane
       Permissions:
       • contents: read.
       """
+
+  Scenario: Review a diagnostic check
+    Given an Agent connected through the "cruncher" SSH tunnel
+    When I run `passlet doctor`
+    Then the Touch ID pane shows:
+      """
+      Passlet is trying to verify stored credentials.
+      """

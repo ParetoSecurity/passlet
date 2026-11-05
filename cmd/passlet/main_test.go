@@ -17,7 +17,8 @@ import (
 
 func init() {
 	if os.Getenv("PASSLET_CLI_FIXTURE") == "1" {
-		if run() != nil {
+		if err := run(); err != nil {
+			writeCommandError(os.Stderr, err)
 			os.Exit(1)
 		}
 		os.Exit(0)

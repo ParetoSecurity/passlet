@@ -51,7 +51,7 @@ func TestApprovalFeatures(t *testing.T) {
 					repositories = append(repositories, fmt.Sprintf("alice/repository-%03d", i))
 				}
 			})
-			s.Step("^I run `passlet (request [^`]+)`$", func(command string) error {
+			s.Step("^I run `passlet (request [^`]+|doctor)`$", func(command string) error {
 				command = strings.ReplaceAll(command, "{repositories}", strings.Join(repositories, ","))
 				dir, err := os.MkdirTemp("/tmp", "pl-approval-")
 				if err != nil {
@@ -83,9 +83,15 @@ func TestApprovalFeatures(t *testing.T) {
 				go func() { _ = server.Serve(listener) }()
 				defer server.Close()
 				grant := filepath.Join(dir, "grant.json")
-				args := append(strings.Fields(command), "--endpoint", "unix://"+socket, "--out", grant)
+				args := append(strings.Fields(command), "--endpoint", "unix://"+socket)
+				denial := "approval_denied"
+				if command == "doctor" {
+					denial = "Approval was denied."
+				} else {
+					args = append(args, "--out", grant)
+				}
 				_, err = invokeCLI(t, "", args...)
-				if err == nil || err.Error() != "approval_denied" {
+				if err == nil || err.Error() != denial {
 					return fmt.Errorf("expected fixture denial, got %v", err)
 				}
 				if _, err := os.Stat(grant); !os.IsNotExist(err) {

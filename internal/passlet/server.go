@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -165,7 +164,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	prompt := requested.Prompt(caller)
 	if doctor {
-		prompt = fmt.Sprintf("check Passlet GitHub credentials for %s. This verifies your identity and may refresh saved authorization. No agent token will be issued.", caller.displayName())
+		prompt = "verify stored credentials"
 	}
 	session, err := s.Approval.Approve(ctx, prompt)
 	if err != nil {

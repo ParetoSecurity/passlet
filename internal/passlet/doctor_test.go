@@ -107,8 +107,8 @@ func TestDoctorUsesApprovalGateAndAuditWithoutMinting(t *testing.T) {
 	if provider.calls != 0 || session.stores != 1 || !session.closed || len(approval.prompts) != 1 {
 		t.Fatal("doctor did not use the approved rotation flow")
 	}
-	if strings.Contains(approval.prompts[0], "tailnet.ts.net") || !strings.Contains(approval.prompts[0], "cruncher") || !strings.Contains(approval.prompts[0], "No agent token") {
-		t.Fatal("diagnostic purpose or caller missing from prompt")
+	if approval.prompts[0] != "verify stored credentials" {
+		t.Fatal("unexpected diagnostic approval prompt")
 	}
 	verified := false
 	for _, event := range audit.events {

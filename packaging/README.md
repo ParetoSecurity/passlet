@@ -4,11 +4,11 @@ Homebrew and Nix/Home Manager are the supported installation paths. They own ser
 
 ## Release metadata
 
-The `vX.Y.Z-prepare` workflow builds and signs the release, then uploads `passlet-release-assets` and `passlet-package-updates`. The latter contains `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`, all generated from the same archives. The release JSON records the preparation run ID and source SHA, and both plugin manifests carry the release version.
+The `vX.Y.Z-prepare` workflow builds and signs the CI-verified head of an open release PR, then uploads `passlet-release-assets` and `passlet-package-updates`. The latter contains `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`, all generated from the same archives. The release JSON records the preparation run ID and source SHA, and both plugin manifests carry the release version.
 
-Download the artifacts from the successful preparation run, verify the signed archives, and open a package-update PR containing all five generated files. These URLs deliberately refer to the pending release. Merge the reviewed metadata immediately before pushing the final `vX.Y.Z` tag. Do not deploy the intermediate main revision before publication, because its new artifact URLs are not public yet.
+Download the artifacts from the successful preparation run, verify the signed archives, and add all five generated files to the same release PR. These URLs deliberately refer to the pending release. Squash-merge the reviewed code and metadata as one commit immediately before pushing the final `vX.Y.Z` tag. Do not deploy the intermediate main revision before publication, because its new artifact URLs are not public yet.
 
-Publication downloads the recorded preparation artifacts, verifies the source and checksums, and regenerates the metadata to check exact equality with the final tag. It then uploads and publishes the immutable release. Do not rebuild between preparation and publication, use `latest` or `:no_check`, invent hashes, or change either tag. A final release tag therefore contains matching Nix/Homebrew metadata and plugin versions.
+Publication downloads the recorded preparation artifacts, verifies that the merged source tree matches the prepared PR apart from generated metadata, verifies checksums, and regenerates the metadata to check exact equality with the final tag. It then uploads and publishes the immutable release. Do not rebuild between preparation and publication, use `latest` or `:no_check`, invent hashes, or change either tag. A final release tag therefore contains matching Nix/Homebrew metadata and plugin versions.
 
 For local generation from downloaded preparation archives, preserve the preparation identity:
 

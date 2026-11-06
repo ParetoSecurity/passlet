@@ -43,7 +43,6 @@ def verify(version, artifacts, run, root=ROOT):
         and run.get("conclusion") == "success"
     ):
         raise ValueError("Artifacts must come from the successful preparation workflow for this release")
-    subprocess.run(["git", "merge-base", "--is-ancestor", source, "HEAD"], cwd=root, check=True)
     changed = subprocess.check_output(["git", "diff", "--name-only", source, "HEAD"], cwd=root, text=True)
     if set(changed.splitlines()) - METADATA:
         raise ValueError("Source changed after preparation; prepare a new release before publishing")

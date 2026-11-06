@@ -23,7 +23,7 @@ func TestHealthRejectsUnavailableAndInvalidEndpoints(t *testing.T) {
 	}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"not ready"}`)) }))
 	server.Listener.Close()
-	server.Listener = l
+	server.Listener = pairedFixture(t, server.Config, l)
 	server.Start()
 	defer server.Close()
 	if err := Health(context.Background(), "unix://"+l.Addr().String()); err == nil || err.Error() != "approver_health_check_failed" {

@@ -27,7 +27,7 @@ func Doctor(ctx context.Context, endpoint string) (DoctorResult, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return DoctorResult{}, errors.New("approver_unavailable_or_connection_lost")
+		return DoctorResult{}, authenticationFailure(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var reply struct {

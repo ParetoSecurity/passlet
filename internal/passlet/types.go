@@ -24,6 +24,7 @@ type Request struct {
 }
 type Caller struct {
 	Transport string   `json:"transport"`
+	KeyID     string   `json:"key_id,omitempty"`
 	NodeID    string   `json:"node_id"`
 	Name      string   `json:"name"`
 	User      string   `json:"user,omitempty"`
@@ -135,11 +136,7 @@ func safeLabel(s string) string {
 	return s
 }
 func (c Caller) displayName() string {
-	name := c.Name
-	if c.Transport == "tailscale" {
-		name, _, _ = strings.Cut(name, ".")
-	}
-	return safeLabel(name)
+	return safeLabel(c.Name)
 }
 
 func (r Request) Prompt(c Caller) string {

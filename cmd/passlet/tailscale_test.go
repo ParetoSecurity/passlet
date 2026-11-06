@@ -12,8 +12,8 @@ import (
 	"testing"
 )
 
-func tailscaleConfigJSON(socket string) string {
-	return fmt.Sprintf(`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/":{"Proxy":%q}}}}}`, "unix:"+socket)
+func tailscaleConfigJSON(target string) string {
+	return fmt.Sprintf(`{"TCP":{"17400":{"TCPForward":%q}}}`, strings.TrimPrefix(target, "tcp://"))
 }
 
 func installTailscaleFixture(t *testing.T, socket string) {
@@ -33,7 +33,7 @@ esac
 }
 
 func TestEnsureTailscale(t *testing.T) {
-	const socket = "/tmp/passlet.sock.tailscale"
+	const socket = tailscaleTarget
 	const status = `{"Version":"1.104.4","BackendState":"Running","Self":{"DNSName":"mac.example.ts.net."}}`
 	for _, tc := range []struct {
 		name, initial        string
@@ -42,7 +42,7 @@ func TestEnsureTailscale(t *testing.T) {
 		{"missing", `{}`, true, false},
 		{"matching", tailscaleConfigJSON(socket), false, false},
 		{"unrelated port", `{"TCP":{"443":{"HTTPS":true}},"Web":{"mac.example.ts.net:443":{"Handlers":{"/":{"Text":"keep"}}}},"AllowFunnel":{"mac.example.ts.net:443":true}}`, true, false},
-		{"other backend", tailscaleConfigJSON("/tmp/other.sock"), false, true},
+		{"other backend", tailscaleConfigJSON("tcp://127.0.0.1:9999"), false, true},
 		{"raw TCP", `{"TCP":{"17400":{"TCPForward":"127.0.0.1:1234"}}}`, false, true},
 		{"foreground", `{"Foreground":{"session":{"TCP":{"17400":{"HTTPS":true}}}}}`, false, true},
 		{"Funnel", `{"AllowFunnel":{"mac.example.ts.net:17400":true}}`, false, true},
@@ -69,7 +69,7 @@ func TestEnsureTailscale(t *testing.T) {
 			if (err != nil) != tc.wantError || (len(writes) == 1) != tc.wantWrite {
 				t.Fatalf("writes %v error %v", writes, err)
 			}
-			if tc.wantWrite && !reflect.DeepEqual(writes[0], []string{"serve", "--bg", "--https=17400", "unix:" + socket}) {
+			if tc.wantWrite && !reflect.DeepEqual(writes[0], []string{"serve", "--bg", "--tcp=17400", socket}) {
 				t.Fatalf("unexpected mutation %v", writes)
 			}
 		})
@@ -77,7 +77,7 @@ func TestEnsureTailscale(t *testing.T) {
 }
 
 func TestEnsureTailscaleFailures(t *testing.T) {
-	for _, mode := range []string{"status failed", "status invalid", "stopped", "no hostname", "outdated", "config failed", "config invalid", "configure failed", "verification failed", "verification invalid", "verification read failed"} {
+	for _, mode := range []string{"status failed", "status invalid", "stopped", "no hostname", "config failed", "config invalid", "configure failed", "verification failed", "verification invalid", "verification read failed"} {
 		t.Run(mode, func(t *testing.T) {
 			writes := 0
 			err := ensureTailscale(context.Background(), "/tmp/ts.sock", func(_ context.Context, _ string, args ...string) ([]byte, error) {
@@ -92,8 +92,6 @@ func TestEnsureTailscaleFailures(t *testing.T) {
 						return []byte(`{"BackendState":"Stopped"}`), nil
 					case "no hostname":
 						return []byte(`{"BackendState":"Running"}`), nil
-					case "outdated":
-						return []byte(`{"Version":"1.104.1","BackendState":"Running","Self":{"DNSName":"mac.example.ts.net"}}`), nil
 					}
 					return []byte(`{"Version":"1.104.4","BackendState":"Running","Self":{"DNSName":"mac.example.ts.net"}}`), nil
 				case "serve status --json":
@@ -119,33 +117,21 @@ func TestEnsureTailscaleFailures(t *testing.T) {
 	}
 }
 
-func TestTailscaleSocketVersions(t *testing.T) {
-	for _, tc := range []struct {
-		version string
-		want    bool
-	}{
-		{"1.104.4", true}, {"1.104.5", true}, {"1.106.0", true}, {"2.0.0", true}, {"1.104.4-build", true},
-		{"1.104.1", false}, {"1.102.0", false}, {"0.104.4", false}, {"unknown", false}, {"1.x.4", false}, {"1.104", false},
-	} {
-		if got := supportsTailscaleSockets(tc.version); got != tc.want {
-			t.Fatalf("%s: %v", tc.version, got)
-		}
-	}
-}
-
 func TestTailscaleRejectsAmbiguousForwarding(t *testing.T) {
 	for _, data := range []string{
-		`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/":{"Proxy":"unix:/tmp/socket"},"/other":{"Text":"other"}}}}}`,
-		`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/other":{"Proxy":"unix:/tmp/socket"}}}}}`,
-		`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/":{"Proxy":"unix:/tmp/socket","AcceptAppCaps":["cap"]}}}}}`,
-		`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/":{"Proxy":"unix:/tmp/socket"}}},"other.example.ts.net:17400":{"Handlers":{"/":{"Text":"other"}}}}}`,
-		`{"TCP":{"17400":{"HTTPS":true}},"Web":{"mac.example.ts.net:17400":{"Handlers":{"/":{"Proxy":"unix:/tmp/socket"}}}},"Foreground":{"s":{"TCP":{"17400":{"HTTPS":true}}}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401","HTTPS":true}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401","HTTP":true}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401","TerminateTLS":"mac.example.ts.net"}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401","ProxyProtocol":2}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401"}},"Web":{"mac.example.ts.net:17400":{}}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401"}},"AllowFunnel":{"mac.example.ts.net:17400":true}}`,
+		`{"TCP":{"17400":{"TCPForward":"127.0.0.1:17401"}},"Foreground":{"session":{"TCP":{"17400":{}}}}}`,
 	} {
 		var config tailscaleServeConfig
 		if err := json.Unmarshal([]byte(data), &config); err != nil {
 			t.Fatal(err)
 		}
-		if config.forwardsTo("mac.example.ts.net", "/tmp/socket") {
+		if config.forwardsTo("mac.example.ts.net", tailscaleTarget) {
 			t.Fatal("ambiguous forwarding accepted")
 		}
 	}

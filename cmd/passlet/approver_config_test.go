@@ -3,8 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -32,7 +30,7 @@ func TestPackageServiceSettings(t *testing.T) {
 		if (err == nil) != tt.valid || got.Tailscale != tt.want {
 			t.Fatalf("incorrect config result: %v %v", got, err)
 		}
-		if err != nil && err.Error() != "invalid_approver_config_use_tailscale_and_ssh_labels" {
+		if err != nil && err.Error() != "invalid_approver_configuration" {
 			t.Fatal("configuration error may expose contents")
 		}
 	}
@@ -71,35 +69,5 @@ func TestApproverConfigIOErrors(t *testing.T) {
 	}
 	if _, err := readApproverConfig(loop); err == nil || err.Error() != "cannot_read_approver_config" {
 		t.Fatalf("symlink loop: %v", err)
-	}
-}
-
-func TestApproverSshLabels(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "approver.toml")
-	for _, tc := range []struct {
-		name, contents string
-		want           []string
-		valid          bool
-	}{
-		{"two routes", "ssh = [\"cruncher\", \"other-server\"]\ntailscale = true", []string{"cruncher", "other-server"}, true},
-		{"empty", `ssh = []`, []string{}, true},
-		{"duplicate", `ssh = ["cruncher","cruncher"]`, nil, false},
-		{"path traversal", `ssh = ["../cruncher"]`, nil, false},
-		{"uppercase", `ssh = ["Cruncher"]`, nil, false},
-		{"empty label", `ssh = [""]`, nil, false},
-		{"leading hyphen", `ssh = ["-cruncher"]`, nil, false},
-		{"too long", `ssh = ["` + strings.Repeat("a", 33) + `"]`, nil, false},
-		{"wrong type", `ssh = "cruncher"`, nil, false},
-		{"oversized config", `ssh = []` + strings.Repeat(" ", 4096), nil, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := os.WriteFile(path, []byte(tc.contents), 0600); err != nil {
-				t.Fatal(err)
-			}
-			got, err := readApproverConfig(path)
-			if (err == nil) != tc.valid || !reflect.DeepEqual(got.Ssh, tc.want) {
-				t.Fatalf("config=%+v err=%v", got, err)
-			}
-		})
 	}
 }

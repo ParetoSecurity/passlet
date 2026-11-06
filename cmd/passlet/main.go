@@ -51,6 +51,10 @@ func runWithOverview(showOverview func(context.Context) error) (result error) {
 		if errors.Is(result, flag.ErrHelp) {
 			result = nil
 		}
+		if result != nil && (len(os.Args) > 1 && os.Args[1] == "doctor" ||
+			len(os.Args) > 2 && os.Args[1] == "approver" && os.Args[2] == "doctor") {
+			result = fmt.Errorf("%w\n\nReport issues at https://github.com/ParetoSecurity/passlet/issues/", result)
+		}
 	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

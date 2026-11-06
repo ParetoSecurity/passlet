@@ -108,6 +108,7 @@ func TestDoctorUsesSelectedApprover(t *testing.T) {
 		}
 		w.Write([]byte(`{"status":"ready"}`))
 	})}
+	listener = pairedFixture(t, server, listener)
 	go server.Serve(listener)
 	defer server.Close()
 	if err := diagnostics(context.Background(), []string{"--endpoint", "unix://" + path}); err != nil {

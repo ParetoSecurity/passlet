@@ -47,13 +47,25 @@ func EndpointClient(endpoint string) (*http.Client, func(), error) {
 	transport := &http.Transport{Proxy: nil, DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 		ctx, cancel := context.WithTimeout(ctx, ConnectDeadline)
 		defer cancel()
-		return (&tls.Dialer{NetDialer: &net.Dialer{Timeout: ConnectDeadline}}).DialContext(ctx, network, addr)
-	}, ResponseHeaderTimeout: ClientDeadline}
-	if u.Scheme == "unix" {
-		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{Timeout: ConnectDeadline}).DialContext(ctx, "unix", u.Path)
+		if u.Scheme == "unix" {
+			network, addr = "unix", u.Path
 		}
-	}
+		conn, err := (&net.Dialer{Timeout: ConnectDeadline}).DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		config, err := configuredAgentTLS()
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		secured := tls.Client(conn, config)
+		if err := secured.HandshakeContext(ctx); err != nil {
+			_ = secured.Close()
+			return nil, err
+		}
+		return secured, nil
+	}, ResponseHeaderTimeout: ClientDeadline}
 	client := &http.Client{Transport: transport, Timeout: ClientDeadline, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return client, transport.CloseIdleConnections, nil
 }
@@ -64,7 +76,7 @@ func EndpointURL(endpoint, path string) (string, error) {
 		return "", err
 	}
 	if u.Scheme == "unix" {
-		u = &url.URL{Scheme: "http", Host: "passlet.local"}
+		u = &url.URL{Scheme: "https", Host: "passlet.local"}
 	}
 	u.Path = path
 	return u.String(), nil
@@ -89,7 +101,7 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		if ctx.Err() != nil {
 			return Grant{}, errors.New("request_cancelled")
 		}
-		return Grant{}, errors.New("approver_unavailable_or_connection_lost")
+		return Grant{}, authenticationFailure(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 65537))

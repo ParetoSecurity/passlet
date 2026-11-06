@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"passlet.dev/passlet/internal/passlet"
+	"passlet.dev/passlet/testutil/testkeys"
 )
 
 func TestDoctorFeatures(t *testing.T) {
@@ -99,6 +102,7 @@ func TestDoctorFeatures(t *testing.T) {
 					}
 					w.WriteHeader(http.StatusBadGateway)
 				})}
+				listener = pairedFixture(t, server, listener)
 				go func() { _ = server.Serve(listener) }()
 				cleanup = func() { _ = server.Close() }
 				return nil
@@ -139,25 +143,38 @@ func TestDoctorFeatures(t *testing.T) {
 						t.Error("doctor requested a grant")
 					}
 					handler.ServeHTTP(w, r)
-				}), ConnContext: passlet.ConnectionContext}
+				})}
+				listener = pairedFixture(t, server, listener)
 				go func() { _ = server.Serve(listener) }()
 				cleanup = func() { _ = server.Close(); api.Close(); _ = audit.Close() }
 				return nil
 			})
-			s.Step(`^the Approver has (?:a )?(listening|unavailable) (SSH and Tailscale sockets|Tailscale socket)$`, func(state, transports string) error {
+			s.Step(`^the Agent pairing (configuration is missing|pin is incorrect|key is not trusted|key has not been generated)$`, func(state string) error {
+				reachable = false
+				configDir := filepath.Join(dir, ".config", "passlet")
+				if state == "configuration is missing" {
+					return os.Remove(filepath.Join(configDir, "agent.toml"))
+				}
+				if state == "key has not been generated" {
+					return os.Remove(filepath.Join(configDir, "agent.pem"))
+				}
+				if state == "key is not trusted" {
+					data, err := x509.MarshalPKCS8PrivateKey(testkeys.Private("unknown"))
+					if err != nil {
+						return err
+					}
+					return os.WriteFile(filepath.Join(configDir, "agent.pem"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data}), 0600)
+				}
+				data := fmt.Sprintf("private_key_file = %q\napprover_public_key = %q\n", filepath.Join(configDir, "agent.pem"), testkeys.Public("other-approver"))
+				return os.WriteFile(filepath.Join(configDir, "agent.toml"), []byte(data), 0600)
+			})
+			s.Step(`^the Approver has (?:an? )?(listening|unavailable) Tailscale listener$`, func(state string) error {
 				configDir := filepath.Join(dir, ".config", "passlet")
 				if err := os.MkdirAll(configDir, 0700); err != nil {
 					return err
 				}
 				config := "tailscale = true\n"
-				sockets := []string{tailscaleSocket(passlet.DefaultSocket())}
-				if transports == "SSH and Tailscale sockets" {
-					config = "ssh = [\"lima\", \"orbstack\"]\n" + config
-					sockets = append(sockets,
-						filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-lima.sock"),
-						filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-orbstack.sock"),
-					)
-				}
+				sockets := []string{tailscaleBackend}
 				if err := os.WriteFile(filepath.Join(configDir, "approver.toml"), []byte(config), 0600); err != nil {
 					return err
 				}
@@ -165,7 +182,13 @@ func TestDoctorFeatures(t *testing.T) {
 					if state == "unavailable" {
 						continue
 					}
-					listener, err := passlet.ListenUnix(socket)
+					var listener net.Listener
+					var err error
+					if socket == tailscaleBackend {
+						listener, err = net.Listen("tcp4", socket)
+					} else {
+						listener, err = passlet.ListenUnix(socket)
+					}
 					if err != nil {
 						return err
 					}
@@ -176,6 +199,7 @@ func TestDoctorFeatures(t *testing.T) {
 						fmt.Fprint(w, `{"status":"ready"}`)
 					})}
 					socketListeners[socket] = listener
+					listener = pairedFixture(t, server, listener)
 					go func() { _ = server.Serve(listener) }()
 					previousCleanup := cleanup
 					cleanup = func() { _ = server.Close(); previousCleanup() }
@@ -186,15 +210,7 @@ func TestDoctorFeatures(t *testing.T) {
 				}
 				return nil
 			})
-			s.Step(`^the SSH listener for "([^"]*)" stops$`, func(label string) error {
-				socket := filepath.Join(filepath.Dir(passlet.DefaultSocket()), "ssh-"+label+".sock")
-				listener := socketListeners[socket]
-				if listener == nil {
-					return fmt.Errorf("no listener configured for %s", label)
-				}
-				return listener.Close()
-			})
-			s.Step(`^Tailscale (is not running|has no forwarding configured|forwards to a different socket)$`, func(condition string) {
+			s.Step(`^Tailscale (is not installed|is not running|has no forwarding configured|forwards to a different backend)$`, func(condition string) {
 				tailscaleFixture.condition = "Tailscale " + condition
 			})
 			s.Step(`^I (approve|deny) the diagnostic check$`, func(decision string) {
@@ -231,7 +247,7 @@ func TestDoctorFeatures(t *testing.T) {
 				return nil
 			})
 			s.Step(`^the terminal shows:$`, func(doc *godog.DocString) error {
-				want := strings.NewReplacer("{endpoint}", endpoint, "{state_dir}", passlet.StateDir()).Replace(doc.Content) + "\n"
+				want := strings.NewReplacer("{version}", version, "{endpoint}", endpoint, "{state_dir}", passlet.StateDir()).Replace(doc.Content) + "\n"
 				if output != want {
 					return fmt.Errorf("terminal output:\n%s\nwant:\n%s", output, want)
 				}

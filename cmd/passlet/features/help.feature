@@ -91,7 +91,7 @@ Feature: Show command help
       When I run `passlet approver doctor --help`
       Then the terminal shows:
         """
-        Check service health and credentials on this Mac. Inspects local, SSH socket and Tailscale connections.
+        Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
 
         Requires Touch ID approval to verify saved credentials.
         """

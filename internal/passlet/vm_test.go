@@ -4,6 +4,7 @@ package passlet
 // No environment variable can enable it in the production CLI or Swift helper.
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"net/http/cgi"
 	"os"
 	"os/signal"
+	"passlet.dev/passlet/testutil/testkeys"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -41,6 +43,10 @@ func TestVMFixture(t *testing.T) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer cancel()
+	if role == "configure" {
+		testkeys.WriteNamed(t, os.Getenv("HOME"), filepath.Base(os.Getenv("HOME"))+"-")
+		return
+	}
 	if role == "github" {
 		runVMGitHub(t, ctx)
 		return
@@ -48,6 +54,7 @@ func TestVMFixture(t *testing.T) {
 	if role != "alice" && role != "bob" {
 		t.Fatal("invalid fixture role")
 	}
+	testkeys.WriteNamed(t, os.Getenv("HOME"), role+"-")
 	path := filepath.Join(StateDir(), "passlet.sock")
 	l, err := ListenUnix(path)
 	if err != nil {
@@ -65,9 +72,13 @@ func TestVMFixture(t *testing.T) {
 	// Short deadline for deterministic cancellation tests; only this test
 	// binary changes it. The production server retains 120 seconds.
 	s.Deadline = 15 * time.Second
-	h := &http.Server{Handler: s, ConnContext: ConnectionContext, BaseContext: func(net.Listener) context.Context { return ctx }}
+	p, err := NewPairing(testkeys.Private(role+"-approver"), map[string]string{role: testkeys.Public(role + "-agent")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &http.Server{Handler: p.Handler(s), BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() { <-ctx.Done(); h.Close() }()
-	if err := h.Serve(l); err != nil && err != http.ErrServerClosed {
+	if err := h.Serve(tls.NewListener(l, p.ServerConfig())); err != nil && err != http.ErrServerClosed {
 		t.Fatal(err)
 	}
 }

@@ -64,11 +64,11 @@ The package-managed LaunchAgent starts at graphical login and restarts after a c
 
 ## Local agents
 
-On your Mac, no endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Use `passlet connect unix://$HOME/.local/share/passlet/passlet.sock` to save the local endpoint. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
+[Pair your local Agent](docs/SETUP.md#pair-agents) first. No endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Use `passlet connect unix://$HOME/.local/share/passlet/passlet.sock` to save the local endpoint. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
 
 ## Remote agents over SSH
 
-On your Approver Mac, declare a label for each SSH tunnel. With Home Manager, set `programs.passlet.service.ssh = [ "cruncher" ];` and reactivate. With Homebrew, add `ssh = ["cruncher"]` to `~/.config/passlet/approver.toml`, preserving any Tailscale setting, and restart the service. The Approver creates `~/.local/share/passlet/ssh-cruncher.sock`; approval prompts identify that route as “cruncher.” See [SSH tunnel configuration](docs/SETUP.md#ssh-tunnel-labels) for multiple servers and SSH config examples.
+[Pair each Agent](docs/SETUP.md#pair-agents), then forward the Mac’s shared socket. Approval prompts identify the trusted key’s configured label, such as `alice@cruncher`. See [SSH configuration](docs/SETUP.md#ssh-forwarding).
 
 On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
@@ -82,7 +82,7 @@ From your Mac, keep this SSH connection open, substituting your actual remote us
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
   -o StreamLocalBindUnlink=yes \
-  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" \
+  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" \
   alice@cruncher
 ```
 
@@ -141,11 +141,9 @@ Use HTTPS Git remotes. `exec --grant` uses the delivered token without contactin
 
 Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `tailscale = true` in `~/.config/passlet/approver.toml` for Homebrew and restart the service.
 
-Passlet keeps its local socket and creates a separate private socket for Tailscale Serve. At startup it checks forwarding on HTTPS port `17400`, leaves matching configuration alone, and creates it when absent. It refuses conflicting configuration and preserves unrelated Serve routes. No loopback TCP listener or separate setup command is needed. Tailscale must be running, signed in, and version 1.104.4 or newer. Its permissions and tailnet HTTPS settings must allow Serve configuration.
+Passlet keeps its shared local/SSH socket and opens a paired TLS listener at `127.0.0.1:17401`. Tailscale Serve forwards TCP port `17400` to it without terminating TLS. Startup reuses matching forwarding, creates it when absent, and refuses conflicts. The GUI Tailscale app is supported, and tailnet HTTPS certificates are not required.
 
-Run `passlet approver doctor` on the Approver Mac to see the connection instructions. Local agents connect automatically. On remote agents, use `passlet connect https://your-mac.your-tailnet.ts.net:17400`. Configure Tailscale network policy to allow intended callers on that port. Use Serve, not Funnel.
-
-Only the separate private socket trusts Serve's forwarded peer address. Passlet verifies that address with `tailscale whois`, shows the device name in approval prompts, and records the full hostname and node ID in audit events. Normal local and SSH socket clients cannot select a Tailscale identity through HTTP headers.
+[Pair each Agent](docs/SETUP.md#pair-agents), then use `passlet connect https://your-mac.your-tailnet.ts.net:17400` or declare the endpoint through Home Manager. Permit intended devices on TCP 17400 in tailnet policy. Each user on a shared machine has their own trusted key and approval label. Neither caller headers nor forwarded socket paths determine identity.
 
 ## Agent plugins
 

@@ -27,8 +27,12 @@ func TestDoctorRejectsUnsafeSocketDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"ready"}`)) })}
+	listener = pairedFixture(t, server, listener)
 	go server.Serve(listener)
 	defer server.Close()
+	if err := passlet.Health(context.Background(), "unix://"+passlet.DefaultSocket()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(filepath.Dir(passlet.DefaultSocket()), 0755); err != nil {
 		t.Fatal(err)
 	}

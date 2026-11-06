@@ -102,11 +102,11 @@ func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
 	}
 }
 
-func TestApprovalUsesDeviceNameWithoutChangingAuditIdentity(t *testing.T) {
+func TestApprovalUsesTrustedLabelWithoutChangingAuditIdentity(t *testing.T) {
 	for _, tc := range []struct{ transport, name, want string }{
-		{"tailscale", "cruncher.tailnet.ts.net.", "cruncher"},
+		{"paired", "alice@cruncher", "alice@cruncher"},
 		{"tailscale", "cruncher", "cruncher"},
-		{"tailscale", "cruncher\n.tailnet.ts.net.", "cruncher"},
+		{"paired", "cruncher\n", "cruncher"},
 		{"unix", "local/SSH socket client", "local"},
 		{"ssh", "cruncher", "cruncher"},
 	} {

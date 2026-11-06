@@ -7,7 +7,7 @@
     fileset = pkgs.lib.fileset.unions [
       (source + "/go.mod") (source + "/go.sum")
       (source + "/cmd") (source + "/internal")
-      (source + "/assets")
+      (source + "/assets") (source + "/testutil")
     ];
   };
   vendorHash = "sha256-FtOYtkDZTj1Lvvez1lVfhM0YfOh6+C8IsHfokjPOAYo=";

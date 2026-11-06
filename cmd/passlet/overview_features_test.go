@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -12,19 +13,17 @@ import (
 )
 
 type overviewFixture struct {
-	tailUnavailable, sshUnavailable, unavailable bool
-	socket, dns, condition                       string
-	healthCalls, calls                           []string
+	tailUnavailable, unavailable bool
+	socket, dns, condition       string
+	healthCalls, calls           []string
 }
 
 func (f *overviewFixture) health(ctx context.Context, endpoint string) error {
 	f.healthCalls = append(f.healthCalls, endpoint)
-	if f.tailUnavailable && endpoint == "unix://"+tailscaleSocket(f.socket) {
+	if f.tailUnavailable && endpoint == tailscaleTarget {
 		return errors.New("offline")
 	}
-	if f.sshUnavailable && strings.Contains(endpoint, "ssh-") {
-		return errors.New("offline")
-	}
+
 	if f.unavailable {
 		return errors.New("unavailable")
 	}
@@ -39,7 +38,7 @@ func (f *overviewFixture) command(ctx context.Context, name string, args ...stri
 	}
 	switch f.condition {
 	case "Tailscale is not installed":
-		return nil, errors.New("not found")
+		return nil, exec.ErrNotFound
 	case "querying Tailscale times out":
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -59,17 +58,16 @@ func (f *overviewFixture) command(ctx context.Context, name string, args ...stri
 	if f.condition == "Tailscale has no forwarding configured" {
 		return []byte(`{}`), nil
 	}
-	socket := tailscaleSocket(f.socket)
-	https := true
+	target := tailscaleBackend
+	terminateTLS := ""
 	switch f.condition {
-	case "Tailscale forwards to a different socket":
-		socket = "/tmp/other.sock"
-	case "Tailscale forwarding does not use HTTPS":
-		https = false
+	case "Tailscale forwards to a different backend":
+		target = "127.0.0.1:9999"
+	case "Tailscale forwarding terminates TLS":
+		terminateTLS = f.dns
 	}
 	return json.Marshal(map[string]any{
-		"TCP": map[string]any{tailscalePort: map[string]any{"HTTPS": https}},
-		"Web": map[string]any{f.dns + ":" + tailscalePort: map[string]any{"Handlers": map[string]any{"/": map[string]string{"Proxy": "unix:" + socket}}}},
+		"TCP": map[string]any{tailscalePort: map[string]any{"TCPForward": target, "TerminateTLS": terminateTLS}},
 	})
 }
 

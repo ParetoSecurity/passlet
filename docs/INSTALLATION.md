@@ -83,20 +83,14 @@ Install Tailscale 1.104.4 or newer and sign in on both machines. On the Approver
 }
 ```
 
-Activate with the same Home Manager or nix-darwin command used above. Home Manager supplies the Tailscale CLI on the service's PATH. Passlet creates a dedicated private Unix socket and checks Tailscale Serve on startup. Matching HTTPS forwarding on port `17400` is reused; missing forwarding is configured automatically. A conflict stops startup with an error instead of replacing another service. Unrelated ports are preserved.
+[Pair the Agents and Approver](SETUP.md#pair-agents), then activate with the same Home Manager or nix-darwin command used above. Home Manager supplies the Tailscale CLI on the service's PATH. Passlet opens a mutually authenticated TLS listener on `127.0.0.1:17401` and configures raw TCP forwarding from Tailscale port `17400`. Matching forwarding is reused, conflicts stop startup, and unrelated routes are preserved.
 
-Tailscale must already be running and signed in, with HTTPS enabled for the tailnet and permission to configure Serve. Unix-socket forwarding requires local administrator access under Tailscale's permission rules. If the Tailscale app sandbox prevents access to the private socket, use the standalone `tailscaled` distribution. Passlet never invokes sudo or changes tailnet policy.
+Tailscale must already be running and signed in, with permission to configure Serve. The GUI app works with this loopback backend. Tailnet HTTPS certificates are not required because Passlet authenticates its own TLS connection using paired public keys. Passlet never invokes sudo or changes tailnet policy.
 
-Run `passlet approver doctor` on the Approver Mac. After approval and credential verification, it prints the verified connection command for remote agents:
+On an Agent with pairing configured, save the address with `passlet connect https://your-mac.your-tailnet.ts.net:17400`, or declare `programs.passlet.agent.endpoint`. Permit intended callers on TCP 17400 in network policy. The temporary GitHub setup callback uses localhost port 17402.
 
-```sh
-passlet connect https://your-mac.your-tailnet.ts.net:17400
-passlet doctor
-```
+To disable remote access, set `programs.passlet.service.tailscale = false;` and reactivate. The saved Serve rule remains but its backend is stopped. See [Tailscale troubleshooting](SETUP.md#tailscale) for inspecting and removing only Passlet's rule.
 
-Local agents connect automatically. Tailscale handles HTTPS certificates and forwards traffic to the private socket; Passlet opens no TCP listener. Permit intended callers on TCP `17400` in Tailscale network policy. The temporary GitHub setup callback uses localhost port `17402`.
-
-To disable remote access, set `programs.passlet.service.tailscale = false;` and reactivate. Passlet stops accepting connections on its Tailscale socket. The persisted Serve rule remains, but cannot reach Passlet while the socket is disabled. Only remove that rule after verifying it still belongs to Passlet, using `tailscale serve --https=17400 off`. Never reset unrelated Serve configuration.
 
 ### Homebrew
 
@@ -126,7 +120,7 @@ Coming soon. Approver currently requires macOS. You can already run Agent on Lin
 
 ## Use Agent locally
 
-Agent is installed alongside Approver. Once GitHub setup is complete, your coding tools can request access on the same Mac. No SSH connection, Tailscale configuration, or separate Agent install is needed.
+Agent is installed alongside Approver. After pairing the local Agent and completing GitHub setup, your coding tools can request access on the same Mac. No SSH connection, Tailscale configuration, or separate Agent install is needed.
 
 Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Approver, clear the environment override and save the local socket:
 
@@ -189,7 +183,7 @@ brew install paretosecurity/passlet/passlet-agent
 
 ### Connect Agent to Approver
 
-Configure [SSH tunnel labels](SETUP.md#ssh-tunnel-labels), then follow the [SSH forwarding instructions](SETUP.md#ssh-server-configuration) to forward the matching Approver socket into the remote account. Use a separate Unix account and private socket directory for each person. The SSH connection must remain open when requesting new credentials.
+[Pair the Agent](SETUP.md#pair-agents), then follow the [SSH forwarding instructions](SETUP.md#ssh-server-configuration) to forward the shared Approver socket into the remote account. Use a separate Unix account and private socket directory for each person. The SSH connection must remain open when requesting new credentials.
 
 On the remote machine, point Agent at the forwarded socket. For example, with a Linux account named `alice`:
 

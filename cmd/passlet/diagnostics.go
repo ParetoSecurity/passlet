@@ -42,7 +42,7 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 func localDiagnostics(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("approver doctor", flag.ContinueOnError)
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), `Check service health and credentials on this Mac. Inspects local, SSH socket and Tailscale connections.
+		_, _ = fmt.Fprintln(fs.Output(), `Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
 
 Requires Touch ID approval to verify saved credentials.`)
 	}
@@ -56,6 +56,7 @@ Requires Touch ID approval to verify saved credentials.`)
 }
 
 func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
+	fmt.Println("passlet", version)
 	fmt.Println("Endpoint:", endpoint)
 	if err := passlet.Health(ctx, endpoint); err != nil {
 		return errors.New(doctorConnectionHint(endpoint, err))
@@ -78,6 +79,9 @@ func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
 }
 
 func doctorFailureMessage(err error) string {
+	if problem := passlet.PairingProblem(err); problem != "" {
+		return problem
+	}
 	switch err.Error() {
 	case "approval_denied":
 		return "Approval was denied."
@@ -115,6 +119,9 @@ func doctorFailureMessage(err error) string {
 }
 
 func doctorConnectionHint(endpoint string, err error) string {
+	if problem := passlet.PairingProblem(err); problem != "" {
+		return problem
+	}
 	if endpoint == "unix://"+passlet.DefaultSocket() {
 		switch {
 		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ECONNREFUSED):

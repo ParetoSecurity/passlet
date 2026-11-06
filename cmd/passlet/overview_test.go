@@ -15,22 +15,22 @@ import (
 
 func TestOverviewRemoteAddressValidation(t *testing.T) {
 	f := overviewFixture{socket: "/tmp/passlet.sock", dns: "mac.example.ts.net"}
-	got, _ := overviewRemoteAddresses(context.Background(), f.socket, true, f.command)
+	got, _ := overviewRemoteAddresses(context.Background(), true, f.command)
 	if !reflect.DeepEqual(got, []string{"https://mac.example.ts.net:17400"}) {
 		t.Fatal(got)
 	}
 	f.dns = "user@mac.example.ts.net"
-	if got, _ := overviewRemoteAddresses(context.Background(), f.socket, true, f.command); len(got) != 0 {
+	if got, _ := overviewRemoteAddresses(context.Background(), true, f.command); len(got) != 0 {
 		t.Fatal("unsafe endpoint advertised", got)
 	}
-	if got, _ := overviewRemoteAddresses(context.Background(), f.socket, false, func(context.Context, string, ...string) ([]byte, error) {
+	if got, _ := overviewRemoteAddresses(context.Background(), false, func(context.Context, string, ...string) ([]byte, error) {
 		t.Fatal("queried disabled Tailscale")
 		return nil, nil
 	}); len(got) != 0 {
 		t.Fatal(got)
 	}
 	f.dns = "mac.example.ts.net"
-	if got, _ := overviewRemoteAddresses(context.Background(), f.socket, true, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+	if got, _ := overviewRemoteAddresses(context.Background(), true, func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if args[0] == "serve" {
 			return []byte("invalid"), nil
 		}
@@ -78,6 +78,7 @@ func TestOverviewHealthUsesDefaultSocket(t *testing.T) {
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})}
+	listener = pairedFixture(t, server, listener)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Close() })
 	endpoint := "unix://" + passlet.DefaultSocket()
@@ -119,8 +120,8 @@ func TestOverviewUnverifiedTailscaleForwarding(t *testing.T) {
 		"querying Tailscale times out",
 		"Tailscale returns invalid configuration",
 		"Tailscale has no forwarding configured",
-		"Tailscale forwards to a different socket",
-		"Tailscale forwarding does not use HTTPS",
+		"Tailscale forwards to a different backend",
+		"Tailscale forwarding terminates TLS",
 	} {
 		t.Run(condition, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())

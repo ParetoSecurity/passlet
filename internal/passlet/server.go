@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"time"
 )
@@ -28,29 +27,14 @@ type Server struct {
 	Deadline time.Duration
 }
 
-type transportKey struct{}
 type callerKey struct{}
 
-func ConnectionContext(ctx context.Context, c net.Conn) context.Context {
-	if c, ok := c.(*sshConn); ok {
-		return context.WithValue(ctx, callerKey{}, Caller{Transport: "ssh", Name: c.label})
+func connectionIdentity(ctx context.Context, _ string) (Caller, error) {
+	caller, ok := ctx.Value(callerKey{}).(Caller)
+	if !ok {
+		return Caller{}, errors.New("agent_authentication_required")
 	}
-	if _, ok := c.(*tailscaleConn); ok {
-		return context.WithValue(ctx, transportKey{}, "tailscale")
-	}
-	return context.WithValue(ctx, transportKey{}, c.LocalAddr().Network())
-}
-
-func connectionIdentity(ctx context.Context, remote string) (Caller, error) {
-	if caller, ok := ctx.Value(callerKey{}).(Caller); ok {
-		return caller, nil
-	}
-	if ctx.Value(transportKey{}) == "unix" {
-		return Caller{Transport: "unix", Name: "local/SSH socket client"}, nil
-	}
-	c, err := WhoIs(ctx, remote)
-	c.Transport = "tailscale"
-	return c, err
+	return caller, nil
 }
 
 func NewServer(approval Approval, g Minter, a Recorder) *Server {
@@ -67,14 +51,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Origin") != "" {
 		apiError(w, 403, "browser_requests_not_supported")
 		return
-	}
-	if r.Context().Value(transportKey{}) == "tailscale" {
-		peer, err := tailscalePeer(r)
-		if err != nil {
-			apiError(w, 403, "identity_unavailable")
-			return
-		}
-		r.RemoteAddr = peer
 	}
 	if r.URL.Path == "/v1/health" && r.Method == "GET" {
 		if _, err := s.Identity(r.Context(), r.RemoteAddr); err != nil {

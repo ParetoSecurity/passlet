@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"os"
+	"passlet.dev/passlet/testutil/testkeys"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,6 +28,7 @@ func approverTestPaths(t *testing.T) (string, string) {
 	if err := os.WriteFile(helper, []byte("#!/bin/sh\ntouch '"+filepath.Join(dir, "invoked")+"'\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	writePairingConfig(t, dir, false)
 	return dir, helper
 }
 
@@ -82,7 +86,7 @@ func TestApproverReadsConfigurationBeforeBinding(t *testing.T) {
 }
 
 func TestApproverStartupFailuresReleaseSocket(t *testing.T) {
-	for _, mode := range []string{"socket occupied", "audit unavailable", "SSH socket occupied", "Tailscale socket occupied", "Tailscale unavailable"} {
+	for _, mode := range []string{"socket occupied", "audit unavailable", "Tailscale port occupied", "Tailscale unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			dir, helper := approverTestPaths(t)
 			socket := passlet.DefaultSocket()
@@ -96,16 +100,10 @@ func TestApproverStartupFailuresReleaseSocket(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(passlet.StateDir(), "audit.sqlite"), 0700); err != nil {
 					t.Fatal(err)
 				}
-			case "SSH socket occupied":
-				l, err := passlet.ListenUnix(filepath.Join(passlet.StateDir(), "ssh-other-server.sock"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer l.Close()
 			default:
 				enabled = true
-				if mode == "Tailscale socket occupied" {
-					l, err := passlet.ListenUnix(tailscaleSocket(socket))
+				if mode == "Tailscale port occupied" {
+					l, err := net.Listen("tcp4", tailscaleBackend)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -114,7 +112,7 @@ func TestApproverStartupFailuresReleaseSocket(t *testing.T) {
 					t.Setenv("PATH", t.TempDir())
 				}
 			}
-			writeSshConfig(t, dir, enabled)
+			writePairingConfig(t, dir, enabled)
 			err := approver(context.Background(), []string{"--helper", helper})
 			if err == nil {
 				t.Fatal("startup unexpectedly succeeded")
@@ -132,13 +130,7 @@ func TestApproverStartupFailuresReleaseSocket(t *testing.T) {
 				t.Fatalf("failed startup retained socket or lock: %v", err)
 			}
 			l.Close()
-			if mode == "SSH socket occupied" {
-				l, err := passlet.ListenUnix(filepath.Join(passlet.StateDir(), "ssh-cruncher.sock"))
-				if err != nil {
-					t.Fatalf("failed startup retained SSH socket: %v", err)
-				}
-				l.Close()
-			}
+
 		})
 	}
 }
@@ -148,8 +140,8 @@ func TestApproverHealthAndCancellation(t *testing.T) {
 		t.Run("Tailscale="+strconv.FormatBool(enabled), func(t *testing.T) {
 			dir, helper := approverTestPaths(t)
 			socket := passlet.DefaultSocket()
-			writeSshConfig(t, dir, enabled)
-			installTailscaleFixture(t, tailscaleSocket(socket))
+			writePairingConfig(t, dir, enabled)
+			installTailscaleFixture(t, tailscaleTarget)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
@@ -178,16 +170,6 @@ func TestApproverHealthAndCancellation(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
-			for _, label := range []string{"cruncher", "other-server"} {
-				path := filepath.Join(passlet.StateDir(), "ssh-"+label+".sock")
-				if err := passlet.Health(ctx, "unix://"+path); err != nil {
-					t.Fatalf("SSH socket unhealthy: %v", err)
-				}
-				info, err := os.Stat(path)
-				if err != nil || info.Mode().Perm() != 0600 {
-					t.Fatalf("SSH socket permissions: %v %v", info, err)
-				}
-			}
 			if _, err := os.Stat(filepath.Join(dir, "invoked")); !os.IsNotExist(err) {
 				t.Fatal("health invoked approval helper")
 			}
@@ -200,7 +182,7 @@ func TestApproverHealthAndCancellation(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("shutdown timed out")
 			}
-			for _, path := range []string{socket, filepath.Join(passlet.StateDir(), "ssh-cruncher.sock"), filepath.Join(passlet.StateDir(), "ssh-other-server.sock")} {
+			for _, path := range []string{socket} {
 				l, err := passlet.ListenUnix(path)
 				if err != nil {
 					t.Fatalf("shutdown retained socket or lock: %v", err)
@@ -211,13 +193,45 @@ func TestApproverHealthAndCancellation(t *testing.T) {
 	}
 }
 
-func writeSshConfig(t *testing.T, home string, tailscale bool) {
+func writePairingConfig(t *testing.T, home string, tailscale bool) {
 	t.Helper()
-	dir := filepath.Join(home, ".config", "passlet")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	key := testkeys.Write(t, home)
+	data := fmt.Sprintf("private_key_file = %q\ntailscale = %t\n[agents.test-agent]\npublic_key = %q\n", key, tailscale, testkeys.Public("agent"))
+	if err := os.WriteFile(filepath.Join(home, ".config", "passlet", "approver.toml"), []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("ssh = [\"cruncher\", \"other-server\"]\ntailscale = "+strconv.FormatBool(tailscale)), 0600); err != nil {
+}
+
+func TestApproverRejectsInvalidPairingKeyBeforeBinding(t *testing.T) {
+	dir, helper := approverTestPaths(t)
+	if err := os.WriteFile(filepath.Join(dir, ".config", "passlet", "approver.pem"), []byte("invalid existing key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := approver(context.Background(), []string{"--helper", helper})
+	if err == nil || err.Error() != "invalid_agent_private_key" {
+		t.Fatalf("unexpected startup result: %v", err)
+	}
+	if _, err := os.Stat(passlet.DefaultSocket()); !os.IsNotExist(err) {
+		t.Fatal("unpaired service created a listener")
+	}
+	if got := doctorFailureMessage(err); !strings.Contains(got, "PKCS#8 PEM") {
+		t.Fatal(got)
+	}
+}
+
+func TestApproverGeneratesDefaultPairingKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if _, err := (approverConfig{}).pairing(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := passlet.ReadPrivateKey(filepath.Join(passlet.StateDir(), "approver.pem")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(passlet.StateDir(), "approver.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := passlet.ParsePublicKey(string(data)); err != nil {
 		t.Fatal(err)
 	}
 }

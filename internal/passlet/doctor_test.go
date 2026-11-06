@@ -41,6 +41,7 @@ func TestDoctorClientFailures(t *testing.T) {
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			})}
+			listener = pairedFixture(t, server, listener)
 			go func() { _ = server.Serve(listener) }()
 			defer server.Close()
 			if _, err := Doctor(context.Background(), "unix://"+path); err == nil || err.Error() != tc.want {

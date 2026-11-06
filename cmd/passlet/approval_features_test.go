@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"passlet.dev/passlet/internal/passlet"
+	"passlet.dev/passlet/testutil/testkeys"
 )
 
 func TestApprovalFeatures(t *testing.T) {
@@ -38,12 +41,12 @@ func TestApprovalFeatures(t *testing.T) {
 				t.Setenv("CODEX_THREAD_ID", "fixture-thread")
 			})
 			s.Step("^(?:an Agent on this Mac|an Approver configured for GitHub account `alice`)$", func() {
-				caller = passlet.Caller{Transport: "unix", Name: "local/SSH socket client"}
+				caller = passlet.Caller{Transport: "paired", Name: "local"}
 			})
-			s.Step(`^an Agent connected through the "([^"]*)" SSH tunnel$`, func(label string) {
+			s.Step(`^an Agent paired as "([^"]*)" connecting through SSH$`, func(label string) {
 				caller = passlet.Caller{Transport: "ssh", Name: label}
 			})
-			s.Step(`^an Agent connected through Tailscale as "([^"]*)"$`, func(host string) {
+			s.Step(`^an Agent paired as "([^"]*)" connecting through Tailscale$`, func(host string) {
 				caller = passlet.Caller{Transport: "tailscale", Name: host, NodeID: "fixture-node"}
 			})
 			s.Step("^repositories `alice/repository-001` through `alice/repository-100`$", func() {
@@ -72,14 +75,19 @@ func TestApprovalFeatures(t *testing.T) {
 				}
 				defer audit.Close()
 				handler := passlet.NewServer(passlet.NativeHelper{Path: helper}, nil, audit)
-				identity := caller
-				handler.Identity = func(context.Context, string) (passlet.Caller, error) { return identity, nil }
 				socket := filepath.Join(dir, "socket")
 				listener, err := passlet.ListenUnix(socket)
 				if err != nil {
 					return err
 				}
 				server := &http.Server{Handler: handler}
+				testkeys.Write(t, os.Getenv("HOME"))
+				pairing, err := passlet.NewPairing(testkeys.Private("approver"), map[string]string{caller.Name: testkeys.Public("agent")})
+				if err != nil {
+					return err
+				}
+				server.Handler = pairing.Handler(handler)
+				listener = tls.NewListener(listener, pairing.ServerConfig())
 				go func() { _ = server.Serve(listener) }()
 				defer server.Close()
 				grant := filepath.Join(dir, "grant.json")
@@ -91,6 +99,9 @@ func TestApprovalFeatures(t *testing.T) {
 					args = append(args, "--out", grant)
 				}
 				_, err = invokeCLI(t, "", args...)
+				if command == "doctor" {
+					err = errors.Unwrap(err)
+				}
 				if err == nil || err.Error() != denial {
 					return fmt.Errorf("expected fixture denial, got %v", err)
 				}

@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const tailscalePort = "17400"
 
-func tailscaleSocket(socket string) string { return socket + ".tailscale" }
+const tailscaleBackend = "127.0.0.1:17401"
+const tailscaleTarget = "tcp://" + tailscaleBackend
 
 type tailscaleStatus struct {
 	Version      string
@@ -23,9 +23,11 @@ type tailscaleStatus struct {
 
 type tailscaleServeConfig struct {
 	TCP map[string]struct {
-		HTTPS      bool
-		HTTP       bool
-		TCPForward string
+		HTTPS         bool
+		HTTP          bool
+		TCPForward    string
+		TerminateTLS  string
+		ProxyProtocol int
 	}
 	Web map[string]struct {
 		Handlers map[string]struct {
@@ -86,22 +88,15 @@ func (c tailscaleServeConfig) occupiesPort() bool {
 	return false
 }
 
-func (c tailscaleServeConfig) forwardsTo(hostname, socket string) bool {
+func (c tailscaleServeConfig) forwardsTo(hostname, target string) bool {
 	hostPort := net.JoinHostPort(hostname, tailscalePort)
 	tcp, ok := c.TCP[tailscalePort]
-	if !ok || !tcp.HTTPS || tcp.HTTP || tcp.TCPForward != "" || c.AllowFunnel[hostPort] {
-		return false
-	}
-	web, ok := c.Web[hostPort]
-	if !ok || len(web.Handlers) != 1 {
-		return false
-	}
-	handler, ok := web.Handlers["/"]
-	if !ok || handler.Proxy != "unix:"+socket || handler.Path != "" || handler.Text != "" || len(handler.AcceptAppCaps) != 0 {
+	if !ok || tcp.HTTPS || tcp.HTTP || tcp.TerminateTLS != "" || tcp.ProxyProtocol != 0 ||
+		tcp.TCPForward != strings.TrimPrefix(target, "tcp://") || c.AllowFunnel[hostPort] {
 		return false
 	}
 	for name := range c.Web {
-		if name != hostPort && strings.HasSuffix(name, ":"+tailscalePort) {
+		if strings.HasSuffix(name, ":"+tailscalePort) {
 			return false
 		}
 	}
@@ -113,51 +108,31 @@ func (c tailscaleServeConfig) forwardsTo(hostname, socket string) bool {
 	return true
 }
 
-func supportsTailscaleSockets(version string) bool {
-	version, _, _ = strings.Cut(version, "-")
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	var numbers [3]int
-	for i, part := range parts {
-		n, err := strconv.Atoi(part)
-		if err != nil || n < 0 {
-			return false
-		}
-		numbers[i] = n
-	}
-	return numbers[0] > 1 || (numbers[0] == 1 && (numbers[1] > 104 || (numbers[1] == 104 && numbers[2] >= 4)))
-}
-
-func ensureTailscale(ctx context.Context, socket string, command overviewCommand) error {
+func ensureTailscale(ctx context.Context, target string, command overviewCommand) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	status, err := tailscaleNode(ctx, command)
 	if err != nil {
 		return err
 	}
-	if !supportsTailscaleSockets(status.Version) {
-		return errors.New("tailscale 1.104.4 or newer is required for Unix socket forwarding; upgrade Tailscale")
-	}
 	config, err := readTailscaleServe(ctx, command)
 	if err != nil {
 		return err
 	}
-	if config.forwardsTo(status.Self.DNSName, socket) {
+	if config.forwardsTo(status.Self.DNSName, target) {
 		return nil
 	}
 	if config.occupiesPort() {
 		return errors.New("tailscale Serve port 17400 is already configured; resolve the conflict before enabling Passlet")
 	}
-	if _, err := command(ctx, "tailscale", "serve", "--bg", "--https="+tailscalePort, "unix:"+socket); err != nil {
-		return fmt.Errorf("cannot configure Tailscale Serve; check Tailscale permissions and tailnet HTTPS settings: %w", err)
+	if _, err := command(ctx, "tailscale", "serve", "--bg", "--tcp="+tailscalePort, target); err != nil {
+		return fmt.Errorf("cannot configure Tailscale Serve; check Tailscale Serve permissions: %w", err)
 	}
 	config, err = readTailscaleServe(ctx, command)
 	if err != nil {
 		return err
 	}
-	if !config.forwardsTo(status.Self.DNSName, socket) {
+	if !config.forwardsTo(status.Self.DNSName, target) {
 		return errors.New("tailscale_forwarding_not_verified")
 	}
 	return nil

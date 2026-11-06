@@ -92,8 +92,9 @@ func unixServer(t *testing.T, handler *Server) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &http.Server{Handler: handler, ConnContext: ConnectionContext}
+	s := &http.Server{Handler: handler}
 	done := make(chan struct{})
+	l = pairedFixture(t, s, l)
 	go func() { defer close(done); s.Serve(l) }()
 	t.Cleanup(func() { s.Close(); <-done })
 	return "unix://" + path
@@ -111,7 +112,7 @@ func TestUnixGrantAndIdentity(t *testing.T) {
 	audit.mu.Lock()
 	defer audit.mu.Unlock()
 	for _, e := range audit.events {
-		if e.Caller.Transport != "unix" || e.Caller.Name != "local/SSH socket client" || e.Caller.User != "" {
+		if e.Caller.Transport != "paired" || e.Caller.Name != "test-agent" || e.Caller.User != "" {
 			t.Fatal("invented client identity", e.Caller)
 		}
 		data, _ := json.Marshal(e)

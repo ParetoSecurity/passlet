@@ -142,6 +142,7 @@ func TestRequestWritesPrivateGrantWithoutOverwriting(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(passlet.Grant{ID: "fixture", Token: "fixture-child", User: "alice", ExpiresAt: time.Now().Add(time.Hour), Repositories: request.Repositories, Permissions: request.Permissions})
 	})}
+	l = pairedFixture(t, server, l)
 	go server.Serve(l)
 	defer server.Close()
 	path := filepath.Join(dir, "grant.json")

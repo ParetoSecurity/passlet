@@ -29,39 +29,103 @@ Run `passlet connect <endpoint>` on the agent machine to check the Approver's he
 
 The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved address. Without any of these, requests use the default local socket. If a saved address cannot be read or is invalid, correct it with `passlet connect`; commands do not silently switch to the local socket. Use `passlet doctor` to inspect the effective address and verify GitHub access. Use `passlet approver doctor` on your Mac to check the local service regardless of the selected endpoint.
 
-## SSH tunnel labels
+## Pair agents
 
-Configure the Approver with one label per tunnel. For Homebrew, merge these settings into `~/.config/passlet/approver.toml` and restart the service:
+Every connection, including local and SSH socket connections, requires mutual [TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html). Each user on each machine has an Ed25519 private key. The Approver maps trusted public keys to labels such as `alice@cruncher`; the Agent pins the Approver's public key. The key contains no username. Pairing authenticates possession of that key, not the executable or environment running the request. Each credential request still requires Touch ID.
 
-```toml
-ssh = ["cruncher", "other-server"]
-tailscale = true
-```
+Passlet generates a missing private key itself using Go's Ed25519 implementation. No OpenSSL or activation script is required. The Approver does this at startup; an Agent does it when connecting with pairing configuration present. Repeated starts and concurrent commands preserve the same key. Existing malformed, unreadable, or insecure keys cause an error instead of being replaced. Dangling secret-manager symlinks are preserved too.
 
-Tailscale is optional. Labels must be unique, start with a lowercase letter or digit, and contain only lowercase letters, digits, and hyphens, up to 32 characters. On startup, the Approver creates `ssh-cruncher.sock` and `ssh-other-server.sock` beside its normal socket. Each socket has mode `0600` in the same private directory. All listeners share the approval gate. Removing a label and restarting stops that listener.
+The default private files are `~/.local/share/passlet/approver.pem` and `~/.local/share/passlet/agent.pem`, with mode `0600`. Passlet exports their public keys as `approver.pub` and `agent.pub` in that directory, including when a private key is provisioned at another path. Only exchange the `.pub` files, through a trusted channel. Private keys never belong in Git or the Nix store.
 
-For Home Manager, declare the labels in your configuration and reactivate:
+Start the Approver first to generate its key. Copy its public key into the Agent's pairing configuration, then run `passlet connect <endpoint>`. This creates the Agent key. The first connection is rejected until you add `agent.pub` to the Approver's trusted Agents and restart it. Subsequent connections use the same keys. Give each user on each machine a separate key, so their names and revocation remain independent.
+
+With Home Manager, configure the Agent. `privateKeyFile` is optional and defaults to the path above; set it explicitly when using a secret manager:
 
 ```nix
-programs.passlet.service.ssh = [ "cruncher" "other-server" ];
+programs.passlet = {
+  enable = true;
+  agent = {
+    approverPublicKey = builtins.readFile ./alice-mac.pub;
+    endpoint = "https://alice-mac.example.ts.net:17400";
+    privateKeyFile = "/home/alice/.local/share/passlet/agent.pem";
+  };
+};
 ```
 
-Home Manager writes `~/.config/passlet/approver.toml` with both the SSH labels and the Tailscale setting, and restarts the service when those settings change. Edit your Home Manager configuration rather than its generated TOML file.
+Configure the Approver Mac, including its local Agent:
+
+```nix
+programs.passlet = {
+  enable = true;
+  agent = {
+    approverPublicKey = builtins.readFile ./alice-mac.pub;
+    privateKeyFile = "/Users/alice/.local/share/passlet/agent.pem";
+  };
+  service = {
+    agents = {
+      "alice@cruncher".publicKey = builtins.readFile ./alice-cruncher.pub;
+      "alice@mac".publicKey = builtins.readFile ./alice-local.pub;
+    };
+    privateKeyFile = "/Users/alice/.local/share/passlet/approver.pem";
+    tailscale = true;
+  };
+};
+```
+
+You can provision private files through a secret manager, or let Passlet create them at user-writable paths. Home Manager generates the configuration and restarts the Approver when its settings change. Remove an Agent's public key and reactivate to revoke it. When changing private file contents at the same path, restart the service too. Changing the Approver key requires updating its pin on all Agents. Self-signed TLS certificates are refreshed automatically from the same key for each connection.
+
+For Homebrew or manually managed Agent installations, the equivalent files are `~/.config/passlet/agent.toml`:
+
+```toml
+private_key_file = "/Users/alice/.local/share/passlet/agent.pem"
+approver_public_key = """
+-----BEGIN PUBLIC KEY-----
+<Approver public key>
+-----END PUBLIC KEY-----
+"""
+```
+
+And `~/.config/passlet/approver.toml` on the Mac:
+
+```toml
+private_key_file = "/Users/alice/.local/share/passlet/approver.pem"
+tailscale = true
+
+[agents."alice@mac"]
+public_key = """
+-----BEGIN PUBLIC KEY-----
+<local Agent public key>
+-----END PUBLIC KEY-----
+"""
+
+[agents."alice@cruncher"]
+public_key = """
+-----BEGIN PUBLIC KEY-----
+<remote Agent public key>
+-----END PUBLIC KEY-----
+"""
+```
+
+Use the actual PEM contents, preserving their line breaks. Restart the Approver after changing its configuration. Local doctor uses the same Agent key and Approver pin, which must match the local service. An endpoint setting chooses an address, it does not establish trust or bypass pairing.
+
+TLS encrypts requests and returned tokens across the entire connection. Session resumption is disabled, and no early data is accepted. Captured traffic cannot authenticate a new connection or replay a request. Someone who obtains a private key can make new requests under its label until that key is revoked. Root and processes that can read the key remain trusted.
+
+## SSH forwarding
+
+Local and SSH Agents use the same `~/.local/share/passlet/passlet.sock` on the Mac. The Approver creates it on startup with mode `0600` in a private directory. There are no per-tunnel sockets. The paired key determines the displayed name on every transport.
 
 For an account named `alice`, add this to `~/.ssh/config` on the Approver Mac:
 
 ```sshconfig
 Host cruncher
     User alice
-    RemoteForward /home/alice/.local/share/passlet/passlet.sock /Users/alice/.local/share/passlet/ssh-cruncher.sock
+    RemoteForward /home/alice/.local/share/passlet/passlet.sock /Users/alice/.local/share/passlet/passlet.sock
     ExitOnForwardFailure yes
 ```
 
-The first socket is created on Cruncher by SSH, and its parent directory must already exist with mode `0700`. The second socket is created on the Mac by the Approver. It must be listening when a request arrives, although SSH can establish the tunnel before it exists. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. For another server, use another Host entry and the matching Mac-side socket.
+SSH creates the first socket on Cruncher, whose parent directory must exist with mode `0700`. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. Other servers can forward to the same Mac socket and authenticate using their own keys.
 
-Approval prompts say “cruncher,” and audit events record `transport: "ssh"` and `name: "cruncher"`. These values come from the configured listener; request headers cannot change them. The label identifies the route, not an authenticated remote host, Unix user, or process. Other processes with access to that route can request approval too. Forwarding the normal `passlet.sock` still works, but its approval prompts display “local” and its audit records say “local/SSH socket client”. That socket cannot distinguish a local caller from an SSH forward; use a named SSH socket to display the route.
-
-The Mac's `passlet approver doctor` reports whether each configured SSH socket is listening. If a configured socket is missing or refuses connections, it prints the socket path and links to the relevant setup documentation. Permission failures and timeouts are reported separately. It cannot tell whether the SSH tunnel is connected. Run `passlet doctor` on the remote machine to check the complete path. A missing forwarded socket suggests the tunnel may not be running; a stale socket that refuses connections suggests restarting the tunnel. Permission errors get separate guidance. If the socket responds without a healthy Approver reply, check the service on your Mac and the forwarding target. These checks run only when requested, with no background process or heartbeat protocol.
+`passlet approver doctor` checks the shared local listener. It cannot determine whether an SSH tunnel is connected. Run `passlet doctor` on the remote machine to check the complete authenticated connection. Missing or stale forwarded sockets receive tunnel troubleshooting advice.
 
 ## SSH server configuration
 
@@ -76,11 +140,11 @@ Match User alice,bob
 
 Validate sshd configuration before reloading it and retain an existing admin session. `StreamLocalBindUnlink` on the server allows a new tunnel to replace its stale remote socket after disconnect. The SSH client's setting alone does not configure remote sshd. When the server cannot enable it, inspect the old tunnel and remove only your own stale forwarded socket before reconnecting. Replacing a live forward would interrupt requests.
 
-After configuring the `cruncher` label, Alice runs this from her Mac:
+After pairing her Agent, Alice runs this from her Mac:
 
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
-  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/ssh-cruncher.sock" alice@cruncher
+  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" alice@cruncher
 ```
 
 Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/passlet.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
@@ -89,15 +153,17 @@ Unix permissions isolate Alice from Bob, but not either from remote root or othe
 
 ## Tailscale
 
-`passlet approver doctor` reports when Tailscale is stopped, Serve has no forwarding on port 17400, or forwarding targets a different socket. It shows the actual and expected socket targets for a mismatch and links to these setup instructions. These checks do not change Tailscale configuration. Local doctor exits unsuccessfully if any configured listener or Tailscale forwarding check fails.
+Enable `programs.passlet.service.tailscale = true;` with Home Manager, or merge `tailscale = true` into the Homebrew Approver configuration. Restart after changing configuration. Tailscale must be running and signed in, and the service must be allowed to configure Serve. Passlet never invokes sudo or changes tailnet policy.
 
-For Home Manager, set `programs.passlet.service.tailscale = true;` and reactivate, as described in [Configure Tailscale forwarding](INSTALLATION.md#configure-tailscale-forwarding). For Homebrew, create `~/.config/passlet/approver.toml` containing `tailscale = true`, then reinstall the cask to restart it. This file contains no credentials. Tailscale and SSH settings are read from this file on startup. Home Manager generates the file from its service settings. For foreground diagnostics, run `passlet approver start`.
+The Approver binds `127.0.0.1:17401` and configures `tailscale serve --bg --tcp=17400 tcp://127.0.0.1:17401`. [Serve forwards the encrypted TCP stream](https://tailscale.com/docs/reference/tailscale-cli/serve) without terminating TLS. Passlet authenticates both peers and encrypts tokens itself, so it works with the GUI Tailscale app without giving its sandbox access to Unix sockets. Tailnet HTTPS certificates are not needed. Agents still use `https://your-mac.your-tailnet.ts.net:17400`, with the Approver public key pinned in their pairing configuration.
 
-Passlet uses Tailscale Serve's HTTPS proxy to a dedicated mode-0600 Unix socket beside its normal local socket, with a `.tailscale` suffix. The sockets share one approval lock. Startup requires Tailscale 1.104.4 or newer, reuses matching forwarding on port `17400`, creates missing forwarding, and rejects conflicts. It does not configure Funnel, modify unrelated routes, invoke sudo, or alter tailnet HTTPS policy. A permission or HTTPS setup failure produces an actionable startup error.
+Startup reuses matching forwarding, creates it when absent, and refuses conflicts without changing unrelated ports. If port 17400 still has an old Passlet HTTPS proxy, verify it belongs to Passlet and remove only that route with `tailscale serve --https=17400 off` before restarting. Never reset unrelated Serve configuration. Funnel and TLS termination on this route are rejected.
 
-The dedicated socket accepts only a single forwarded IP address and rejects Funnel requests. Passlet verifies that address through `tailscale whois`; it does not trust caller-supplied user names. The normal local socket ignores forwarded identity headers. Approval prompts show the Tailscale device name, while audit events retain its full hostname and stable node ID. The private socket trusts Tailscale and other processes with access to the same Unix account.
+Permit intended devices on TCP 17400 in tailnet policy. Pairing additionally distinguishes users on a shared server. Caller IP headers and Tailscale device names do not establish identity. Approval prompts show the trusted key's configured label; audit events record that label and its key fingerprint.
 
-Use the Mac's actual `.ts.net` HTTPS hostname and port. Tailscale network policy controls which nodes can connect. A shared server's node identity does not distinguish its Unix users; prefer per-user SSH sockets for that case. Setting `tailscale` to false stops the dedicated socket after restart; saved forwarding remains inactive until it is enabled again.
+`passlet approver doctor` checks Tailscale status, the loopback listener, and Serve forwarding. It explains missing or mismatched configuration without changing it. Run `passlet doctor` on the Agent to verify end-to-end connectivity and authentication.
+
+Disabling Tailscale stops the loopback listener after restart. The saved Serve route remains but cannot reach Passlet. To remove it, first verify it still belongs to Passlet, then use `tailscale serve --tcp=17400 off`.
 
 ## Diagnostics
 

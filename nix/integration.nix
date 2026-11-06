@@ -101,6 +101,9 @@ in pkgs.testers.runNixOSTest {
     def as_user(user, command):
         return "su - " + user + " -c " + shlex.quote(command)
 
+    for user in ("alice", "bob"):
+        cruncher.succeed(as_user(user, "PASSLET_VM_ROLE=configure ${fixture}"))
+
     def request(user, repo, name, permission="write"):
         return as_user(user, f"passlet request --endpoint unix:///home/{user}/.local/share/passlet/mac.sock --repos acme/{repo} --permissions contents:{permission} --out /home/{user}/.local/share/passlet/{name}.json")
 
@@ -115,6 +118,17 @@ in pkgs.testers.runNixOSTest {
             cruncher.succeed(f"python3 -c \"import json; d=json.load(open('/home/{user}/.local/share/passlet/write.json')); assert d['user']=='{user}'; assert not any(k in d for k in ['access_token','refresh_token','client_secret'])\"")
         cruncher.fail(as_user("bob", "test -r /home/alice/.local/share/passlet/write.json"))
         cruncher.fail(as_user("bob", "passlet doctor --endpoint unix:///home/alice/.local/share/passlet/mac.sock") + " | grep 'GitHub authorization: valid'")
+
+    with subtest("A different user's key cannot authenticate through Alice's tunnel"):
+        count = "sqlite3 /home/alice/.local/share/passlet/audit.sqlite 'select count(*) from events'"
+        before = alice.succeed(count)
+        cruncher.succeed("cp /home/alice/.config/passlet/agent.pem /home/alice/.config/passlet/agent.pem.saved")
+        try:
+            cruncher.succeed("cat /home/bob/.config/passlet/agent.pem > /home/alice/.config/passlet/agent.pem")
+            cruncher.fail(request("alice", "test-a", "wrong-key"))
+            assert alice.succeed(count) == before, "untrusted key reached the approval handler"
+        finally:
+            cruncher.succeed("cat /home/alice/.config/passlet/agent.pem.saved > /home/alice/.config/passlet/agent.pem && rm /home/alice/.config/passlet/agent.pem.saved")
 
     with subtest("Real Git push and gh access are scoped"):
         cruncher.succeed(execute("alice", "write", "git clone https://github.com/acme/test-a.git /home/alice/checkout"))

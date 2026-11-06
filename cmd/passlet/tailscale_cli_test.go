@@ -84,7 +84,7 @@ func TestTailscaleCliPreservesUnrelatedRoutes(t *testing.T) {
 		return output, nil
 	}
 	for range 2 {
-		if err := ensureTailscale(context.Background(), "/tmp/passlet.sock.tailscale", command); err != nil {
+		if err := ensureTailscale(context.Background(), tailscaleTarget, command); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -98,7 +98,7 @@ func TestTailscaleCliPreservesUnrelatedRoutes(t *testing.T) {
 		t.Fatalf("unrelated route changed or matching route rewritten: %d %s", revision, data)
 	}
 	var result tailscaleServeConfig
-	if err := json.Unmarshal(data, &result); err != nil || !result.forwardsTo("mac.example.ts.net", "/tmp/passlet.sock.tailscale") {
+	if err := json.Unmarshal(data, &result); err != nil || !result.forwardsTo("mac.example.ts.net", tailscaleTarget) {
 		t.Fatalf("unexpected configuration: %s %v", data, err)
 	}
 }

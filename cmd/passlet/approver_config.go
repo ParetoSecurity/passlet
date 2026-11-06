@@ -6,14 +6,33 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"github.com/pelletier/go-toml/v2"
+	"passlet.dev/passlet/internal/passlet"
 )
 
 type approverConfig struct {
-	Ssh       []string `toml:"ssh"`
-	Tailscale bool     `toml:"tailscale"`
+	PrivateKeyFile string `toml:"private_key_file"`
+	Agents         map[string]struct {
+		PublicKey string `toml:"public_key"`
+	} `toml:"agents"`
+	Tailscale bool `toml:"tailscale"`
+}
+
+func (c approverConfig) pairing() (*passlet.Pairing, error) {
+	path := c.PrivateKeyFile
+	if path == "" {
+		path = filepath.Join(passlet.StateDir(), "approver.pem")
+	}
+	key, err := passlet.LoadOrCreatePairingKey(path, filepath.Join(passlet.StateDir(), "approver.pub"))
+	if err != nil {
+		return nil, err
+	}
+	agents := make(map[string]string)
+	for name, agent := range c.Agents {
+		agents[name] = agent.PublicKey
+	}
+	return passlet.NewPairing(key, agents)
 }
 
 // Homebrew owns the LaunchAgent; user settings stay outside its managed plist.
@@ -34,23 +53,15 @@ func readApproverConfig(path string) (approverConfig, error) {
 		return approverConfig{}, errors.New("cannot_read_approver_config")
 	}
 	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, 4097))
+	data, err := io.ReadAll(io.LimitReader(file, 65537))
 	if err != nil {
 		return approverConfig{}, errors.New("cannot_read_approver_config")
 	}
 	var config approverConfig
 	decoder := toml.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if len(data) > 4096 || decoder.Decode(&config) != nil {
-		return approverConfig{}, errors.New("invalid_approver_config_use_tailscale_and_ssh_labels")
-	}
-	label := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
-	seen := make(map[string]bool)
-	for _, name := range config.Ssh {
-		if !label.MatchString(name) || seen[name] {
-			return approverConfig{}, errors.New("ssh_labels_must_be_unique_lowercase_names_up_to_32_characters_using_letters_digits_and_hyphens")
-		}
-		seen[name] = true
+	if len(data) > 65536 || decoder.Decode(&config) != nil {
+		return approverConfig{}, errors.New("invalid_approver_configuration")
 	}
 	return config, nil
 }

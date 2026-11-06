@@ -78,6 +78,7 @@ func TestConnectFeatures(t *testing.T) {
 					}
 					_, _ = w.Write([]byte(`{"status":"ready"}`))
 				})}
+				listener = pairedFixture(t, server, listener)
 				go func() { _ = server.Serve(listener) }()
 				endpoint = "unix://" + socket
 				return nil

@@ -18,7 +18,8 @@ let
         home.username = "alice";
         home.homeDirectory = if platformPkgs.stdenv.hostPlatform.isDarwin then "/Users/alice" else "/home/alice";
         home.stateVersion = "25.05";
-        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; service.ssh = if tailscale then [ "cruncher" ] else [ ]; }
+        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; service.agents."alice@cruncher".publicKey = "fixture-agent-key";
+          agent = { endpoint = "https://alice.example.ts.net:17400"; approverPublicKey = "fixture-approver-key"; }; }
           // lib.optionalAttrs (service != null) { service.enable = service; };
       } ];
     }).config;
@@ -45,8 +46,12 @@ assert lib.hasInfix "<integer>63</integer>" plist;
 assert lib.hasInfix "<string>/usr/bin:/bin</string>" plist;
 assert !(lib.hasInfix "/bin/sh" plist);
 assert !(lib.hasInfix "--tailscale" plist);
-assert toString mac.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { ssh = [ ]; tailscale = false; });
-assert toString tailscale.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { ssh = [ "cruncher" ]; tailscale = true; });
+assert toString mac.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { private_key_file = "/Users/alice/.local/share/passlet/approver.pem"; agents."alice@cruncher".public_key = "fixture-agent-key"; tailscale = false; });
+assert toString tailscale.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { private_key_file = "/Users/alice/.local/share/passlet/approver.pem"; agents."alice@cruncher".public_key = "fixture-agent-key"; tailscale = true; });
+assert linux.xdg.configFile."passlet/endpoint".text == "https://alice.example.ts.net:17400\n";
+assert toString linux.xdg.configFile."passlet/agent.toml".source == toString (((import pkgs.path { system = "x86_64-linux"; }).formats.toml { }).generate "passlet-agent.toml" {
+  private_key_file = "/home/alice/.local/share/passlet/agent.pem"; approver_public_key = "fixture-approver-key";
+});
 assert lib.hasInfix "<key>PassletConfiguration</key>" plist;
 assert plist != tailscale.programs.passlet.service.plist.text;
 assert builtins.elem "linkGeneration" mac.home.activation.passletAgent.after;

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -86,6 +87,10 @@ func approver(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	pairing, err := config.pairing()
+	if err != nil {
+		return err
+	}
 	l, err := passlet.ListenUnix(socket)
 	if err != nil {
 		return err
@@ -97,37 +102,28 @@ func approver(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = a.Close() }()
 	listeners := []net.Listener{l}
-	for _, label := range config.Ssh {
-		path := filepath.Join(filepath.Dir(socket), "ssh-"+label+".sock")
-		listener, err := passlet.ListenUnix(path)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = listener.Close() }()
-		listeners = append(listeners, &passlet.SshListener{Listener: listener, Label: label})
-	}
 	if config.Tailscale {
-		t, err := passlet.ListenUnix(tailscaleSocket(socket))
+		t, err := net.Listen("tcp4", tailscaleBackend)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = t.Close() }()
-		if err := ensureTailscale(ctx, tailscaleSocket(socket), overviewOutput); err != nil {
+		if err := ensureTailscale(ctx, tailscaleTarget, overviewOutput); err != nil {
 			return err
 		}
-		listeners = append(listeners, &passlet.TailscaleListener{Listener: t})
+		listeners = append(listeners, t)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	handler := passlet.NewServer(passlet.NativeHelper{Path: *helper}, passlet.NewGitHub(), a)
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 125 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, BaseContext: func(net.Listener) context.Context { return ctx }, ConnContext: passlet.ConnectionContext}
+	server := &http.Server{Handler: pairing.Handler(handler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 125 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, BaseContext: func(net.Listener) context.Context { return ctx }}
 	results := make(chan error, len(listeners))
 	for _, listener := range listeners {
-		go func() { results <- server.Serve(listener) }()
+		go func() { results <- server.Serve(tls.NewListener(listener, pairing.ServerConfig())) }()
 	}
 	fmt.Fprintln(os.Stderr, "Passlet listening on", socket)
 	if config.Tailscale {
-		fmt.Fprintln(os.Stderr, "Tailscale Serve socket:", tailscaleSocket(socket))
+		fmt.Fprintln(os.Stderr, "Tailscale Serve backend:", tailscaleTarget)
 	}
 	select {
 	case err = <-results: // coverage-ignore: Listeners are owned here; unexpected accept failure requires an OS fault.

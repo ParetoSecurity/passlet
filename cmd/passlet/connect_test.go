@@ -37,6 +37,7 @@ func endpointTestServer(t *testing.T) string {
 			w.WriteHeader(404)
 		}
 	})}
+	listener = pairedFixture(t, server, listener)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Close() })
 	return "unix://" + socket
@@ -62,7 +63,7 @@ func TestConnectCannotSave(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	endpoint := endpointTestServer(t)
-	if err := os.WriteFile(filepath.Join(home, ".config"), nil, 0600); err != nil {
+	if err := os.Mkdir(filepath.Join(home, ".config", "passlet", "endpoint"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	out, err := invokeCLI(t, "", "connect", endpoint)

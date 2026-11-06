@@ -109,7 +109,8 @@ func TestAccessFeatures(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				server = &http.Server{Handler: handler, ConnContext: passlet.ConnectionContext}
+				server = &http.Server{Handler: handler}
+				listener = pairedFixture(t, server, listener)
 				go func(srv *http.Server) { _ = srv.Serve(listener) }(server)
 				child := `#!/bin/sh
 : > "$HOME/child-started"

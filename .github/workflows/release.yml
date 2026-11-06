@@ -19,17 +19,20 @@ jobs:
       version: ${{ steps.verify.outputs.version }}
       prepare: ${{ steps.verify.outputs.prepare }}
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
           fetch-depth: 0
           persist-credentials: false
       - id: verify
-        name: Verify release tag points to main before signing
+        name: Verify preparation PR or published source
         env:
           PASSLET_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
           import os, re
@@ -39,7 +42,13 @@ jobs:
           print(f"prepare={'true' if match[2] else 'false'}")
           PYTHON
           sha=$(git rev-parse "refs/tags/$PASSLET_TAG^{commit}")
-          git merge-base --is-ancestor "$sha" origin/main
+          if [[ "$PASSLET_TAG" == *-prepare ]]; then
+            gh api "repos/$GH_REPO/commits/$sha/pulls" > "$RUNNER_TEMP/preparation-prs.json"
+            gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$sha&event=pull_request&per_page=1" > "$RUNNER_TEMP/preparation-ci.json"
+            python3 scripts/verify-preparation.py "$sha" "$RUNNER_TEMP/preparation-prs.json" "$RUNNER_TEMP/preparation-ci.json"
+          else
+            git merge-base --is-ancestor "$sha" origin/main
+          fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
   prepare:
     if: needs.verify.outputs.prepare == 'true'

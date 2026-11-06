@@ -1,6 +1,6 @@
 ---
 name: release-passlet
-description: Prepare and publish a Passlet release, validate signed artifacts, and deliver the Homebrew/Nix package metadata PR. Use for releasing Passlet or checking release readiness, not for installing it on a user's machine.
+description: Prepare and publish a Passlet release, validate signed artifacts, and review code and package metadata in one release PR. Use for releasing Passlet or checking release readiness, not for installing it on a user's machine.
 ---
 
 # Release Passlet
@@ -18,7 +18,7 @@ Read these files from the release candidate, rather than relying on historical r
 - `.github/workflows/release.yml` and `scripts/release.sh`: actual trigger, signing, asset creation, and upload behavior.
 - `packaging/README.md` and `scripts/package-release.py`: package metadata generation and validation.
 
-Use `skills/passlet/SKILL.md` for authenticated GitHub operations. Reuse a valid grant for `ParetoSecurity/passlet`. Release inspection needs `contents:read`; workflow status and artifact downloads need `actions:read`. Pushing preparation/final tags and package metadata need `contents:write`; opening the metadata PR needs `pull_requests:write`. Request only permissions required by the authorized work. Do not request workflow write access unless an authorized recovery operation actually requires it.
+Use `skills/passlet/SKILL.md` for authenticated GitHub operations. Reuse a valid grant for `ParetoSecurity/passlet`. Release inspection needs `contents:read`; workflow status and artifact downloads need `actions:read`. Pushing preparation/final tags and package metadata need `contents:write`; opening the metadata PR needs `pull_requests:write`. Request only permissions required by the authorized work. Request workflow write access only when the authorized release PR changes workflows or an authorized recovery operation requires it.
 
 Pass all authenticated `gh` and Git operations through `passlet exec --grant <grant-path> -- ...`. Never use ambient credentials as a fallback. Keep tokens and signing secrets out of logs and generated files.
 
@@ -26,12 +26,12 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
-- [ ] Verify the candidate is on `origin/main` and its required CI checks passed. Confirm it includes the intended Approver, Agent, and package definitions.
+- [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Verify the candidate is its current head and its latest PR CI run passed. Confirm it includes the intended Approver, Agent, and package definitions.
 - [ ] Review release notes against changes since the previous release. Describe supported behavior and migrations accurately. Store multiline notes in a file for `gh --notes-file`.
 - [ ] Run applicable checks in `nix-shell`: `make check-all`, `nix-build nix/packaging-tests.nix --no-out-link`, and the relevant macOS/integration checks. Existing successful CI for the exact candidate can supply platform checks that cannot run locally. Distinguish passed, failed, and unperformed checks.
 - [ ] Verify production signing and manual validation prerequisites in `docs/RELEASING.md` and `docs/VALIDATION.md`. Do not treat preview signatures, fixtures, or older releases as proof of production Keychain behavior.
 
-The Release workflow has two phases. `vX.Y.Z-prepare` builds and signs artifacts from main without publishing. After its generated package metadata is reviewed and merged, `vX.Y.Z` publishes those exact prepared artifacts. Both tag commits must be ancestors of main and both phases retain the protected `release` environment. Never move tags, rebuild approved artifacts during publication, or publish an empty release.
+The Release workflow has two phases. `vX.Y.Z-prepare` builds and signs the CI-verified head of an open same-repository release PR without publishing. After its generated package metadata is added to that same PR, reviewed, and squash-merged, `vX.Y.Z` publishes those exact prepared artifacts. Preparation checks the exact PR head and passing PR CI; the final tag must be on main. Both phases retain the protected `release` environment. Review the exact preparation commit before approving signing, especially changes to workflows and build scripts. Never move tags, rebuild approved artifacts during publication, or publish an empty release.
 
 ## 2. Prepare signed artifacts
 
@@ -51,20 +51,20 @@ Alternatively, use `env -u DEVELOPER_DIR /usr/bin/xcrun stapler validate /absolu
 
 For a failed run, report the failing stage and any draft or published assets. If the release is already immutable, use a newly authorized version; do not disable immutability or try to reuse the tag. Stop before destructive recovery. Uploads intentionally refuse overwrites, so rerunning a partially uploaded release may fail again. Do not delete assets, retag, or loop retries without an explicit recovery decision.
 
-## 3. Review and merge package metadata
+## 3. Add metadata to the release PR
 
 - [ ] Inspect all five generated files: `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. Verify exact archive URLs, hashes, matching versions, and the preparation run ID and SHA.
-- [ ] Copy them onto a branch based on current `origin/main`. If regeneration is necessary, run `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>` in the development shell. Never invent provenance or hashes.
+- [ ] Copy them onto the existing release PR branch. Do not open a second metadata PR. If regeneration is necessary, run `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>` in the development shell. Never invent provenance or hashes.
 - [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Before publication, the final archive URLs are not public, so use the downloaded signed archives for installation validation. Never replace the maintainer's working installation or credentials as an implicit test.
-- [ ] Open a draft package-update PR following repository conventions. State that it prepares this release's package and plugin versions. Do not merge without authorization.
-- [ ] After merge, verify only these five generated files differ between the prepared source and intended final tag commit. Other source changes require a new preparation, never an unverified rebuild or moved tag.
+- [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical. Have the code and generated metadata reviewed, then squash-merge only with authorization.
+- [ ] After merge, verify only these five generated files differ between the prepared source tree and intended final tag tree. The preparation SHA need not be an ancestor after a squash merge. Other source changes require a new preparation, never an unverified rebuild or moved tag.
 
 The metadata URLs refer to the pending release. Merge immediately before final publication; do not deploy this intermediate main revision while its URLs are unavailable.
 
 ## 4. Publish the final tag
 
-- [ ] With publication authorized and reviewed metadata merged, push the unused `vX.Y.Z` tag at the metadata commit on main. Do not create the release manually or reuse the preparation tag as the final tag.
-- [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, source ancestry, absence of unprepared code changes, checksums, and exact regenerated metadata before uploading anything.
+- [ ] With publication authorized and the reviewed release PR squash-merged, push the unused `vX.Y.Z` tag at that merged commit on main. Do not create the release manually or reuse the preparation tag as the final tag.
+- [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata, checksums, and exact regenerated metadata before uploading anything.
 - [ ] Monitor draft creation, upload, and publication. This phase downloads the already signed artifacts and never rebuilds them. If preparation artifacts have expired, stop and prepare again with freshly reviewed metadata. If a draft or upload fails, inspect it before choosing recovery. Do not delete artifacts or blindly retry a partially uploaded release.
 - [ ] Verify the published three archives and checksum file match the approved preparation artifacts. Apply the reviewed notes with `gh release edit <tag> --notes-file <file>` through the scoped grant.
 
@@ -73,6 +73,6 @@ The metadata URLs refer to the pending release. Merge immediately before final p
 - [ ] Verify the final tag and main contain the intended package metadata and both plugin manifests at the release version.
 - [ ] Build the real published package with `nix build .#packages.aarch64-darwin.default --no-link` (or the corresponding supported system). Verify `passlet --version` and that the macOS bundle retains its signature. Verify Linux Agent behavior and applicable production service lifecycle checks, distinguishing tests not run.
 - [ ] Confirm the final `github:ParetoSecurity/passlet/vX.Y.Z` input resolves to the same release version. Consumers may pin this tag and update their lock file. Do not activate user machines unless requested.
-- [ ] Report preparation and final SHAs, release URL, workflow results, package PR state, checks performed, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
+- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
 
 If work stops awaiting environment approval, metadata review, or manual validation, preserve those exact next steps.

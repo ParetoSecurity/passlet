@@ -1,6 +1,6 @@
 cask "passlet" do
-  version "0.4.1"
-  sha256 "1ee490fe75d36d8c49608ec14d7563edfea3a26b4cd97edbc073a4b3a5e75a13"
+  version "0.4.2"
+  sha256 "0d44df0f557233cac5dd247311f0cddf160388b28e3633b5f2d8a5303bd908bf"
 
   url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_universal.zip"
   name "Passlet"

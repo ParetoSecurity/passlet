@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import copy
 import hashlib
 import importlib.util
 import json
@@ -12,6 +13,52 @@ ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("verify_release", ROOT / "scripts/verify-release.py")
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+spec = importlib.util.spec_from_file_location("verify_preparation", ROOT / "scripts/verify-preparation.py")
+preparation = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(preparation)
+
+
+class PreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "a" * 40
+        self.pr = {
+            "state": "open",
+            "base": {"ref": "main", "repo": {"full_name": preparation.REPOSITORY}},
+            "head": {"sha": self.sha, "repo": {"full_name": preparation.REPOSITORY}},
+        }
+        self.run = {"head_sha": self.sha, "path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed", "conclusion": "success"}
+
+    def test_accepts_exact_pr_head_with_passing_ci(self):
+        preparation.verify(self.sha, [self.pr], {"workflow_runs": [self.run]})
+
+    def test_rejects_forks_closed_prs_wrong_bases_and_stale_heads(self):
+        for path, value in [
+            (("state",), "closed"),
+            (("head", "repo"), None),
+            (("head", "repo", "full_name"), "someone/passlet"),
+            (("head", "sha"), "b" * 40),
+            (("base", "ref"), "another-branch"),
+            (("base", "repo", "full_name"), "someone/passlet"),
+        ]:
+            with self.subTest(field=path):
+                pr = copy.deepcopy(self.pr)
+                target = pr
+                for name in path[:-1]:
+                    target = target[name]
+                target[path[-1]] = value
+                with self.assertRaisesRegex(ValueError, "open PR"):
+                    preparation.verify(self.sha, [pr], {"workflow_runs": [self.run]})
+        with self.assertRaisesRegex(ValueError, "open PR"):
+            preparation.verify(self.sha, [], {"workflow_runs": [self.run]})
+
+    def test_rejects_missing_failed_pending_or_unrelated_ci(self):
+        for field, value in [("head_sha", "b" * 40), ("path", ".github/workflows/other.yml"), ("event", "push"), ("status", "in_progress"), ("conclusion", "failure")]:
+            with self.subTest(field=field):
+                run = dict(self.run, **{field: value})
+                with self.assertRaisesRegex(ValueError, "latest PR CI"):
+                    preparation.verify(self.sha, [self.pr], {"workflow_runs": [run, self.run]})
+        with self.assertRaisesRegex(ValueError, "latest PR CI"):
+            preparation.verify(self.sha, [self.pr], {"workflow_runs": []})
 
 
 class PublicationTests(unittest.TestCase):
@@ -27,11 +74,14 @@ class PublicationTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
         shutil.copytree(ROOT / "packaging/homebrew", self.root / "packaging/homebrew")
-        (self.root / "app.go").write_text("reviewed source\n")
+        (self.root / "app.go").write_text("base source\n")
         self.git("init", "-q")
         self.git("config", "user.email", "fixture@example.com")
         self.git("config", "user.name", "Fixture")
         self.git("config", "core.hooksPath", "/dev/null")
+        self.commit()
+        self.base = self.git("rev-parse", "HEAD").strip()
+        (self.root / "app.go").write_text("reviewed source\n")
         self.commit()
         source = self.git("rev-parse", "HEAD").strip()
         self.run = {
@@ -66,6 +116,20 @@ class PublicationTests(unittest.TestCase):
 
     def test_final_tag_matches_prepared_assets_and_both_plugins(self):
         self.verify()
+
+    def test_accepts_squashed_source_and_metadata_without_ancestry(self):
+        self.git("reset", "--soft", self.base)
+        self.commit()
+        result = subprocess.run(["git", "merge-base", "--is-ancestor", self.run["head_sha"], "HEAD"], cwd=self.root)
+        self.assertEqual(result.returncode, 1)
+        self.verify()
+
+    def test_rejects_unprepared_changes_in_squash(self):
+        self.git("reset", "--soft", self.base)
+        (self.root / "app.go").write_text("unprepared squash resolution\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "Source changed"):
+            self.verify()
 
     def test_rejects_wrong_or_unsuccessful_workflow(self):
         for key, value in {

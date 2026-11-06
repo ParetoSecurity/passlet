@@ -4,15 +4,20 @@ Homebrew and Nix/Home Manager are the supported installation paths. They own ser
 
 ## Release metadata
 
-After signing, notarization and archive creation, `scripts/release.sh` generates `build/package-updates/`. The tag-triggered release workflow uploads this directory as `passlet-package-updates` before publishing the draft GitHub release. It uploads signed assets while the release is still a draft, so release immutability can remain enabled. It contains `Casks/passlet.rb`, `Formula/passlet-agent.rb` and `packaging/release.json`, pinned to the exact uploaded archives and SHA-256 digests, plus `plugin.json` and `.claude-plugin/plugin.json` with the same release version.
+The `vX.Y.Z-prepare` workflow builds and signs the release, then uploads `passlet-release-assets` and `passlet-package-updates`. The latter contains `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`, all generated from the same archives. The release JSON records the preparation run ID and source SHA, and both plugin manifests carry the release version.
 
-Open a package-update PR containing all five generated files after the artifacts have been published. Merge it through the repository's normal review requirements. Do not use `latest`, `:no_check`, invented hashes, or metadata for an unpublished release. The first CLI-only release must complete this step before the installation commands are available. Package definitions are intentionally not generated from unsigned CI previews.
+Download the artifacts from the successful preparation run, verify the signed archives, and open a package-update PR containing all five generated files. These URLs deliberately refer to the pending release. Merge the reviewed metadata immediately before pushing the final `vX.Y.Z` tag. Do not deploy the intermediate main revision before publication, because its new artifact URLs are not public yet.
 
-For a local release build, prepare the same update with:
+Publication downloads the recorded preparation artifacts, verifies the source and checksums, and regenerates the metadata to check exact equality with the final tag. It then uploads and publishes the immutable release. Do not rebuild between preparation and publication, use `latest` or `:no_check`, invent hashes, or change either tag. A final release tag therefore contains matching Nix/Homebrew metadata and plugin versions.
+
+For local generation from downloaded preparation archives, preserve the preparation identity:
 
 ```sh
-python3 scripts/package-release.py "$PASSLET_VERSION" dist build/package-updates
+python3 scripts/package-release.py "$PASSLET_VERSION" dist build/package-updates \
+  --run-id "$PREPARATION_RUN_ID" --source-sha "$PREPARATION_SHA"
 ```
+
+Omitting the preparation arguments is useful for local packaging fixtures but produces metadata that cannot be published by the release workflow.
 
 ## Homebrew
 

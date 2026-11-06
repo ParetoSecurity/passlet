@@ -7,7 +7,7 @@ Use the repository-local [release-passlet skill](../.agents/skills/release-passl
 Following pareto-mac, distribution uses Developer ID Application signing,
 hardened runtime, notarization and stapling. Following canario/trak/vend and
 pareto-linux, CI uses pinned actions, minimal job permissions, concurrency
-control, tests, coverage artifacts, and dependency update PRs. Pushing a version tag triggers the release workflow. It builds and signs the artifacts, creates a draft release, uploads the complete asset set and package metadata, then publishes the release. Keep release immutability enabled.
+control, tests, coverage artifacts, and dependency update PRs. Pushing `vX.Y.Z-prepare` builds and signs the artifacts without publishing. Merge the generated package metadata, then push `vX.Y.Z` at that commit to publish the prepared artifacts. The final tag includes the matching Nix package metadata and both plugin versions. Keep release immutability enabled.
 
 Do not copy product-specific Fly deployments, Setapp distribution, Sentry symbol
 uploads, or automatic dependency merging into this CLI project.
@@ -50,16 +50,19 @@ the existing prototype identity. The icon source is `assets/passlet.png`;
 
 ## Prepare and validate a release
 
-After CI passes on main, push an unused `vX.Y.Z` tag pointing to the exact reviewed commit. Do not publish an empty release in the GitHub UI: immutable releases cannot accept assets after publication.
+After CI passes on main, push an unused preparation tag such as `v0.4.1-prepare` at the exact reviewed commit. Both preparation and final publication require approval under the existing `release` environment, restricted to `v*` tags. No signing credentials are available to PR workflows.
 
-The Release workflow verifies that the tag points to a commit on main and passes that exact SHA to the signing job. Its verification job uses the runner's Git and Python without loading the development environment. GitHub pauses signing for approval under the `release` environment rules before making credentials available. The signing job uses the pinned Nix environment, repeats tests, builds universal macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums.
+Preparation runs the pinned tests, builds universal macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
 
-After checking that the tag still resolves to the verified SHA, the workflow creates a draft release with generated notes, attaches all signed assets, uploads the `passlet-package-updates` workflow artifact, and publishes the draft. Publication makes the assets and tag immutable. Existing releases and assets are not overwritten. If a run fails after draft creation, inspect the draft and uploaded assets before choosing a recovery; a blind rerun will not replace them.
+Download both artifacts from that successful run. Verify checksums and production signatures, then open a package-update PR containing `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. The release JSON identifies the exact preparation run and source SHA. Do not edit generated files, invent checksums, or bump plugin versions separately.
 
-For a published release with missing assets, use a new version. Do not move or reuse an immutable tag or disable immutability to work around the failure. Release titles and notes can still be edited after publication.
+After reviewing and merging the metadata PR, push the final `vX.Y.Z` tag at its reviewed commit on main. Only those five generated files may differ from the prepared source. If other source changes have landed, prepare a new release rather than publishing binaries for different code. Merge metadata immediately before final publication: consumers following main can see the new package URLs before the assets are public, so do not leave this intermediate state deployed.
 
-Verify the uploaded release artifacts and checksums, then
-publish the generated Homebrew/Nix package metadata and both plugin manifests in one reviewed PR after verifying the assets are available. The release workflow uploads the `passlet-package-updates` artifact for this purpose. See [package maintenance](../packaging/README.md). End users install through Homebrew or Nix/Home Manager, not by extracting archives manually.
+The publication job downloads assets from the recorded preparation run. It checks that the run succeeded in this repository's Release workflow, matches the preparation tag and source SHA, and that the tagged source has no unprepared changes. It verifies the archive checksums and regenerates all five metadata files, requiring exact matches with the final tag. Only then does it create a draft release, upload the three archives and checksum file, and publish. It never rebuilds the approved artifacts.
+
+Do not publish an empty release in the GitHub UI. Publication makes the assets and final tag immutable. Never move either tag or overwrite release assets. If a run fails after draft creation, inspect its uploaded assets before choosing recovery; a blind rerun cannot replace existing assets. Expired preparation artifacts require a new preparation and a freshly reviewed metadata PR before publication. Release titles and notes can still be edited after publication.
+
+Consumers can pin `github:ParetoSecurity/passlet/vX.Y.Z` after publication: the final tag contains the package hashes and plugin versions for that release. See [package maintenance](../packaging/README.md).
 
 Keep the CLI and helper together inside the signed bundle.
 `PassletHelper` stays the main executable because macOS accepts the Keychain
@@ -73,7 +76,7 @@ architectures on actual hardware where possible; cross-compilation is not a
 runtime test. Confirm Mac-offline use after token delivery.
 
 Run production signing/Keychain validation before announcing the release.
-Pushing a version tag is the explicit trigger; signing, draft creation, asset attachment, and publication then run automatically. Keep
+Preparation and publication have separate tag triggers and environment approvals; publication reuses the verified signed artifacts. Keep
 GitHub parent credentials, refresh tokens, and app client secrets out of all CI
 secrets, artifacts, logs, and screenshots.
 

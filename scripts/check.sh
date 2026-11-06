@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 mkdir -p build
 python3 scripts/test-app-metadata.py
 python3 scripts/test-packaging.py
+python3 scripts/test-release.py
 python3 scripts/test-agent-conventions.py
 ./scripts/go.sh mod verify
 golangci-lint run ./assets/... ./cmd/... ./internal/...

@@ -3,10 +3,12 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,6 +18,58 @@ spec.loader.exec_module(release)
 spec = importlib.util.spec_from_file_location("verify_preparation", ROOT / "scripts/verify-preparation.py")
 preparation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preparation)
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        self.notes = self.root / "docs/releases/v1.2.3.md"
+        self.notes.parent.mkdir(parents=True)
+        self.env = dict(os.environ, PASSLET_TAG="v1.2.3", RUNNER_TEMP=str(self.root), VERIFIED_SHA="a" * 40)
+
+    def test_both_phases_require_nonempty_reviewed_notes(self):
+        start = self.workflow.index('          notes="docs/releases/')
+        end = self.workflow.index('          sha=$(git rev-parse', start)
+        script = textwrap.dedent(self.workflow[start:end])
+        for tag in ["v1.2.3", "v1.2.3-prepare"]:
+            for contents in [None, "", "User-facing changes\n"]:
+                with self.subTest(tag=tag, contents=contents):
+                    self.notes.unlink(missing_ok=True)
+                    if contents is not None:
+                        self.notes.write_text(contents)
+                    result = subprocess.run(["bash", "-euc", script], cwd=self.root, env=dict(self.env, PASSLET_TAG=tag), capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, bool(contents))
+
+    def test_notes_are_set_when_creating_the_draft(self):
+        self.notes.write_text("Reviewed changes and upgrade instructions.\n")
+        binary = self.root / "bin"
+        binary.mkdir()
+        (binary / "git").write_text('#!/bin/sh\nif [ "$1" = rev-parse ]; then printf "%s\\n" "$VERIFIED_SHA"; fi\n')
+        (binary / "gh").write_text("#!/usr/bin/env python3\n" + textwrap.dedent('''
+            import json, pathlib, sys
+            args = sys.argv[1:]
+            event = {"args": args}
+            if args[:2] == ["release", "create"]:
+                event["notes"] = pathlib.Path(args[args.index("--notes-file") + 1]).read_text()
+            with open("events.jsonl", "a") as stream:
+                stream.write(json.dumps(event) + "\\n")
+        '''))
+        for path in binary.iterdir():
+            path.chmod(0o700)
+        prepared = self.root / "prepared"
+        prepared.mkdir()
+        (prepared / "fixture.zip").write_text("signed fixture")
+        section = self.workflow.split("      - name: Publish the verified release\n", 1)[1]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        subprocess.run(["bash", "-euc", script], cwd=self.root, env=dict(self.env, PATH=str(binary) + os.pathsep + os.environ["PATH"]), check=True)
+        events = [json.loads(line) for line in (self.root / "events.jsonl").read_text().splitlines()]
+        self.assertEqual([e["args"][:2] for e in events], [["release", "create"], ["release", "upload"], ["release", "edit"]])
+        self.assertEqual(events[0]["notes"], self.notes.read_text())
+        self.assertIn("--draft", events[0]["args"])
+        self.assertIn("--draft=false", events[-1]["args"])
 
 
 class PreparationTests(unittest.TestCase):

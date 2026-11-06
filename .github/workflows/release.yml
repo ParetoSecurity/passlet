@@ -41,6 +41,11 @@ jobs:
           print(f"version={match[1]}")
           print(f"prepare={'true' if match[2] else 'false'}")
           PYTHON
+          notes="docs/releases/${PASSLET_TAG%-prepare}.md"
+          if ! test -s "$notes"; then
+            echo "Missing release notes: $notes" >&2
+            exit 1
+          fi
           sha=$(git rev-parse "refs/tags/$PASSLET_TAG^{commit}")
           if [[ "$PASSLET_TAG" == *-prepare ]]; then
             gh api "repos/$GH_REPO/commits/$sha/pulls" > "$RUNNER_TEMP/preparation-prs.json"
@@ -155,6 +160,6 @@ jobs:
         run: |
           git fetch --no-tags origin "refs/tags/$PASSLET_TAG"
           test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$VERIFIED_SHA"
-          gh release create "$PASSLET_TAG" --draft --verify-tag --title "$PASSLET_TAG" --generate-notes
+          gh release create "$PASSLET_TAG" --draft --verify-tag --title "$PASSLET_TAG" --notes-file "docs/releases/$PASSLET_TAG.md"
           gh release upload "$PASSLET_TAG" "$RUNNER_TEMP/prepared/"*
           gh release edit "$PASSLET_TAG" --draft=false

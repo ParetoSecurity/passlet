@@ -27,7 +27,7 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
 - [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Verify the candidate is its current head and its latest PR CI run passed. Confirm it includes the intended Approver, Agent, and package definitions.
-- [ ] Review release notes against changes since the previous release. Describe supported behavior and migrations accurately. Store multiline notes in a file for `gh --notes-file`.
+- [ ] Write concise, user-facing release notes from changes since the previous published release. Explain what changed for users, including relevant migrations, instead of listing PR titles or internal workflow steps. Include a full changelog link. Commit the notes to `docs/releases/vX.Y.Z.md` in the release PR before pushing the preparation tag. Both workflow phases require this nonempty file, and source verification prevents changing it after preparation.
 - [ ] Run applicable checks in `nix-shell`: `make check-all`, `nix-build nix/packaging-tests.nix --no-out-link`, and the relevant macOS/integration checks. Existing successful CI for the exact candidate can supply platform checks that cannot run locally. Distinguish passed, failed, and unperformed checks.
 - [ ] Verify production signing and manual validation prerequisites in `docs/RELEASING.md` and `docs/VALIDATION.md`. Do not treat preview signatures, fixtures, or older releases as proof of production Keychain behavior.
 
@@ -66,7 +66,7 @@ The metadata URLs refer to the pending release. Merge immediately before final p
 - [ ] With publication authorized and the reviewed release PR squash-merged, push the unused `vX.Y.Z` tag at that merged commit on main. Do not create the release manually or reuse the preparation tag as the final tag.
 - [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata, checksums, and exact regenerated metadata before uploading anything.
 - [ ] Monitor draft creation, upload, and publication. This phase downloads the already signed artifacts and never rebuilds them. If preparation artifacts have expired, stop and prepare again with freshly reviewed metadata. If a draft or upload fails, inspect it before choosing recovery. Do not delete artifacts or blindly retry a partially uploaded release.
-- [ ] Verify the published three archives and checksum file match the approved preparation artifacts. Apply the reviewed notes with `gh release edit <tag> --notes-file <file>` through the scoped grant.
+- [ ] Verify the published three archives and checksum file match the approved preparation artifacts. The workflow sets the reviewed notes from `docs/releases/vX.Y.Z.md` when creating the draft, before uploading assets and publishing the immutable release. Read back the published notes and compare them with that file.
 
 ## 5. Verify availability and hand off
 

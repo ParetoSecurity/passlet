@@ -1,18 +1,18 @@
 class PassletAgent < Formula
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"
-  version "0.4.0"
+  version "0.4.1"
   license "MIT"
 
   depends_on :linux
 
   on_arm do
     url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_linux_arm64.tar.gz"
-    sha256 "048a96e268b2fc4e29080d3d7b183a9a7e6e148c2e4cc91402c4cffb0fa2203a"
+    sha256 "3ec7bae118d8b020640a5332f9aa78ed26a9e8ce86d6e88f4ec982001ac50dbb"
   end
   on_intel do
     url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_linux_amd64.tar.gz"
-    sha256 "088163021d0bf4a0456ab89ab570655668280169abc75f5b075307f379d2908e"
+    sha256 "4e3b74b78a55976f1a852208c86795b62124784672f6d5d6d9280a73c11df583"
   end
 
   def install

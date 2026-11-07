@@ -247,9 +247,6 @@ Feature: Diagnose Approver access
 
         ✓ Local socket: listening
         ✓ Tailscale: listening
-
-        On Tailscale agents, run this once:
-          passlet pair --endpoint https://alice-mac.example.ts.net:17400 --code <code>
         """
 
     Scenario: Configured Tailscale listener is unavailable

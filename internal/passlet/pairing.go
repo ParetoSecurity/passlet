@@ -242,6 +242,9 @@ func authenticationFailure(err error) error {
 	if errors.As(err, &auth) {
 		return auth
 	}
+	if CodexSandboxBlocksNetwork() {
+		return errors.New(CodexSandboxHint)
+	}
 	return errors.New("approver_unavailable_or_connection_lost")
 }
 

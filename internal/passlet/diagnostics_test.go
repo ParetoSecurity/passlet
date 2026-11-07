@@ -135,6 +135,21 @@ func TestProtectedAccountIdentity(t *testing.T) {
 	}
 }
 
+func TestHealthExplainsCodexSandbox(t *testing.T) {
+	t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+	err := Health(context.Background(), "unix://"+filepath.Join(t.TempDir(), "missing.sock"))
+	if err == nil || err.Error() != CodexSandboxHint {
+		t.Fatal(err)
+	}
+}
+
+func TestRequestExplainsCodexSandbox(t *testing.T) {
+	t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+	if err := authenticationFailure(errors.New("dial failed")); err.Error() != CodexSandboxHint {
+		t.Fatal(err)
+	}
+}
+
 func TestHealthPreservesConnectionFailure(t *testing.T) {
 	err := Health(context.Background(), "unix://"+socketPath(t))
 	if !errors.Is(err, os.ErrNotExist) || err.Error() != "approver_unavailable_check_service_or_SSH_tunnel" {

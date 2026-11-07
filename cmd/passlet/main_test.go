@@ -76,6 +76,25 @@ func TestExecOverridesCredentialsWithoutPersisting(t *testing.T) {
 		t.Fatal("persisted token in global Git config")
 	}
 }
+func TestGitProxyEnv(t *testing.T) {
+	for _, tc := range []struct {
+		proxy, method string
+		want          int
+	}{
+		{"http://user:secret@127.0.0.1:1", "", 1},
+		{"http://127.0.0.1:1", "", 0},
+		{"", "", 0},
+		{"http://user:secret@127.0.0.1:1", "ntlm", 0},
+	} {
+		t.Setenv("https_proxy", "")
+		t.Setenv("HTTPS_PROXY", tc.proxy)
+		t.Setenv("GIT_HTTP_PROXY_AUTHMETHOD", tc.method)
+		if got := gitProxyEnv(); len(got) != tc.want {
+			t.Fatalf("%+v: %v", tc, got)
+		}
+	}
+}
+
 func TestExecRejectsExpiredGrant(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "grant.json")
 	data, _ := json.Marshal(passlet.Grant{Token: "expired", ExpiresAt: time.Now().Add(-time.Hour)})

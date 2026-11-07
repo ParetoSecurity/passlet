@@ -79,6 +79,16 @@ func TestDoctorConnectionHints(t *testing.T) {
 	}
 }
 
+func TestDoctorExplainsCodexSandbox(t *testing.T) {
+	t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+	for _, endpoint := range []string{"unix:///tmp/forwarded.sock", "https://mac.example.ts.net:17400"} {
+		got := doctorConnectionHint(endpoint, fmt.Errorf("connection: %w", syscall.EPERM))
+		if got != passlet.CodexSandboxHint {
+			t.Fatal(got)
+		}
+	}
+}
+
 func TestDoctorFailureMessages(t *testing.T) {
 	for _, tc := range []struct {
 		codes []string

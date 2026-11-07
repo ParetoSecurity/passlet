@@ -58,6 +58,7 @@ Retain the grant file and its private directory after each command, task, and pr
 
 ## Failures and new access
 
+- Codex sandbox blocking the network: this is not a Mac problem. Ask the user to approve running the `passlet` command outside the sandbox, and do not enable sandbox-wide network access to work around it.
 - Mac unavailable, connection lost, or approval timeout: stop requesting. Continue useful local work that needs no token. Tell the user to bring the Mac online and confirm when ready; only then make a new explicit request. There is no queue or automatic retry.
 - Approval denied or cancelled: do not immediately prompt again or try another credential. Explain which work needs access and wait for the user to direct the next step.
 - `approver_busy`: do other work; do not poll or repeatedly request approval.

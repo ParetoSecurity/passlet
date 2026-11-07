@@ -121,6 +121,22 @@ Permit intended devices on TCP 17400 in tailnet policy. Pairing additionally dis
 
 Disabling Tailscale stops the loopback listener after restart. The saved Serve route remains but cannot reach Passlet. To remove it, first verify it still belongs to Passlet, then use `tailscale serve --tcp=17400 off`.
 
+## Agent sandboxes
+
+Codex's `workspace-write` sandbox blocks the network, so Passlet cannot reach the Approver from inside it and says so. Approve running `passlet` outside the sandbox when Codex asks. Setting `sandbox_workspace_write.network_access = true` also works, but it opens the network to every sandboxed command.
+
+Claude Code's sandbox only offers a proxy, which Passlet does not use, so exclude the two commands that talk to the Approver:
+
+```json
+{
+  "sandbox": {
+    "excludedCommands": ["passlet doctor", "passlet request *"]
+  }
+}
+```
+
+A chained command stays sandboxed, so run `passlet request` as its own Bash call, with a grant directory you created under `$TMPDIR` in an earlier call. `passlet exec` works inside the sandbox.
+
 ## Diagnostics
 
 `passlet doctor` checks the selected Approver, requests native approval on its Mac, unlocks Keychain, refreshes authorization when needed, saves rotated credentials, and verifies the GitHub identity. It uses the same approval lock and deadline as credential requests, including when called remotely. It returns a failure for denied approval, invalid credentials, or failed verification, and never issues an agent token. Both the Agent and Approver must support the diagnostic endpoint; an older Approver reports that an update is required.

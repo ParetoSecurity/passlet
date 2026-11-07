@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -29,9 +30,20 @@ func (a AccountInfo) Validate() error {
 	return nil
 }
 
+// CodexSandboxHint explains a connection failure that the Approver's state cannot.
+const CodexSandboxHint = "The Codex sandbox is blocking network access, so Passlet cannot reach your Mac. Run passlet outside the sandbox."
+
+// CodexSandboxBlocksNetwork reports whether Codex has disabled this process's network.
+func CodexSandboxBlocksNetwork() bool {
+	return os.Getenv("CODEX_SANDBOX_NETWORK_DISABLED") == "1"
+}
+
 type healthConnectionError struct{ cause error }
 
 func (e healthConnectionError) Error() string {
+	if CodexSandboxBlocksNetwork() {
+		return CodexSandboxHint
+	}
 	return "approver_unavailable_check_service_or_SSH_tunnel"
 }
 func (e healthConnectionError) Unwrap() error { return e.cause }

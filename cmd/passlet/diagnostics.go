@@ -122,6 +122,9 @@ func doctorConnectionHint(endpoint string, err error) string {
 	if problem := passlet.PairingProblem(err); problem != "" {
 		return problem
 	}
+	if passlet.CodexSandboxBlocksNetwork() {
+		return passlet.CodexSandboxHint
+	}
 	if endpoint == "unix://"+passlet.DefaultSocket() {
 		switch {
 		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ECONNREFUSED):

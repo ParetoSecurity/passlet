@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -184,7 +185,7 @@ Example:
 			env = append(env, e)
 		}
 		env = append(env, "GH_TOKEN="+grant.Token, "GITHUB_TOKEN="+grant.Token, "PASSLET_GIT_TOKEN="+grant.Token, "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=", "GIT_CONFIG_KEY_1=credential.https://github.com.helper", "GIT_CONFIG_VALUE_1="+wrapper)
-		cmd.Env = env
+		cmd.Env = append(env, gitProxyEnv()...)
 		if err = cmd.Run(); err != nil {
 			return errors.New("command_failed")
 		}
@@ -215,4 +216,18 @@ Example:
 	default:
 		return errors.New("unknown command")
 	}
+}
+
+// gitProxyEnv keeps Git working behind a proxy with credentials in its URL.
+// Sandboxes set Basic auth through the Git config that exec clears.
+func gitProxyEnv() []string {
+	if os.Getenv("GIT_HTTP_PROXY_AUTHMETHOD") != "" {
+		return nil
+	}
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy"} {
+		if proxy, err := url.Parse(os.Getenv(name)); err == nil && proxy.User != nil {
+			return []string{"GIT_HTTP_PROXY_AUTHMETHOD=basic"}
+		}
+	}
+	return nil
 }

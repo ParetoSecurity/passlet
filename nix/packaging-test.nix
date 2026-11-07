@@ -18,7 +18,7 @@ let
         home.username = "alice";
         home.homeDirectory = if platformPkgs.stdenv.hostPlatform.isDarwin then "/Users/alice" else "/home/alice";
         home.stateVersion = "25.05";
-        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; }
+        programs.passlet = { enable = enabled; inherit package; service.tailscale = tailscale; service.sshAgentSocket = if tailscale then "/Users/alice/.ssh/agent.sock" else null; sshAgent.enable = platformPkgs.stdenv.hostPlatform.isLinux; }
           // lib.optionalAttrs (service != null) { service.enable = service; };
       } ];
     }).config;
@@ -35,6 +35,15 @@ let
 in
 assert builtins.all (a: a.assertion) mac.assertions;
 assert builtins.all (a: a.assertion) linux.assertions;
+assert linux.home.sessionVariables.SSH_AUTH_SOCK == "/home/alice/.local/share/passlet/ssh-agent.sock";
+assert linux.systemd.user.services."passlet-ssh-agent@".Service.ExecStart == [ "${fakePackage}/bin/passlet ssh-agent --stdio" ];
+assert linux.systemd.user.services."passlet-ssh-agent@".Service.StandardInput == "socket";
+assert linux.systemd.user.sockets.passlet-ssh-agent.Socket.Accept;
+assert linux.systemd.user.sockets.passlet-ssh-agent.Socket.SocketMode == "0600";
+assert linux.systemd.user.sockets.passlet-ssh-agent.Socket.MaxConnections == 32;
+assert linux.systemd.user.sockets.passlet-ssh-agent.Install.WantedBy == [ "sockets.target" ];
+assert !(mac.systemd.user.sockets ? passlet-ssh-agent);
+assert !(mac.systemd.user.services ? "passlet-ssh-agent@");
 assert lib.hasInfix "<string>dev.passlet.agent</string>" plist;
 assert lib.hasInfix (builtins.unsafeDiscardStringContext "<string>${fakePackage}/bin/passlet</string>") plist;
 assert lib.hasInfix "<string>approver</string>" plist;
@@ -46,7 +55,7 @@ assert lib.hasInfix "<string>/usr/bin:/bin</string>" plist;
 assert !(lib.hasInfix "/bin/sh" plist);
 assert !(lib.hasInfix "--tailscale" plist);
 assert toString mac.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { tailscale = false; });
-assert toString tailscale.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { tailscale = true; });
+assert toString tailscale.xdg.configFile."passlet/approver.toml".source == toString (tomlFormat.generate "passlet-approver.toml" { tailscale = true; ssh_agent_socket = "/Users/alice/.ssh/agent.sock"; });
 assert !(linux.xdg.configFile ? "passlet/agent.toml");
 assert !(linux.xdg.configFile ? "passlet/endpoint");
 assert lib.hasInfix "<key>PassletConfiguration</key>" plist;

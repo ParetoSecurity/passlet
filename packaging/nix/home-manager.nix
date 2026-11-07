@@ -5,6 +5,8 @@ let
   helper = "${cfg.package}/Applications/Passlet.app/Contents/MacOS/PassletHelper";
   settings = {
     tailscale = cfg.service.tailscale;
+  } // lib.optionalAttrs (cfg.service.sshAgentSocket != null) {
+    ssh_agent_socket = cfg.service.sshAgentSocket;
   };
   plist = "${config.home.homeDirectory}/Library/LaunchAgents/dev.passlet.agent.plist";
 in {
@@ -15,10 +17,16 @@ in {
       default = pkgs.callPackage ./package.nix { };
       description = "Passlet release package, including the signed macOS helper.";
     };
+    sshAgent.enable = lib.mkEnableOption "Run an on-demand SSH-agent proxy on Linux";
     service.enable = lib.mkOption {
       type = lib.types.bool;
       default = pkgs.stdenv.hostPlatform.isDarwin;
       description = "Run the approving service at graphical login on this Mac.";
+    };
+    service.sshAgentSocket = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Absolute upstream SSH-agent socket on the Approver Mac. Null disables forwarding.";
     };
     service.tailscale = lib.mkEnableOption "Expose the Approver through Tailscale Serve on port 17400";
     # macOS names a background item after the program launchd spawns and groups
@@ -47,12 +55,39 @@ in {
   };
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
+    home.sessionVariables = lib.mkIf cfg.sshAgent.enable {
+      SSH_AUTH_SOCK = "${config.home.homeDirectory}/.local/share/passlet/ssh-agent.sock";
+    };
+    systemd.user.sockets.passlet-ssh-agent = lib.mkIf (cfg.sshAgent.enable && pkgs.stdenv.hostPlatform.isLinux) {
+      Unit.Description = "Passlet SSH-agent socket";
+      Socket = {
+        Accept = true;
+        DirectoryMode = "0700";
+        ListenStream = "${config.home.homeDirectory}/.local/share/passlet/ssh-agent.sock";
+        MaxConnections = 32;
+        RemoveOnStop = true;
+        SocketMode = "0600";
+      };
+      Install.WantedBy = [ "sockets.target" ];
+    };
+    systemd.user.services."passlet-ssh-agent@" = lib.mkIf (cfg.sshAgent.enable && pkgs.stdenv.hostPlatform.isLinux) {
+      Unit.Description = "Passlet SSH-agent connection";
+      Service = {
+        ExecStart = "${executable} ssh-agent --stdio";
+        StandardInput = "socket";
+        StandardOutput = "journal";
+        UMask = "0077";
+      };
+    };
     xdg.configFile."passlet/approver.toml" = lib.mkIf cfg.service.enable {
       source = (pkgs.formats.toml { }).generate "passlet-approver.toml" settings;
     };
     assertions = [{
       assertion = !cfg.service.enable || pkgs.stdenv.hostPlatform.isDarwin;
       message = "The Passlet approver requires macOS. Linux installs the agent CLI only.";
+    } {
+      assertion = !cfg.sshAgent.enable || pkgs.stdenv.hostPlatform.isLinux;
+      message = "The managed Passlet SSH-agent proxy service requires Linux.";
     }];
     home.activation.passletOwnership = lib.mkIf cfg.service.enable (lib.hm.dag.entryBefore [ "writeBoundary" ] ''
       plist=${lib.escapeShellArg plist}

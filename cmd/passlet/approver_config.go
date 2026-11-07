@@ -11,7 +11,8 @@ import (
 )
 
 type approverConfig struct {
-	Tailscale bool `toml:"tailscale"`
+	SSHAgentSocket string `toml:"ssh_agent_socket"`
+	Tailscale      bool   `toml:"tailscale"`
 }
 
 // Homebrew owns the LaunchAgent; user settings stay outside its managed plist.

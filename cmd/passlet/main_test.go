@@ -152,3 +152,47 @@ func TestExecProcessSubstitutionPreservesStdin(t *testing.T) {
 		})
 	}
 }
+
+func TestExecPreservesProxyAuthenticationWithoutCredentials(t *testing.T) {
+	dir := t.TempDir()
+	grant := filepath.Join(dir, "grant.json")
+	data, _ := json.Marshal(passlet.Grant{Token: "scoped-test-child", ExpiresAt: time.Now().Add(time.Hour)})
+	if err := os.WriteFile(grant, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(dir, "gitconfig")
+	if err := os.WriteFile(global, []byte("[http]\n proxyAuthMethod = basic\n[credential]\n helper = !echo password=unrelated-parent\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, injected, explicit, want string }{
+		{"global", "", "", "basic"},
+		{"sandbox", "digest", "", "digest"},
+		{"explicit environment", "digest", "ntlm", "ntlm"},
+		{"invalid method", "fixture-secret", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GIT_CONFIG_GLOBAL", global)
+			t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+			t.Setenv("GIT_CONFIG_COUNT", "0")
+			t.Setenv("GIT_CONFIG_PARAMETERS", "")
+			t.Setenv("GIT_HTTP_PROXY_AUTHMETHOD", tc.explicit)
+			if tc.injected != "" {
+				t.Setenv("GIT_CONFIG_COUNT", "2")
+				t.Setenv("GIT_CONFIG_KEY_0", "http.proxyAuthMethod")
+				t.Setenv("GIT_CONFIG_VALUE_0", tc.injected)
+				t.Setenv("GIT_CONFIG_KEY_1", "credential.helper")
+				t.Setenv("GIT_CONFIG_VALUE_1", "!echo password=unrelated-parent")
+			}
+			got, err := invokeCLI(t, "", "exec", "--grant", grant, "--", "/bin/sh", "-c", `printf '%s' "$GIT_HTTP_PROXY_AUTHMETHOD"`)
+			if err != nil || got != tc.want {
+				t.Fatalf("proxy method: %q %v", got, err)
+			}
+			cmd := fixture(t, "exec", "--grant", grant, "--", "/bin/sh", "-c", `printf '%s\n' "$GIT_HTTP_PROXY_AUTHMETHOD"; printf 'protocol=https\nhost=github.com\n\n' | git credential fill`)
+			cmd.Dir = dir
+			output, err := cmd.Output()
+			if err != nil || !strings.HasPrefix(string(output), tc.want+"\n") || !strings.Contains(string(output), "password=scoped-test-child") || strings.Contains(string(output), "unrelated-parent") || strings.Contains(string(output), "fixture-secret") {
+				t.Fatalf("proxy/credential isolation: %q %v", output, err)
+			}
+		})
+	}
+}

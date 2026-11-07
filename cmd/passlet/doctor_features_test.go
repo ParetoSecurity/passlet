@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +29,7 @@ func TestDoctorFeatures(t *testing.T) {
 		Options: &godog.Options{Format: "pretty", Paths: []string{"features/doctor.feature"}, Strict: true, TestingT: t},
 		ScenarioInitializer: func(s *godog.ScenarioContext) {
 			var dir, endpoint, output, helperError string
+			var hostOS string
 			var result error
 			var expectFailure, reachable bool
 			var cleanup func()
@@ -43,6 +45,7 @@ func TestDoctorFeatures(t *testing.T) {
 				}
 				endpoint = "unix://" + filepath.Join(dir, "socket")
 				output, helperError = "", ""
+				hostOS = runtime.GOOS
 				result, cleanup = nil, nil
 				showStatus = overview
 				tailscaleFixture = nil
@@ -51,6 +54,7 @@ func TestDoctorFeatures(t *testing.T) {
 				providerCalls.Store(0)
 				t.Setenv("HOME", dir)
 				t.Setenv("PASSLET_ENDPOINT", "")
+				t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "")
 				return ctx, testkeys.SaveEndpoint(endpoint)
 			})
 			s.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
@@ -76,6 +80,28 @@ func TestDoctorFeatures(t *testing.T) {
 					return ctx, fmt.Errorf("got %d provider calls, want %d", providerCalls.Load(), want)
 				}
 				return ctx, nil
+			})
+			s.Step(`^I am running Passlet on Linux with the default socket$`, func() error {
+				hostOS = "linux"
+				endpoint = "unix://" + passlet.DefaultSocket()
+				return testkeys.SaveEndpoint(endpoint)
+			})
+			s.Step(`^I am running in (an ordinary process|Codex with network disabled)$`, func(environment string) {
+				if environment == "Codex with network disabled" {
+					t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+				}
+			})
+			s.Step(`^access to the socket directory is denied$`, func() error {
+				blocked := filepath.Join(dir, "blocked")
+				if err := os.Mkdir(blocked, 0700); err != nil {
+					return err
+				}
+				endpoint = "unix://" + filepath.Join(blocked, "passlet.sock")
+				if err := testkeys.SaveEndpoint(endpoint); err != nil {
+					return err
+				}
+				cleanup = func() { _ = os.Chmod(blocked, 0700) }
+				return os.Chmod(blocked, 0000)
 			})
 			s.Step(`^I am checking the local Approver$`, func() error {
 				endpoint = "unix://" + passlet.DefaultSocket()
@@ -110,6 +136,7 @@ func TestDoctorFeatures(t *testing.T) {
 				return nil
 			})
 			s.Step(`^the selected Approver is unreachable$`, func() {})
+			s.Step(`^the forwarded socket is missing$`, func() {})
 			s.Step(`^the local Approver service is stopped$`, func() error {
 				endpoint = "unix://" + passlet.DefaultSocket()
 				return testkeys.SaveEndpoint(endpoint)
@@ -236,7 +263,15 @@ func TestDoctorFeatures(t *testing.T) {
 					return err
 				}
 				output, result = invokeCLICommand(t, "", func() error {
-					err := runWithOverview(showStatus)
+					var err error
+					if command == "doctor" && hostOS != runtime.GOOS {
+						err = diagnosticsForOS(context.Background(), nil, hostOS)
+						if err != nil {
+							err = fmt.Errorf("%w\n\nReport issues at https://github.com/ParetoSecurity/passlet/issues/", err)
+						}
+					} else {
+						err = runWithOverview(showStatus)
+					}
 					if err != nil {
 						writeCommandError(os.Stdout, err)
 					}
@@ -250,7 +285,7 @@ func TestDoctorFeatures(t *testing.T) {
 				return nil
 			})
 			s.Step(`^the terminal shows:$`, func(doc *godog.DocString) error {
-				want := strings.NewReplacer("{version}", version, "{endpoint}", endpoint, "{state_dir}", passlet.StateDir()).Replace(doc.Content) + "\n"
+				want := strings.NewReplacer("{version}", version, "{endpoint}", endpoint, "{state_dir}", passlet.StateDir(), "{socket}", strings.TrimPrefix(endpoint, "unix://")).Replace(doc.Content) + "\n"
 				if output != want {
 					return fmt.Errorf("terminal output:\n%s\nwant:\n%s", output, want)
 				}

@@ -403,3 +403,54 @@ func TestSharedPairingStateDirectory(t *testing.T) {
 		t.Fatal("shared state directory accepted")
 	}
 }
+
+func TestPairThroughAuthenticatedProxy(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PASSLET_ENDPOINT", "")
+	var prompts atomic.Int32
+	endpoint := enrollmentServer(t, func(context.Context, string) error {
+		prompts.Add(1)
+		return nil
+	})
+	code, err := CreateInvitation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, tunnels := connectProxy(t, true)
+	useProxy(t, proxy)
+	if err := PairAgent(context.Background(), endpoint, code, "alice@proxy"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Health(context.Background(), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.Load() != 1 || tunnels.Load() != 2 {
+		t.Fatalf("prompts=%d tunnels=%d", prompts.Load(), tunnels.Load())
+	}
+	proxy.User = nil
+	if err := Health(context.Background(), endpoint); err == nil {
+		t.Fatal("proxy accepted missing authentication")
+	}
+}
+
+func TestPairExplainsDeniedSandboxSocket(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+	code, err := CreateInvitation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := os.MkdirTemp("/tmp", "pl-denied-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(blocked)
+	if err := os.Chmod(blocked, 0000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(blocked, 0700)
+	err = PairAgent(context.Background(), "unix://"+filepath.Join(blocked, "socket"), code, "alice@vm")
+	if err == nil || !strings.Contains(err.Error(), "Codex sandbox denied") {
+		t.Fatal(err)
+	}
+}

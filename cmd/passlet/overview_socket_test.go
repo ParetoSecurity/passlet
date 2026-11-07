@@ -46,7 +46,7 @@ func TestOverviewUnverifiedSockets(t *testing.T) {
 		tailDown bool
 		want     string
 	}{
-		{`tailscale = true`, false, "passlet pair --endpoint https://mac.example.ts.net:17400 --code <code>"},
+		{`tailscale = true`, false, "✓ Tailscale: listening"},
 		{`tailscale = true`, true, "Tailscale: unavailable"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {

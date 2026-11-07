@@ -81,10 +81,6 @@ func writeOverview(ctx context.Context, out io.Writer, home string, command over
 	if settings.Tailscale && len(addresses) == 0 {
 		_, _ = fmt.Fprintln(out, "\nTailscale troubleshooting: https://github.com/ParetoSecurity/passlet/blob/main/docs/SETUP.md#tailscale")
 	}
-	if len(addresses) != 0 {
-		_, _ = fmt.Fprintln(out, "\nOn Tailscale agents, run this once:")
-		_, _ = fmt.Fprintln(out, "  passlet pair --endpoint "+addresses[0]+" --code <code>")
-	}
 	if settings.Tailscale && len(addresses) == 0 {
 		return errors.New("one or more configured listeners are unavailable")
 	}

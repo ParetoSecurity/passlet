@@ -3,10 +3,14 @@ package passlet
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -139,5 +143,23 @@ func TestHealthPreservesConnectionFailure(t *testing.T) {
 	err := Health(context.Background(), "unix://"+socketPath(t))
 	if !errors.Is(err, os.ErrNotExist) || err.Error() != "approver_unavailable_check_service_or_SSH_tunnel" {
 		t.Fatalf("lost connection cause: %v", err)
+	}
+}
+
+func TestSandboxConnectionFailures(t *testing.T) {
+	for _, enabled := range []string{"", "1"} {
+		t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", enabled)
+		for _, cause := range []error{syscall.EPERM, syscall.EACCES, os.ErrNotExist, syscall.ECONNREFUSED, context.DeadlineExceeded} {
+			err := fmt.Errorf("connection: %w", &net.OpError{Op: "dial", Net: "unix", Err: cause})
+			want := enabled == "1" && errors.Is(cause, os.ErrPermission)
+			for _, message := range []string{SandboxNetworkProblem(err), (healthConnectionError{err}).Error(), authenticationFailure(err).Error()} {
+				if strings.Contains(message, "Codex sandbox denied") != want {
+					t.Fatalf("enabled=%q cause=%v: %s", enabled, cause, message)
+				}
+			}
+		}
+	}
+	if got := SandboxNetworkProblem(&os.PathError{Op: "open", Path: "agent.pem", Err: syscall.EACCES}); got != "" {
+		t.Fatal("file access mislabeled as network denial")
 	}
 }

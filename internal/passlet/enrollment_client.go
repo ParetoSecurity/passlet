@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -80,6 +81,9 @@ func PairAgent(ctx context.Context, endpoint, code, name string) error {
 		return secured, nil
 	}}
 	defer transport.CloseIdleConnections()
+	if err := routeThroughProxy(transport, u, func() (*tls.Config, error) { return config, nil }); err != nil {
+		return err
+	}
 	client := &http.Client{Transport: transport, Timeout: 125 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	data, _ := json.Marshal(enrollmentRequest{Secret: base64.RawURLEncoding.EncodeToString(secret), Name: name})
 	address, _ := EndpointURL(endpoint, "/v1/pair")
@@ -90,6 +94,9 @@ func PairAgent(ctx context.Context, endpoint, code, name string) error {
 	req.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(req)
 	if err != nil {
+		if problem := SandboxNetworkProblem(err); problem != "" {
+			return fmt.Errorf("%s", problem)
+		}
 		return errors.New("could not pair with Approver; check the endpoint and pairing code")
 	}
 	defer func() { _ = response.Body.Close() }()

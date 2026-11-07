@@ -184,6 +184,16 @@ Example:
 			env = append(env, e)
 		}
 		env = append(env, "GH_TOKEN="+grant.Token, "GITHUB_TOKEN="+grant.Token, "PASSLET_GIT_TOKEN="+grant.Token, "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=", "GIT_CONFIG_KEY_1=credential.https://github.com.helper", "GIT_CONFIG_VALUE_1="+wrapper)
+		if os.Getenv("GIT_HTTP_PROXY_AUTHMETHOD") == "" {
+			proxyMethod, err := exec.CommandContext(ctx, "git", "config", "--get-urlmatch", "http.proxyAuthMethod", "https://github.com").Output()
+			if err == nil {
+				method := strings.TrimSpace(string(proxyMethod))
+				switch method {
+				case "anyauth", "basic", "digest", "negotiate", "ntlm":
+					env = append(env, "GIT_HTTP_PROXY_AUTHMETHOD="+method)
+				}
+			}
+		}
 		cmd.Env = env
 		if err = cmd.Run(); err != nil {
 			return errors.New("command_failed")

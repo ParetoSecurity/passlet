@@ -52,6 +52,44 @@ Feature: Diagnose Approver access
         """
       And the command fails
 
+    Scenario Outline: Diagnose the default forwarded socket on Linux
+      Given I am running Passlet on Linux with the default socket
+      And the forwarded socket is <state>
+      When I run `passlet doctor`
+      Then the terminal shows:
+        """
+        passlet {version}
+        Endpoint: {endpoint}
+        error: <message>
+
+        Report issues at https://github.com/ParetoSecurity/passlet/issues/
+        """
+      And the command fails
+
+      Examples:
+        | state | message |
+        | missing | No forwarded socket found. Your SSH tunnel may not be running. |
+        | stale | The forwarded socket is not accepting connections. Restart your SSH tunnel. |
+
+    Scenario Outline: Socket access is denied
+      Given I am running in <environment>
+      And access to the socket directory is denied
+      When I run `passlet doctor`
+      Then the terminal shows:
+        """
+        passlet {version}
+        Endpoint: {endpoint}
+        error: <message>
+
+        Report issues at https://github.com/ParetoSecurity/passlet/issues/
+        """
+      And the command fails
+
+      Examples:
+        | environment | message |
+        | an ordinary process | Cannot access socket {socket}. Check its ownership and permissions. If running in a sandbox, allow access to this Unix socket. |
+        | Codex with network disabled | The Codex sandbox denied this connection. Allow access to the endpoint or approve running `passlet` outside the sandbox. |
+
     Scenario: Deny the diagnostic check
       Given an Approver with valid GitHub credentials
       And I deny the diagnostic check

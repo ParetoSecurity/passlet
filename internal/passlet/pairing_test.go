@@ -3,14 +3,18 @@ package passlet
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +48,98 @@ func pairedFixture(t *testing.T, server *http.Server, listener net.Listener) net
 	}
 	server.Handler = p.Handler(server.Handler)
 	return tls.NewListener(listener, p.ServerConfig())
+}
+
+func connectProxy(t *testing.T, authenticated bool) (*url.URL, *atomic.Int32) {
+	t.Helper()
+	var tunnels atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			t.Errorf("proxy received %s", r.Method)
+			return
+		}
+		if authenticated && r.Header.Get("Proxy-Authorization") != "Basic "+base64.StdEncoding.EncodeToString([]byte("fixture:proxy-secret")) {
+			w.WriteHeader(http.StatusProxyAuthRequired)
+			return
+		}
+		tunnels.Add(1)
+		target, err := net.Dial("tcp", r.Host)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer target.Close()
+		client, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer client.Close()
+		_, _ = client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+		go func() { _, _ = io.Copy(target, client) }()
+		_, _ = io.Copy(client, target)
+	}))
+	t.Cleanup(proxy.Close)
+	address, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if authenticated {
+		address.User = url.UserPassword("fixture", "proxy-secret")
+	}
+	return address, &tunnels
+}
+
+func useProxy(t *testing.T, proxy *url.URL) {
+	t.Helper()
+	original := environmentProxy
+	environmentProxy = func(*http.Request) (*url.URL, error) { return proxy, nil }
+	t.Cleanup(func() { environmentProxy = original })
+}
+
+func TestHttpsEndpointConnectsThroughProxy(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	})}
+	secured := pairedFixture(t, server, listener)
+	go func() { _ = server.Serve(secured) }()
+	t.Cleanup(func() { _ = server.Close() })
+	proxy, tunnels := connectProxy(t, false)
+	useProxy(t, proxy)
+	if err := Health(context.Background(), "https://"+listener.Addr().String()); err != nil {
+		t.Fatal(err)
+	}
+	if tunnels.Load() != 1 {
+		t.Fatalf("tunnels: %d", tunnels.Load())
+	}
+	saved, err := readConnection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.Approver = base64.RawURLEncoding.EncodeToString(testkeys.Private("wrong-approver").Public().(ed25519.PublicKey))
+	data, _ := json.Marshal(saved)
+	if err := os.WriteFile(connectionPath(), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Health(context.Background(), "https://"+listener.Addr().String()); err == nil {
+		t.Fatal("proxy bypassed Approver pin")
+	}
+}
+
+func TestUnixEndpointIgnoresProxy(t *testing.T) {
+	proxy, tunnels := connectProxy(t, false)
+	useProxy(t, proxy)
+	endpoint := unixServer(t, NewServer(&testApprover{}, &testMinter{}, &memoryAudit{}))
+	if err := Health(context.Background(), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if tunnels.Load() != 0 {
+		t.Fatalf("tunnels: %d", tunnels.Load())
+	}
 }
 
 func TestPairedConnections(t *testing.T) {

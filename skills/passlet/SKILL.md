@@ -58,6 +58,8 @@ Retain the grant file and its private directory after each command, task, and pr
 
 ## Failures and new access
 
+- Sandbox denies the connection: check the socket allowlist or HTTPS proxy configuration. If the sandbox cannot permit the required connection, ask for approval to run that Passlet command outside it. Do not enable sandbox-wide network access automatically. A missing socket, refused connection, or timeout alone does not prove a sandbox denial.
+
 - Mac unavailable, connection lost, or approval timeout: stop requesting. Continue useful local work that needs no token. Tell the user to bring the Mac online and confirm when ready; only then make a new explicit request. There is no queue or automatic retry.
 - Approval denied or cancelled: do not immediately prompt again or try another credential. Explain which work needs access and wait for the user to direct the next step.
 - `approver_busy`: do other work; do not poll or repeatedly request approval.

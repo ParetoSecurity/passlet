@@ -24,8 +24,7 @@ app=build/release/Passlet.app
 archive="dist/passlet_${PASSLET_VERSION}_macos_universal.zip"
 ditto -c -k --keepParent "$app" build/release/notarization.zip
 /usr/bin/xcrun notarytool submit build/release/notarization.zip --apple-id "$NOTARIZATION_USERNAME" --password "$NOTARIZATION_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-/usr/bin/xcrun stapler staple "$app"
-/usr/bin/xcrun stapler validate "$app"
+PATH=/usr/bin:/bin:/usr/sbin:/sbin ./scripts/staple.sh "$app"
 spctl --assess --type execute --verbose "$app"
 ditto -c -k --keepParent "$app" "$archive"
 for arch in amd64 arm64; do

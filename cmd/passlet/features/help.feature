@@ -9,15 +9,15 @@ Feature: Show command help
         passlet {version}
         """
 
-    Scenario: Show connect help
-      When I run `passlet connect --help`
+    Scenario: Show pair help
+      When I run `passlet pair --help`
       Then the terminal shows:
         """
-        Tell Passlet Agent how to connect to Passlet Approver. Run once on each Agent machine. The connection is saved in ~/.config/passlet/endpoint for future commands.
+        Pair this Agent with an Approver using the one-time command printed by `passlet approver pair`. Approve pairing on your Mac with Touch ID. The endpoint and trusted key are saved locally for future requests.
 
-        Local and SSH socket agents connect to `unix://$HOME/.local/share/passlet/passlet.sock` by default.
-
-        Usage: passlet connect <https://host:port or unix:///absolute/socket>
+        Usage of pair:
+          --code string
+                single-use pairing code from your Mac
         """
 
     Scenario: Show doctor help
@@ -125,4 +125,23 @@ Feature: Show command help
         Usage of approver github setup:
           --handle string
                 GitHub handle used to pre-fill the App name (prompted if omitted)
+        """
+
+  Rule: Pairing management
+
+    Scenario: Show Approver pairing help
+      When I run `passlet approver pair --help`
+      Then the terminal shows:
+        """
+        Create a pairing code for one Agent. The code expires after 10 minutes. Pairing requires Touch ID and does not access stored credentials.
+        """
+
+    Scenario: Show paired Agent management help
+      When I run `passlet approver agents --help`
+      Then the terminal shows:
+        """
+        List paired Agents or revoke access.
+
+        Usage: passlet approver agents list
+               passlet approver agents revoke <name>
         """

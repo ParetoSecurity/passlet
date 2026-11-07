@@ -50,4 +50,4 @@ This test accepts only that repository-local Homebrew prefix. It uses a dummy sl
 
 Run `nix-build nix/packaging-tests.nix --no-out-link` for Home Manager configuration checks. After building the unsigned macOS preview or Linux CLI, run `scripts/check-package-artifact.sh` to verify Nix installation preserves the input files. On macOS it also verifies the preview's ad-hoc signature. CI runs these checks for both platforms.
 
-Home Manager declares paired public keys, endpoint selection, and private-key file paths through `programs.passlet.agent` and `programs.passlet.service.agents`. Passlet generates missing private keys at runtime using Go’s standard library, or reads existing secret-manager files. Private keys are never generated or copied into the Nix store. See [pairing configuration](../docs/SETUP.md#pair-agents).
+Home Manager manages installation, service startup, and Tailscale settings. Passlet manages pairing at runtime through `passlet approver pair` and `passlet pair`. Pairing state and private keys stay in each user's `~/.local/share/passlet/`, outside the Nix store, and survive rebuilds. See [pairing setup](../docs/SETUP.md#pair-agents).

@@ -31,11 +31,6 @@ func writeCommandError(out io.Writer, err error) {
 	if errors.Is(err, errSetupRequiresMac) {
 		return
 	}
-	var connectionErr connectionError
-	if errors.As(err, &connectionErr) {
-		_, _ = fmt.Fprintln(out, connectionErr)
-		return
-	}
 	if errors.Is(err, errGitHubAppNameTaken) {
 		_, _ = fmt.Fprintln(out)
 		return
@@ -66,8 +61,8 @@ func runWithOverview(showOverview func(context.Context) error) (result error) {
 	case "--help", "-h", "help":
 		fmt.Print(commandHelp)
 		return nil
-	case "connect":
-		return connect(ctx, os.Args[2:])
+	case "pair":
+		return pair(ctx, os.Args[2:])
 	case "doctor":
 		return diagnostics(ctx, os.Args[2:])
 	case "--version":

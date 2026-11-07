@@ -195,8 +195,9 @@ func TestApproverHealthAndCancellation(t *testing.T) {
 
 func writePairingConfig(t *testing.T, home string, tailscale bool) {
 	t.Helper()
-	key := testkeys.Write(t, home)
-	data := fmt.Sprintf("private_key_file = %q\ntailscale = %t\n[agents.test-agent]\npublic_key = %q\n", key, tailscale, testkeys.Public("agent"))
+	testkeys.Write(t, home)
+	os.MkdirAll(filepath.Join(home, ".config", "passlet"), 0700)
+	data := fmt.Sprintf("tailscale = %t\n", tailscale)
 	if err := os.WriteFile(filepath.Join(home, ".config", "passlet", "approver.toml"), []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +205,7 @@ func writePairingConfig(t *testing.T, home string, tailscale bool) {
 
 func TestApproverRejectsInvalidPairingKeyBeforeBinding(t *testing.T) {
 	dir, helper := approverTestPaths(t)
-	if err := os.WriteFile(filepath.Join(dir, ".config", "passlet", "approver.pem"), []byte("invalid existing key"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".local", "share", "passlet", "approver.pem"), []byte("invalid existing key"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	err := approver(context.Background(), []string{"--helper", helper})
@@ -221,7 +222,7 @@ func TestApproverRejectsInvalidPairingKeyBeforeBinding(t *testing.T) {
 
 func TestApproverGeneratesDefaultPairingKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if _, err := (approverConfig{}).pairing(); err != nil {
+	if _, err := passlet.LoadOrCreatePairingKey(filepath.Join(passlet.StateDir(), "approver.pem"), filepath.Join(passlet.StateDir(), "approver.pub")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := passlet.ReadPrivateKey(filepath.Join(passlet.StateDir(), "approver.pem")); err != nil {

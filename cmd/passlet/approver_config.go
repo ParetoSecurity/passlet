@@ -8,31 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
-	"passlet.dev/passlet/internal/passlet"
 )
 
 type approverConfig struct {
-	PrivateKeyFile string `toml:"private_key_file"`
-	Agents         map[string]struct {
-		PublicKey string `toml:"public_key"`
-	} `toml:"agents"`
 	Tailscale bool `toml:"tailscale"`
-}
-
-func (c approverConfig) pairing() (*passlet.Pairing, error) {
-	path := c.PrivateKeyFile
-	if path == "" {
-		path = filepath.Join(passlet.StateDir(), "approver.pem")
-	}
-	key, err := passlet.LoadOrCreatePairingKey(path, filepath.Join(passlet.StateDir(), "approver.pub"))
-	if err != nil {
-		return nil, err
-	}
-	agents := make(map[string]string)
-	for name, agent := range c.Agents {
-		agents[name] = agent.PublicKey
-	}
-	return passlet.NewPairing(key, agents)
 }
 
 // Homebrew owns the LaunchAgent; user settings stay outside its managed plist.

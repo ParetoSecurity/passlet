@@ -87,7 +87,7 @@ Install Tailscale 1.104.4 or newer and sign in on both machines. On the Approver
 
 Tailscale must already be running and signed in, with permission to configure Serve. The GUI app works with this loopback backend. Tailnet HTTPS certificates are not required because Passlet authenticates its own TLS connection using paired public keys. Passlet never invokes sudo or changes tailnet policy.
 
-On an Agent with pairing configured, save the address with `passlet connect https://your-mac.your-tailnet.ts.net:17400`, or declare `programs.passlet.agent.endpoint`. Permit intended callers on TCP 17400 in network policy. The temporary GitHub setup callback uses localhost port 17402.
+Run `passlet approver pair` on the Mac and use its printed command on the Agent. Permit intended callers on TCP 17400 in network policy. The temporary GitHub setup callback uses localhost port 17402.
 
 To disable remote access, set `programs.passlet.service.tailscale = false;` and reactivate. The saved Serve rule remains but its backend is stopped. See [Tailscale troubleshooting](SETUP.md#tailscale) for inspecting and removing only Passlet's rule.
 
@@ -122,11 +122,11 @@ Coming soon. Approver currently requires macOS. You can already run Agent on Lin
 
 Agent is installed alongside Approver. After pairing the local Agent and completing GitHub setup, your coding tools can request access on the same Mac. No SSH connection, Tailscale configuration, or separate Agent install is needed.
 
-Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Approver, clear the environment override and save the local socket:
+Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Approver, clear the environment override and pair locally using a fresh code from `passlet approver pair`:
 
 ```sh
 unset PASSLET_ENDPOINT
-passlet connect "unix://$HOME/.local/share/passlet/passlet.sock"
+passlet pair --code <code>
 passlet doctor
 ```
 
@@ -188,13 +188,13 @@ brew install paretosecurity/passlet/passlet-agent
 On the remote machine, point Agent at the forwarded socket. For example, with a Linux account named `alice`:
 
 ```sh
-passlet connect unix:///home/alice/.local/share/passlet/passlet.sock
+passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
 passlet doctor
 ```
 
 Use the actual absolute socket path. On a remote Mac, a typical account path starts with `/Users/alice` instead of `/home/alice`.
 
-[Tailscale HTTPS](#configure-tailscale-forwarding) is an alternative to SSH. Configure both the listener and forwarding on the Approver Mac through Home Manager, then save the HTTPS address on the remote Agent with `passlet connect`.
+[Tailscale HTTPS](#configure-tailscale-forwarding) is an alternative to SSH. Configure both the listener and forwarding on the Approver Mac through Home Manager, then pair the remote Agent using the command printed by `passlet approver pair`.
 
 Install the [Claude Code or Codex plugin](../README.md#agent-plugins) on the remote account and start a new coding-agent session after saving the endpoint. Requests appear on your Approver Mac for approval. Keep GitHub setup and long-lived credentials on that Mac.
 

@@ -211,7 +211,7 @@ Feature: Diagnose Approver access
         ✓ Tailscale: listening
 
         On Tailscale agents, run this once:
-          passlet pair https://alice-mac.example.ts.net:17400 --code <code>
+          passlet pair --endpoint https://alice-mac.example.ts.net:17400 --code <code>
         """
 
     Scenario: Configured Tailscale listener is unavailable

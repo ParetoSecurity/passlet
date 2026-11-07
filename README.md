@@ -60,11 +60,11 @@ The first CLI-only release must publish package metadata before these installati
 
 Credentials go directly into user-presence-protected Keychain storage (`WhenUnlockedThisDeviceOnly`). The unused private signing key returned by GitHub is discarded without being written to disk. No shared Passlet app secret or broker is needed. Setup verifies the authorizing user owns the app and that an installation grants its requested permissions with accessible repositories. Pending organization approval or an interrupted setup produces an actionable error; remove the incomplete app in GitHub before starting a fresh setup. Setup refuses to replace an existing protected credential.
 
-The package-managed LaunchAgent starts at graphical login and restarts after a crash. It never unlocks credentials. Setup configures providers only. See [setup and troubleshooting](docs/SETUP.md).
+The package-managed LaunchAgent starts at graphical login and restarts after a crash. It never unlocks credentials. Successful GitHub setup also pairs the local Agent and selects this Mac as its Approver. See [setup and troubleshooting](docs/SETUP.md).
 
 ## Local agents
 
-[Pair your local Agent](docs/SETUP.md#pair-agents) first. No endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Run `passlet approver pair`, then use its code with `passlet pair --code <code>`. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
+Successful `passlet approver github setup` automatically pairs your local Agent and switches its saved connection to this Mac. No separate pairing command, endpoint configuration, SSH, or Tailscale is needed. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting. If you revoked the local Agent, [pair it explicitly](docs/SETUP.md#pair-agents) to restore access.
 
 ## Remote agents over SSH
 
@@ -89,7 +89,7 @@ ssh -NT -o ExitOnForwardFailure=yes \
 On that remote account, before starting Claude:
 
 ```sh
-passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
+passlet pair --endpoint unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
 passlet doctor
 ```
 

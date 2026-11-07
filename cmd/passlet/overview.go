@@ -83,7 +83,7 @@ func writeOverview(ctx context.Context, out io.Writer, home string, command over
 	}
 	if len(addresses) != 0 {
 		_, _ = fmt.Fprintln(out, "\nOn Tailscale agents, run this once:")
-		_, _ = fmt.Fprintln(out, "  passlet pair "+addresses[0]+" --code <code>")
+		_, _ = fmt.Fprintln(out, "  passlet pair --endpoint "+addresses[0]+" --code <code>")
 	}
 	if settings.Tailscale && len(addresses) == 0 {
 		return errors.New("one or more configured listeners are unavailable")

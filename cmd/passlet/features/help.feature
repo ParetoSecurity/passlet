@@ -18,6 +18,8 @@ Feature: Show command help
         Usage of pair:
           --code string
                 single-use pairing code from your Mac
+          --endpoint string
+                Approver endpoint (defaults to the local socket)
         """
 
     Scenario: Show doctor help

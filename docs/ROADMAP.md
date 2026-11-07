@@ -6,6 +6,7 @@ Ideas for future features, in no particular order. Inclusion here is not a commi
 - GitHub reauthorization. Renew revoked or expired authorization through the browser while preserving the user's GitHub App and its installations. Update the protected Keychain credentials after verifying the authorized identity.
 - 100% test coverage for the Swift codebase, with meaningful tests for the native helper.
 - Fly.io, AWS, Cloudflare, and Vercel providers.
+- Approve remote sudo requests with Touch ID through Passlet, including remote Rex sessions without SSH agent forwarding. Integrate with PAM and reuse paired Agent identities and authenticated transport. Bind each short-lived, single-use approval to the requesting user, host, and exact sudo invocation, with replay protection and trustworthy command attribution. Denial, timeout, or an unavailable Approver must not authorize sudo. This approval must not unlock provider credentials.
 - Native approval on Linux and Windows. Agents already run on macOS and Linux, while approval currently requires macOS.
 - iOS and Android companion apps for reviewing and approving requests.
 - Encrypt token responses for the requesting Agent. Bind the recipient key and encrypted response to the authenticated request so only that Agent can decrypt the token, even when Tailscale Serve or another proxy terminates HTTPS. Authenticate the Approver’s response and reject responses belonging to another request.

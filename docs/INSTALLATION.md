@@ -120,15 +120,17 @@ Coming soon. Approver currently requires macOS. You can already run Agent on Lin
 
 ## Use Agent locally
 
-Agent is installed alongside Approver. After pairing the local Agent and completing GitHub setup, your coding tools can request access on the same Mac. No SSH connection, Tailscale configuration, or separate Agent install is needed.
+Agent is installed alongside Approver. Successful GitHub setup automatically pairs it and switches its saved connection to this Mac, replacing any saved remote endpoint. No SSH connection, Tailscale configuration, separate Agent install, or pairing code is needed.
 
-Agent uses `unix://$HOME/.local/share/passlet/passlet.sock` by default. If you previously configured a remote Approver, clear the environment override and pair locally using a fresh code from `passlet approver pair`:
+Clear any environment override, complete setup, then check the connection:
 
 ```sh
 unset PASSLET_ENDPOINT
-passlet pair --code <code>
+passlet approver github setup
 passlet doctor
 ```
+
+Existing keys are reused. A revoked local Agent requires [explicit pairing](SETUP.md#pair-agents) before it can request access again.
 
 Install the [Claude Code or Codex plugin](../README.md#agent-plugins) and start a new coding-agent session. When it needs GitHub access, it can request the repositories and permissions for its task. Review the request and approve with Touch ID.
 
@@ -188,7 +190,7 @@ brew install paretosecurity/passlet/passlet-agent
 On the remote machine, point Agent at the forwarded socket. For example, with a Linux account named `alice`:
 
 ```sh
-passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
+passlet pair --endpoint unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
 passlet doctor
 ```
 

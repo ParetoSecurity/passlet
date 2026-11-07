@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"passlet.dev/passlet/internal/passlet"
 )
@@ -14,28 +15,24 @@ import (
 func pair(ctx context.Context, args []string) error {
 	fs := commandFlags("pair", "Pair this Agent with an Approver using the one-time command printed by `passlet approver pair`. Approve pairing on your Mac with Touch ID. The endpoint and trusted key are saved locally for future requests.")
 	code := fs.String("code", "", "single-use pairing code from your Mac")
-	// Go flags stop at the first positional argument; the printed command puts the endpoint first.
-	if len(args) > 0 && args[0] != "" && args[0][0] != '-' {
-		args = append(append([]string{}, args[1:]...), args[0])
-	}
+	endpoint := fs.String("endpoint", "", "Approver endpoint (defaults to the local socket)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() > 1 || *code == "" {
-		return errors.New("usage: passlet pair [endpoint] --code <code>")
+	if fs.NArg() != 0 || *code == "" {
+		return errors.New("usage: passlet pair [--endpoint <endpoint>] --code <code>")
 	}
 	if os.Getenv("PASSLET_ENDPOINT") != "" {
 		return errors.New("unset PASSLET_ENDPOINT before pairing")
 	}
-	endpoint := "unix://" + passlet.DefaultSocket()
-	if fs.NArg() == 1 {
-		endpoint = fs.Arg(0)
+	if *endpoint == "" {
+		*endpoint = "unix://" + passlet.DefaultSocket()
 	}
 	fmt.Println("Approve pairing on your Mac with Touch ID.")
-	if err := passlet.PairAgent(ctx, endpoint, *code, ""); err != nil {
+	if err := passlet.PairAgent(ctx, *endpoint, *code, ""); err != nil {
 		return err
 	}
-	fmt.Println("Paired with Approver:", endpoint)
+	fmt.Println("Paired with Approver:", *endpoint)
 	return nil
 }
 
@@ -54,18 +51,23 @@ func approverPair(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("On the Agent machine, run:")
-	endpoint := ""
 	config, err := configuredApprover()
 	if err != nil {
 		return err
 	}
-	addresses, _ := overviewRemoteAddresses(context.Background(), config.Tailscale, overviewOutput)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	addresses, problem := overviewRemoteAddresses(ctx, config.Tailscale, overviewOutput)
+	fmt.Println("For an Agent using the default socket (local or SSH-forwarded), run:")
+	fmt.Printf("  passlet pair --code %s\n\n", code)
 	if len(addresses) > 0 {
-		endpoint = addresses[0] + " "
+		fmt.Println("For an Agent connecting through Tailscale, run:")
+		fmt.Printf("  passlet pair --endpoint %s --code %s\n\n", addresses[0], code)
 	}
-	fmt.Printf("  passlet pair %s--code %s\n\n", endpoint, code)
-	fmt.Println("For SSH, add the Agent's forwarded Unix socket as the endpoint. For a local Agent, omit the endpoint.")
+	if problem != "" {
+		fmt.Printf("WARNING: Tailscale pairing instructions are unavailable.\n%s\n\n", problem)
+	}
+	fmt.Println("For a different SSH-forwarded socket, use `--endpoint unix:///path/to/socket`.")
 	fmt.Println("The code expires in 10 minutes and works once. Approve pairing on this Mac with Touch ID.")
 	return nil
 }

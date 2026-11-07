@@ -1,6 +1,6 @@
 {
   "name": "passlet",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Request scoped GitHub credentials with approval on your Mac.",
   "license": "MIT",
   "author": {

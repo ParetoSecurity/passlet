@@ -25,6 +25,7 @@ func TestPairFeatures(t *testing.T) {
 		s.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("PASSLET_ENDPOINT", "")
+			endpoint, code, output, prompt = "", "", "", ""
 			denied = false
 			server = nil
 			return ctx, nil
@@ -34,6 +35,47 @@ func TestPairFeatures(t *testing.T) {
 				server.Close()
 			}
 			return ctx, err
+		})
+		s.Step(`^the Approver has (Tailscale disabled|verified Tailscale forwarding)$`, func(state string) error {
+			if state == "Tailscale disabled" {
+				return nil
+			}
+			installTailscaleFixture(t, tailscaleTarget)
+			dir := filepath.Join(os.Getenv("HOME"), ".config", "passlet")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("tailscale = true\n"), 0600)
+		})
+		s.Step(`^the Approver has Tailscale enabled but its CLI is (missing|failing)$`, func(state string) error {
+			dir := filepath.Join(os.Getenv("HOME"), ".config", "passlet")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("tailscale = true\n"), 0600); err != nil {
+				return err
+			}
+			bin := t.TempDir()
+			t.Setenv("PATH", bin)
+			if state == "failing" {
+				return os.WriteFile(filepath.Join(bin, "tailscale"), []byte("#!/bin/sh\nexit 1\n"), 0700)
+			}
+			return nil
+		})
+		s.Step("^I run `passlet approver pair`$", func() error {
+			var err error
+			output, err = invokeCLI(t, "", "approver", "pair")
+			if err != nil {
+				return err
+			}
+			fields := strings.Fields(output)
+			for i, field := range fields {
+				if field == "--code" && i+1 < len(fields) {
+					code = fields[i+1]
+					return nil
+				}
+			}
+			return errors.New("pairing instructions contain no code")
 		})
 		s.Step(`^an Approver with a fresh pairing code$`, func() error {
 			var err error
@@ -66,9 +108,10 @@ func TestPairFeatures(t *testing.T) {
 		})
 		s.Step(`^pairing approval is denied$`, func() { denied = true })
 		s.Step(`^the code has already been used$`, func() error { return passlet.PairAgent(context.Background(), endpoint, code, "alice@vm") })
-		s.Step("^I run `passlet pair \\{endpoint\\} --code \\{code\\}`$", func() {
+		s.Step("^I run `passlet pair ([^`]+)`$", func(arguments string) {
 			var err error
-			output, err = invokeCLI(t, "", "pair", endpoint, "--code", code)
+			args := strings.Fields(strings.NewReplacer("{endpoint}", endpoint, "{code}", code).Replace(arguments))
+			output, err = invokeCLI(t, "", append([]string{"pair"}, args...)...)
 			if err != nil {
 				var message strings.Builder
 				writeCommandError(&message, err)
@@ -76,7 +119,7 @@ func TestPairFeatures(t *testing.T) {
 			}
 		})
 		s.Step(`^the terminal shows:$`, func(want *godog.DocString) error {
-			expected := strings.ReplaceAll(want.Content, "{endpoint}", endpoint) + "\n"
+			expected := strings.NewReplacer("{endpoint}", endpoint, "{code}", code).Replace(want.Content) + "\n"
 			if output != expected {
 				return fmt.Errorf("got %q, want %q", output, expected)
 			}

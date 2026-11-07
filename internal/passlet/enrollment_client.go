@@ -3,6 +3,7 @@ package passlet
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -56,15 +57,10 @@ func PairAgent(ctx context.Context, endpoint, code, name string) error {
 	}
 	config, _ := pairedTLS(private, public)
 	if name == "" {
-		current, err := user.Current()
-		if err != nil { // coverage-ignore: Requires the OS account lookup to fail for the running user.
+		name, err = localAgentName()
+		if err != nil { // coverage-ignore: Requires OS account or hostname lookup failure.
 			return err
 		}
-		host, err := os.Hostname()
-		if err != nil { // coverage-ignore: Requires the operating system hostname syscall to fail.
-			return err
-		}
-		name = safeLabel(current.Username + "@" + host)
 	}
 	transport := &http.Transport{DialTLSContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		if u.Scheme == "unix" {
@@ -111,5 +107,49 @@ func PairAgent(ctx context.Context, endpoint, code, name string) error {
 		return errors.New("invalid pairing response")
 	}
 	data, _ = json.Marshal(savedConnection{Endpoint: endpoint, Approver: base64.RawURLEncoding.EncodeToString(public)})
+	return writePairingKey(connectionPath(), append(data, '\n'), true)
+}
+
+func localAgentName() (string, error) {
+	current, err := user.Current()
+	if err != nil { // coverage-ignore: Requires the OS account lookup to fail for the running user.
+		return "", err
+	}
+	host, err := os.Hostname()
+	if err != nil { // coverage-ignore: Requires the operating system hostname syscall to fail.
+		return "", err
+	}
+	return safeLabel(current.Username + "@" + host), nil
+}
+
+func PairLocalAgent() error {
+	name, err := localAgentName()
+	if err != nil { // coverage-ignore: Requires OS account or hostname lookup failure.
+		return err
+	}
+	agent, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "agent.pem"), filepath.Join(StateDir(), "agent.pub"))
+	if err != nil {
+		return err
+	}
+	approver, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "approver.pem"), filepath.Join(StateDir(), "approver.pub"))
+	if err != nil {
+		return err
+	}
+	key := agent.Public().(ed25519.PublicKey)
+	if err := withPairingState(true, func(s *pairingState) error {
+		if s.Revoked[keyID(key)] {
+			return errors.New("local Agent was revoked; pair it explicitly with `passlet approver pair` and `passlet pair`")
+		}
+		for id, a := range s.Agents {
+			if a.Name == name && id != keyID(key) {
+				return errors.New("local Agent name already paired; revoke it before replacing it")
+			}
+		}
+		s.Agents[keyID(key)] = pairedAgent{Name: name, PublicKey: base64.RawURLEncoding.EncodeToString(key)}
+		return nil
+	}); err != nil {
+		return err
+	}
+	data, _ := json.Marshal(savedConnection{Endpoint: "unix://" + DefaultSocket(), Approver: base64.RawURLEncoding.EncodeToString(approver.Public().(ed25519.PublicKey))})
 	return writePairingKey(connectionPath(), append(data, '\n'), true)
 }

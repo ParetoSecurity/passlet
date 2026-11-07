@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cucumber/godog"
+
+	"passlet.dev/passlet/internal/passlet"
 )
 
 func TestGitHubSetupFeatures(t *testing.T) {
@@ -359,6 +361,27 @@ func TestGitHubSetupFeatures(t *testing.T) {
 				}
 				if f.opens != 0 {
 					return fmt.Errorf("unexpected browser launch")
+				}
+				return nil
+			})
+			s.Step(`^the local Agent is paired and its saved connection points to this Mac$`, func() error {
+				if err := await(); err != nil {
+					return err
+				}
+				agents, err := passlet.PairingAgents()
+				if err != nil || len(agents) != 1 {
+					return fmt.Errorf("expected one local Agent, got %v: %v", agents, err)
+				}
+				data, err := os.ReadFile(filepath.Join(passlet.StateDir(), "connection.json"))
+				var connection struct{ Endpoint string }
+				if err != nil {
+					return err
+				}
+				if err := json.Unmarshal(data, &connection); err != nil {
+					return err
+				}
+				if connection.Endpoint != "unix://"+passlet.DefaultSocket() {
+					return fmt.Errorf("unexpected local connection: %s", connection.Endpoint)
 				}
 				return nil
 			})

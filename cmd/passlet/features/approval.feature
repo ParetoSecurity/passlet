@@ -136,14 +136,7 @@ Feature: Review a request in the Touch ID pane
       """
 
     Examples:
-      | label         | transport |
-      | alice@cruncher | SSH       |
-      | alice@lima     | Tailscale |
-
-  Scenario: Review a diagnostic check from a local Agent
-    Given an Agent on this Mac
-    When I run `passlet doctor`
-    Then the Touch ID pane shows:
-      """
-      Passlet is trying to verify stored credentials for local.
-      """
+      | label         | transport      |
+      | alice@mac     | a local socket |
+      | alice@cruncher | SSH            |
+      | alice@lima     | Tailscale      |

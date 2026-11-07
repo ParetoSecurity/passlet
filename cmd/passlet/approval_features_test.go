@@ -43,8 +43,8 @@ func TestApprovalFeatures(t *testing.T) {
 			s.Step("^(?:an Agent on this Mac|an Approver configured for GitHub account `alice`)$", func() {
 				caller = passlet.Caller{Transport: "paired", Name: "local"}
 			})
-			s.Step(`^an Agent paired as "([^"]*)" connecting through SSH$`, func(label string) {
-				caller = passlet.Caller{Transport: "ssh", Name: label}
+			s.Step(`^an Agent paired as "([^"]*)" connecting through (?:SSH|a local socket)$`, func(label string) {
+				caller = passlet.Caller{Transport: "paired", Name: label}
 			})
 			s.Step(`^an Agent paired as "([^"]*)" connecting through Tailscale$`, func(host string) {
 				caller = passlet.Caller{Transport: "tailscale", Name: host, NodeID: "fixture-node"}

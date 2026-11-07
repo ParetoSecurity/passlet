@@ -185,3 +185,64 @@ func TestGitHubResetRequiresOnlyNativeApproval(t *testing.T) {
 		})
 	}
 }
+
+func TestSetupPairsLocalAgent(t *testing.T) {
+	for _, mode := range []string{"success", "existing"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newSetupFixture(t, mode)
+			if err := passlet.PrivateDir(passlet.StateDir()); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(passlet.StateDir(), "connection.json")
+			if err := os.WriteFile(path, []byte(`{"endpoint":"https://remote.example:17400","approver":"remote"}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			result := f.run()
+			if result.err != nil {
+				t.Fatal(result.err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || !strings.Contains(string(data), "unix://") || strings.Contains(string(data), "remote.example") {
+				t.Fatal(string(data), err)
+			}
+			agents, err := passlet.PairingAgents()
+			if err != nil || len(agents) != 1 {
+				t.Fatal(agents, err)
+			}
+			if !strings.Contains(result.output, "Local Agent paired and connected to this Mac.") {
+				t.Fatal(result.output)
+			}
+		})
+	}
+}
+
+func TestSetupDoesNotRestoreRevokedLocalAgent(t *testing.T) {
+	for _, mode := range []string{"success", "existing"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newSetupFixture(t, mode)
+			if err := passlet.PairLocalAgent(); err != nil {
+				t.Fatal(err)
+			}
+			agents, err := passlet.PairingAgents()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range agents {
+				if err := passlet.RevokeAgent(name); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := f.run()
+			if result.err == nil || !strings.Contains(result.err.Error(), "local Agent was revoked") {
+				t.Fatal(result.err)
+			}
+			agents, err = passlet.PairingAgents()
+			if err != nil || len(agents) != 0 {
+				t.Fatal(agents, err)
+			}
+			if strings.Contains(result.output, "Local Agent paired") {
+				t.Fatal(result.output)
+			}
+		})
+	}
+}

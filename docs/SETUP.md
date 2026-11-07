@@ -23,92 +23,46 @@ To troubleshoot in the foreground, stop the managed service with `launchctl boot
 
 Uninstalling through the package manager removes startup while retaining credentials and audit history. Sleep temporarily makes the Mac unavailable; delivered tokens remain usable.
 
-## Agent connection
-
-Run `passlet connect <endpoint>` on the agent machine to check the Approver's health and save its address in `~/.config/passlet/endpoint`. For example, use `passlet connect https://your-mac.your-tailnet.ts.net:17400` for Tailscale or `passlet connect unix:///home/alice/.local/share/passlet/passlet.sock` for SSH forwarding. Keep the tunnel open while connecting through SSH. A failed health check leaves the saved address unchanged and never requests approval or accesses credentials.
-
-The `--endpoint` flag overrides `PASSLET_ENDPOINT`, which overrides the saved address. Without any of these, requests use the default local socket. If a saved address cannot be read or is invalid, correct it with `passlet connect`; commands do not silently switch to the local socket. Use `passlet doctor` to inspect the effective address and verify GitHub access. Use `passlet approver doctor` on your Mac to check the local service regardless of the selected endpoint.
-
 ## Pair agents
 
-Every connection, including local and SSH socket connections, requires mutual [TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html). Each user on each machine has an Ed25519 private key. The Approver maps trusted public keys to labels such as `alice@cruncher`; the Agent pins the Approver's public key. The key contains no username. Pairing authenticates possession of that key, not the executable or environment running the request. Each credential request still requires Touch ID.
+Installation, service startup, and Tailscale settings are declarative. Pairing is managed by Passlet and survives Home Manager rebuilds. There are no public keys or pairing secrets to copy into Nix configuration.
 
-Passlet generates a missing private key itself using Go's Ed25519 implementation. No OpenSSL or activation script is required. The Approver does this at startup; an Agent does it when connecting with pairing configuration present. Repeated starts and concurrent commands preserve the same key. Existing malformed, unreadable, or insecure keys cause an error instead of being replaced. Dangling secret-manager symlinks are preserved too.
+On your Mac, run:
 
-The default private files are `~/.local/share/passlet/approver.pem` and `~/.local/share/passlet/agent.pem`, with mode `0600`. Passlet exports their public keys as `approver.pub` and `agent.pub` in that directory, including when a private key is provisioned at another path. Only exchange the `.pub` files, through a trusted channel. Private keys never belong in Git or the Nix store.
-
-Start the Approver first to generate its key. Copy its public key into the Agent's pairing configuration, then run `passlet connect <endpoint>`. This creates the Agent key. The first connection is rejected until you add `agent.pub` to the Approver's trusted Agents and restart it. Subsequent connections use the same keys. Give each user on each machine a separate key, so their names and revocation remain independent.
-
-With Home Manager, configure the Agent. `privateKeyFile` is optional and defaults to the path above; set it explicitly when using a secret manager:
-
-```nix
-programs.passlet = {
-  enable = true;
-  agent = {
-    approverPublicKey = builtins.readFile ./alice-mac.pub;
-    endpoint = "https://alice-mac.example.ts.net:17400";
-    privateKeyFile = "/home/alice/.local/share/passlet/agent.pem";
-  };
-};
+```sh
+passlet approver pair
 ```
 
-Configure the Approver Mac, including its local Agent:
+Copy the printed command to the Agent machine. With verified Tailscale forwarding, it includes your Mac's address:
 
-```nix
-programs.passlet = {
-  enable = true;
-  agent = {
-    approverPublicKey = builtins.readFile ./alice-mac.pub;
-    privateKeyFile = "/Users/alice/.local/share/passlet/agent.pem";
-  };
-  service = {
-    agents = {
-      "alice@cruncher".publicKey = builtins.readFile ./alice-cruncher.pub;
-      "alice@mac".publicKey = builtins.readFile ./alice-local.pub;
-    };
-    privateKeyFile = "/Users/alice/.local/share/passlet/approver.pem";
-    tailscale = true;
-  };
-};
+```sh
+passlet pair https://your-mac.your-tailnet.ts.net:17400 --code <code>
 ```
 
-You can provision private files through a secret manager, or let Passlet create them at user-writable paths. Home Manager generates the configuration and restarts the Approver when its settings change. Remove an Agent's public key and reactivate to revoke it. When changing private file contents at the same path, restart the service too. Changing the Approver key requires updating its pin on all Agents. Self-signed TLS certificates are refreshed automatically from the same key for each connection.
+For an SSH-forwarded socket, substitute the socket path on the Agent. For a local Agent on the Mac, omit the endpoint:
 
-For Homebrew or manually managed Agent installations, the equivalent files are `~/.config/passlet/agent.toml`:
-
-```toml
-private_key_file = "/Users/alice/.local/share/passlet/agent.pem"
-approver_public_key = """
------BEGIN PUBLIC KEY-----
-<Approver public key>
------END PUBLIC KEY-----
-"""
+```sh
+passlet pair --code <code>
 ```
 
-And `~/.config/passlet/approver.toml` on the Mac:
+Approve the Agent's suggested `user@hostname` label on your Mac with Touch ID. Only approve a pairing you initiated. Pairing does not unlock or inspect provider credentials. Each credential request still needs its own approval.
 
-```toml
-private_key_file = "/Users/alice/.local/share/passlet/approver.pem"
-tailscale = true
+The random pairing code pins the Approver's Ed25519 public key and carries a 256-bit secret. It expires after ten minutes, is consumed before approval, and can be used once. Creating a new code invalidates the previous code. A denied or interrupted pairing needs a fresh code. Treat the code as a temporary secret, share it only with your intended Agent, and avoid recording it in logs or screenshots.
 
-[agents."alice@mac"]
-public_key = """
------BEGIN PUBLIC KEY-----
-<local Agent public key>
------END PUBLIC KEY-----
-"""
+Passlet creates missing private keys using Go's standard library and preserves existing keys. Each user on each machine has a separate key in `~/.local/share/passlet/agent.pem`; the Mac's key is `approver.pem`. These files stay private and never enter Git or the Nix store. The Agent saves its endpoint and Approver pin atomically in `connection.json`. The Approver saves trusted Agent labels and keys in `pairings.json`. All connections use mutually authenticated TLS 1.3, including local and SSH sockets. Pairing identifies possession of a key, not a particular executable. Other processes running under that account, and root, remain trusted.
 
-[agents."alice@cruncher"]
-public_key = """
------BEGIN PUBLIC KEY-----
-<remote Agent public key>
------END PUBLIC KEY-----
-"""
+Manage paired Agents on the Mac:
+
+```sh
+passlet approver agents list
+passlet approver agents revoke alice@cruncher
 ```
 
-Use the actual PEM contents, preserving their line breaks. Restart the Approver after changing its configuration. Local doctor uses the same Agent key and Approver pin, which must match the local service. An endpoint setting chooses an address, it does not establish trust or bypass pairing.
+Revocation takes effect on subsequent requests without restarting the service, including requests on an existing connection. It does not revoke GitHub tokens already issued to that Agent. Revoke an existing name before pairing a different key under the same name.
 
-TLS encrypts requests and returned tokens across the entire connection. Session resumption is disabled, and no early data is accepted. Captured traffic cannot authenticate a new connection or replay a request. Someone who obtains a private key can make new requests under its label until that key is revoked. Root and processes that can read the key remain trusted.
+Commands select their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved pairing, then the local socket. An endpoint override does not change the pinned Approver key. Unset `PASSLET_ENDPOINT` before pairing. Use `passlet doctor` to check an existing pairing.
+
+When upgrading from v0.5.0, remove `programs.passlet.agent`, `programs.passlet.service.agents`, and `programs.passlet.service.privateKeyFile` from Home Manager. Remove `agents` and `private_key_file` from manually managed `approver.toml`. Keep service and Tailscale settings. Upgrade both ends, then pair each Agent, including local Agents. Old `agent.toml` and `endpoint` files are unused and may be removed. Existing private keys at the default paths are retained.
 
 ## SSH forwarding
 
@@ -147,7 +101,7 @@ ssh -NT -o ExitOnForwardFailure=yes \
   -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" alice@cruncher
 ```
 
-Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account saves its matching endpoint with `passlet connect unix:///home/alice/.local/share/passlet/passlet.sock`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
+Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account pairs with `passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
 
 Unix permissions isolate Alice from Bob, but not either from remote root or other processes sharing their account. Never describe this as attesting the agent executable. Root can request approval through either socket and read delivered tokens. A compromised same-user process can also request approval; examine the scopes in the native prompt.
 

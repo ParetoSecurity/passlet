@@ -22,9 +22,9 @@ Usage: passlet <command>
 
 Commands:
   approver      Manage the local Approver on your Mac
-  connect       Check and save an Approver endpoint
   doctor        Check your connection and verify GitHub access
   exec          Run a command with scoped access
+  pair          Pair with an Approver
   request       Request scoped access
 
 Run ` + "`passlet <command> --help`" + ` for command options.
@@ -83,7 +83,7 @@ func writeOverview(ctx context.Context, out io.Writer, home string, command over
 	}
 	if len(addresses) != 0 {
 		_, _ = fmt.Fprintln(out, "\nOn Tailscale agents, run this once:")
-		_, _ = fmt.Fprintln(out, "  passlet connect "+addresses[0])
+		_, _ = fmt.Fprintln(out, "  passlet pair "+addresses[0]+" --code <code>")
 	}
 	if settings.Tailscale && len(addresses) == 0 {
 		return errors.New("one or more configured listeners are unavailable")

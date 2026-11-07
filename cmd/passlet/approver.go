@@ -34,9 +34,11 @@ Agents request credentials from it, you approve them with Touch ID.
 Usage: passlet approver <command>
 
 Commands:
+  agents        List or revoke paired Agents
   audit         Show audit history
   doctor        Check service health and credentials
   github        Manage GitHub credentials
+  pair          Create a one-time pairing code
   start         Run the Approver service
 
 Run ` + "`passlet approver <command> --help`" + ` for command options.
@@ -51,6 +53,10 @@ func approverCommand(ctx context.Context, args []string, showOverview func(conte
 	case "--help", "-h", "help":
 		fmt.Print(approverHelp)
 		return nil
+	case "pair":
+		return approverPair(args[1:])
+	case "agents":
+		return approverAgents(args[1:])
 	case "start":
 		return approver(ctx, args[1:])
 	case "doctor":
@@ -87,10 +93,11 @@ func approver(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	pairing, err := config.pairing()
+	private, err := passlet.LoadOrCreatePairingKey(filepath.Join(passlet.StateDir(), "approver.pem"), filepath.Join(passlet.StateDir(), "approver.pub"))
 	if err != nil {
 		return err
 	}
+	pairing, _ := passlet.NewManagedPairing(private, passlet.NativeHelper{Path: *helper}.Confirm)
 	l, err := passlet.ListenUnix(socket)
 	if err != nil {
 		return err

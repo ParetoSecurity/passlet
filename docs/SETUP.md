@@ -125,17 +125,7 @@ Disabling Tailscale stops the loopback listener after restart. The saved Serve r
 
 Codex's `workspace-write` sandbox blocks the network, so Passlet cannot reach the Approver from inside it and says so. Approve running `passlet` outside the sandbox when Codex asks. Setting `sandbox_workspace_write.network_access = true` also works, but it opens the network to every sandboxed command.
 
-Claude Code's sandbox only offers a proxy, which Passlet does not use, so exclude the two commands that talk to the Approver:
-
-```json
-{
-  "sandbox": {
-    "excludedCommands": ["passlet doctor", "passlet request *"]
-  }
-}
-```
-
-A chained command stays sandboxed, so run `passlet request` as its own Bash call, with a grant directory you created under `$TMPDIR` in an earlier call. `passlet exec` works inside the sandbox.
+Claude Code's sandbox only offers a proxy, and Passlet uses the proxy from `HTTPS_PROXY` to reach an HTTPS endpoint. Mutual TLS runs end to end, so the proxy sees the Approver's host but cannot read the traffic or impersonate either side. A Unix socket endpoint is always direct, so allow it with `sandbox.network.allowUnixSockets`, or `allowAllUnixSockets` on Linux.
 
 ## Diagnostics
 

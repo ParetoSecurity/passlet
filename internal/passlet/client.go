@@ -37,8 +37,33 @@ func endpointURL(endpoint string) (*url.URL, error) {
 	return nil, errors.New("endpoint_must_be_https_origin_or_absolute_unix_socket")
 }
 
-// EndpointClient never uses ambient proxies, follows redirects, or falls back
-// from a Unix socket to a network endpoint.
+// environmentProxy is a variable because http.ProxyFromEnvironment reads the
+// environment once and skips loopback addresses, which tests need.
+var environmentProxy = http.ProxyFromEnvironment
+
+// routeThroughProxy sends HTTPS endpoints through the environment's proxy, the
+// only way out of an agent sandbox. Mutual TLS with pinned keys still runs end
+// to end, so a proxy sees the host but cannot read or impersonate either side.
+func routeThroughProxy(transport *http.Transport, endpoint *url.URL, config func() (*tls.Config, error)) error {
+	if endpoint.Scheme != "https" {
+		return nil
+	}
+	proxy, err := environmentProxy(&http.Request{URL: endpoint})
+	if err != nil || proxy == nil {
+		return err
+	}
+	transport.TLSClientConfig, err = config()
+	if err != nil {
+		return err
+	}
+	transport.Proxy = http.ProxyURL(proxy)
+	transport.DialContext = (&net.Dialer{Timeout: ConnectDeadline}).DialContext
+	transport.TLSHandshakeTimeout = ConnectDeadline
+	return nil
+}
+
+// EndpointClient never follows redirects or falls back from a Unix socket to a
+// network endpoint.
 func EndpointClient(endpoint string) (*http.Client, func(), error) {
 	u, err := endpointURL(endpoint)
 	if err != nil {
@@ -66,6 +91,9 @@ func EndpointClient(endpoint string) (*http.Client, func(), error) {
 		}
 		return secured, nil
 	}, ResponseHeaderTimeout: ClientDeadline}
+	if err := routeThroughProxy(transport, u, configuredAgentTLS); err != nil {
+		return nil, nil, err
+	}
 	client := &http.Client{Transport: transport, Timeout: ClientDeadline, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return client, transport.CloseIdleConnections, nil
 }

@@ -252,7 +252,7 @@ func TestPrivateKeyAndAgentConfiguration(t *testing.T) {
 	if _, err := ReadPrivateKey(path); err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(home, ".config", "passlet", "agent.toml")
+	configPath := connectionPath()
 	valid, _ := os.ReadFile(configPath)
 	if _, err := configuredAgentTLS(); err != nil {
 		t.Fatal(err)
@@ -307,7 +307,7 @@ func TestPrivateKeyAndAgentConfiguration(t *testing.T) {
 func TestPairingProblemGuidance(t *testing.T) {
 	for _, tc := range []struct{ code, text string }{
 		{"agent_configuration_unavailable", "Agent pairing is not configured"},
-		{"invalid_agent_configuration", "configuration is invalid"},
+		{"invalid_agent_configuration", "Saved pairing is invalid"},
 		{"agent_private_key_unavailable", "provision the key"},
 		{"agent_private_key_requires_owner_and_mode_0600", "owned by you with mode 0600"},
 		{"invalid_agent_private_key", "PKCS#8 PEM"},

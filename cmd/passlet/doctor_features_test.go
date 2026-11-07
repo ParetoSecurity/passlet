@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -49,7 +51,7 @@ func TestDoctorFeatures(t *testing.T) {
 				providerCalls.Store(0)
 				t.Setenv("HOME", dir)
 				t.Setenv("PASSLET_ENDPOINT", "")
-				return ctx, passlet.SaveEndpoint(endpoint)
+				return ctx, testkeys.SaveEndpoint(endpoint)
 			})
 			s.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 				if cleanup != nil {
@@ -78,7 +80,7 @@ func TestDoctorFeatures(t *testing.T) {
 			s.Step(`^I am checking the local Approver$`, func() error {
 				endpoint = "unix://" + passlet.DefaultSocket()
 				t.Setenv("PASSLET_ENDPOINT", "invalid-ignored-endpoint")
-				return passlet.SaveEndpoint("https://other.example.ts.net:17400")
+				return testkeys.SaveEndpoint("https://other.example.ts.net:17400")
 			})
 			s.Step(`^the (?:forwarded|local) socket is stale$`, func() error {
 				if err := os.MkdirAll(filepath.Dir(strings.TrimPrefix(endpoint, "unix://")), 0700); err != nil {
@@ -110,7 +112,7 @@ func TestDoctorFeatures(t *testing.T) {
 			s.Step(`^the selected Approver is unreachable$`, func() {})
 			s.Step(`^the local Approver service is stopped$`, func() error {
 				endpoint = "unix://" + passlet.DefaultSocket()
-				return passlet.SaveEndpoint(endpoint)
+				return testkeys.SaveEndpoint(endpoint)
 			})
 			s.Step(`^an Approver (with valid|without) GitHub credentials$`, func(state string) error {
 				reachable = true
@@ -151,9 +153,10 @@ func TestDoctorFeatures(t *testing.T) {
 			})
 			s.Step(`^the Agent pairing (configuration is missing|pin is incorrect|key is not trusted|key has not been generated)$`, func(state string) error {
 				reachable = false
-				configDir := filepath.Join(dir, ".config", "passlet")
+				configDir := filepath.Join(dir, ".local", "share", "passlet")
 				if state == "configuration is missing" {
-					return os.Remove(filepath.Join(configDir, "agent.toml"))
+					t.Setenv("PASSLET_ENDPOINT", endpoint)
+					return os.Remove(filepath.Join(configDir, "connection.json"))
 				}
 				if state == "key has not been generated" {
 					return os.Remove(filepath.Join(configDir, "agent.pem"))
@@ -165,8 +168,8 @@ func TestDoctorFeatures(t *testing.T) {
 					}
 					return os.WriteFile(filepath.Join(configDir, "agent.pem"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data}), 0600)
 				}
-				data := fmt.Sprintf("private_key_file = %q\napprover_public_key = %q\n", filepath.Join(configDir, "agent.pem"), testkeys.Public("other-approver"))
-				return os.WriteFile(filepath.Join(configDir, "agent.toml"), []byte(data), 0600)
+				data := `{"endpoint":"` + endpoint + `","approver":"` + base64.RawURLEncoding.EncodeToString(testkeys.Private("other-approver").Public().(ed25519.PublicKey)) + `"}`
+				return os.WriteFile(filepath.Join(configDir, "connection.json"), []byte(data), 0600)
 			})
 			s.Step(`^the Approver has (?:an? )?(listening|unavailable) Tailscale listener$`, func(state string) error {
 				configDir := filepath.Join(dir, ".config", "passlet")

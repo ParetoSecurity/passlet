@@ -64,7 +64,7 @@ The package-managed LaunchAgent starts at graphical login and restarts after a c
 
 ## Local agents
 
-[Pair your local Agent](docs/SETUP.md#pair-agents) first. No endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Use `passlet connect unix://$HOME/.local/share/passlet/passlet.sock` to save the local endpoint. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
+[Pair your local Agent](docs/SETUP.md#pair-agents) first. No endpoint configuration, SSH, or Tailscale is needed. The default endpoint is `unix://$HOME/.local/share/passlet/passlet.sock`. Run `passlet approver pair`, then use its code with `passlet pair --code <code>`. Clear any explicit `PASSLET_ENDPOINT` to use the saved setting.
 
 ## Remote agents over SSH
 
@@ -89,7 +89,7 @@ ssh -NT -o ExitOnForwardFailure=yes \
 On that remote account, before starting Claude:
 
 ```sh
-passlet connect unix:///home/alice/.local/share/passlet/passlet.sock
+passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>
 passlet doctor
 ```
 
@@ -97,13 +97,7 @@ The remote SSH server must permit Unix socket forwarding. See [SSH server config
 
 ## Choose an Approver
 
-Run `passlet connect <endpoint>` once on each agent account to check reachability and save the Approver address in `~/.config/passlet/endpoint`. It supports HTTPS endpoints and absolute Unix socket URLs, including SSH-forwarded sockets. The health check does not request approval or verify GitHub credentials. If it fails, the previous endpoint remains saved. Use `passlet doctor` for credential verification.
-
-```sh
-passlet connect https://your-mac.your-tailnet.ts.net:17400
-```
-
-Commands choose their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved endpoint, then the default local socket. `passlet connect` refuses to check or save a connection while `PASSLET_ENDPOINT` is set. Unset it before connecting. An unreadable or invalid saved setting produces an error rather than silently using another Approver. `passlet doctor` shows and checks the effective endpoint.
+Run `passlet approver pair` on your Mac, then copy its `passlet pair` command to the Agent and approve with Touch ID. Pairing saves the endpoint and trusted keys locally. No configuration files need editing, and Nix rebuilds preserve the pairing. Use `passlet doctor` to check an existing connection. See [pairing and revocation](docs/SETUP.md#pair-agents).
 
 ## Request and use access
 
@@ -143,7 +137,7 @@ Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INS
 
 Passlet keeps its shared local/SSH socket and opens a paired TLS listener at `127.0.0.1:17401`. Tailscale Serve forwards TCP port `17400` to it without terminating TLS. Startup reuses matching forwarding, creates it when absent, and refuses conflicts. The GUI Tailscale app is supported, and tailnet HTTPS certificates are not required.
 
-[Pair each Agent](docs/SETUP.md#pair-agents), then use `passlet connect https://your-mac.your-tailnet.ts.net:17400` or declare the endpoint through Home Manager. Permit intended devices on TCP 17400 in tailnet policy. Each user on a shared machine has their own trusted key and approval label. Neither caller headers nor forwarded socket paths determine identity.
+[Pair each Agent](docs/SETUP.md#pair-agents), using the command printed by `passlet approver pair`. Permit intended devices on TCP 17400 in tailnet policy. Each user on a shared machine has their own trusted key and approval label. Neither caller headers nor forwarded socket paths determine identity.
 
 ## Agent plugins
 
@@ -176,7 +170,7 @@ codex plugin marketplace upgrade passlet
 codex plugin add passlet@passlet
 ```
 
-Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents save their Approver address with `passlet connect`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
+Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents establish trust with `passlet pair`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
 
 The app and both agent plugins share the same version. The release process generates both plugin manifests alongside the Homebrew/Nix metadata, and the release PR includes them before it is squash-merged and the final release tag is created. Version tags contain matching package and plugin metadata. Do not bump plugin versions separately.
 

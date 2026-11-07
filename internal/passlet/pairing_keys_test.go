@@ -129,11 +129,9 @@ func TestPairingKeyFailuresPreserveExistingFiles(t *testing.T) {
 }
 
 func TestAgentGeneratesDefaultKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	dir := filepath.Join(home, ".config", "passlet")
-	os.MkdirAll(dir, 0700)
-	os.WriteFile(filepath.Join(dir, "agent.toml"), []byte("approver_public_key = '''"+testkeys.Public("approver")+"'''\n"), 0600)
+	t.Setenv("HOME", t.TempDir())
+	testkeys.Write(t, os.Getenv("HOME"))
+	os.Remove(filepath.Join(StateDir(), "agent.pem"))
 	if _, err := configuredAgentTLS(); err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ Feature: Diagnose Approver access
 
       Examples:
         | problem                  | message                                                                                                                   |
-        | configuration is missing | Agent pairing is not configured. Configure ~/.config/passlet/agent.toml before connecting.                                |
+        | configuration is missing | Agent pairing is not configured. Run `passlet approver pair` on your Mac, then use its pairing command on this Agent.                                |
         | pin is incorrect         | The Approver public key does not match your pairing configuration. Verify its identity before changing the trusted key.   |
         | key is not trusted       | The Approver rejected pairing authentication. Check that it trusts this Agent's public key.                               |
         | key has not been generated | The Approver rejected pairing authentication. Check that it trusts this Agent's public key.                               |
@@ -211,7 +211,7 @@ Feature: Diagnose Approver access
         ✓ Tailscale: listening
 
         On Tailscale agents, run this once:
-          passlet connect https://alice-mac.example.ts.net:17400
+          passlet pair https://alice-mac.example.ts.net:17400 --code <code>
         """
 
     Scenario: Configured Tailscale listener is unavailable

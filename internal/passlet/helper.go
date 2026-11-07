@@ -176,3 +176,34 @@ func (h NativeHelper) Reset(ctx context.Context) (AccountInfo, error) {
 	}
 	return account, nil
 }
+
+// Confirm asks for user presence without accessing provider credentials.
+func (h NativeHelper) Confirm(ctx context.Context, prompt string) error {
+	cmd := exec.CommandContext(ctx, h.Path)
+	data, _ := json.Marshal(map[string]string{"op": "confirm", "prompt": prompt})
+	in, err := cmd.StdinPipe()
+	if err != nil { // coverage-ignore: Fresh command; pipe failure requires file-descriptor exhaustion.
+		return err
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil { // coverage-ignore: Fresh command; pipe failure requires file-descriptor exhaustion.
+		return err
+	}
+	if err = cmd.Start(); err != nil {
+		return errors.New("helper_unavailable")
+	}
+	defer func() { _ = in.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	if _, err = in.Write(append(data, '\n')); err != nil { // coverage-ignore: Requires helper death during the first pipe write.
+		return errors.New("helper_unavailable")
+	}
+	scan := bufio.NewScanner(out)
+	scan.Buffer(make([]byte, 4096), 65536)
+	if !scan.Scan() {
+		return errors.New("helper_unavailable")
+	}
+	var reply helperReply
+	if json.Unmarshal(scan.Bytes(), &reply) != nil || !reply.OK {
+		return errors.New("pairing approval denied or cancelled")
+	}
+	return nil
+}

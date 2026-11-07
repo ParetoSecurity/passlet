@@ -83,7 +83,7 @@ final class Helper: NSObject, NSApplicationDelegate {
     func handle(_ msg: [String: Any]) {
         guard !state.finishing else { return }
         switch msg["op"] as? String {
-        case "approve":
+        case "approve", "confirm":
             guard let prompt = msg["prompt"] as? String, state.begin(prompt: prompt) else { finish("invalid_request"); return }
             let ctx = LAContext()
             ctx.localizedCancelTitle = "Deny"
@@ -95,6 +95,11 @@ final class Helper: NSObject, NSApplicationDelegate {
                     guard success else {
                         let denied = (error as? LAError)?.code == .userCancel
                         self.finish(denied ? "approval_denied" : "approval_cancelled"); return
+                    }
+                    if msg["op"] as? String == "confirm" {
+                        reply(["ok": true])
+                        self.finish(nil)
+                        return
                     }
                     ctx.interactionNotAllowed = true
                     DispatchQueue.global().async {

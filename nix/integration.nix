@@ -122,13 +122,13 @@ in pkgs.testers.runNixOSTest {
     with subtest("A different user's key cannot authenticate through Alice's tunnel"):
         count = "sqlite3 /home/alice/.local/share/passlet/audit.sqlite 'select count(*) from events'"
         before = alice.succeed(count)
-        cruncher.succeed("cp /home/alice/.config/passlet/agent.pem /home/alice/.config/passlet/agent.pem.saved")
+        cruncher.succeed("cp /home/alice/.local/share/passlet/agent.pem /home/alice/.local/share/passlet/agent.pem.saved")
         try:
-            cruncher.succeed("cat /home/bob/.config/passlet/agent.pem > /home/alice/.config/passlet/agent.pem")
+            cruncher.succeed("cat /home/bob/.local/share/passlet/agent.pem > /home/alice/.local/share/passlet/agent.pem")
             cruncher.fail(request("alice", "test-a", "wrong-key"))
             assert alice.succeed(count) == before, "untrusted key reached the approval handler"
         finally:
-            cruncher.succeed("cat /home/alice/.config/passlet/agent.pem.saved > /home/alice/.config/passlet/agent.pem && rm /home/alice/.config/passlet/agent.pem.saved")
+            cruncher.succeed("cat /home/alice/.local/share/passlet/agent.pem.saved > /home/alice/.local/share/passlet/agent.pem && rm /home/alice/.local/share/passlet/agent.pem.saved")
 
     with subtest("Real Git push and gh access are scoped"):
         cruncher.succeed(execute("alice", "write", "git clone https://github.com/acme/test-a.git /home/alice/checkout"))

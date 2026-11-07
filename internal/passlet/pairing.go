@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
@@ -20,8 +21,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
 type authenticationError string
@@ -80,8 +79,10 @@ func keyID(key ed25519.PublicKey) string {
 }
 
 type Pairing struct {
-	certificate tls.Certificate
-	agents      map[string]string
+	certificate    tls.Certificate
+	agents         map[string]string
+	confirm        func(context.Context, string) error
+	enrollmentBusy chan struct{}
 }
 
 func certificateFor(private ed25519.PrivateKey) (tls.Certificate, error) {
@@ -152,6 +153,9 @@ func (p *Pairing) ServerConfig() *tls.Config {
 			if err != nil {
 				return err
 			}
+			if p.confirm != nil {
+				return nil
+			}
 			if _, ok := p.agents[keyID(key)]; !ok {
 				return authenticationError("agent_not_trusted")
 			}
@@ -171,7 +175,19 @@ func (p *Pairing) Handler(next http.Handler) http.Handler {
 			apiError(w, 403, "agent_authentication_failed")
 			return
 		}
-		agent, ok := p.agents[keyID(key)]
+		if p.confirm != nil && r.URL.Path == "/v1/pair" {
+			p.enroll(w, r)
+			return
+		}
+		agents := p.agents
+		if p.confirm != nil {
+			agents, err = PairingAgents()
+			if err != nil {
+				apiError(w, 503, "pairing state unavailable")
+				return
+			}
+		}
+		agent, ok := agents[keyID(key)]
 		if !ok {
 			apiError(w, 403, "agent_not_trusted")
 			return
@@ -206,36 +222,18 @@ func pairedTLS(private ed25519.PrivateKey, approver ed25519.PublicKey) (*tls.Con
 }
 
 func configuredAgentTLS() (*tls.Config, error) {
-	home, err := os.UserHomeDir()
+	config, err := readConnection()
 	if err != nil {
-		return nil, authenticationError("agent_configuration_unavailable")
-	}
-	file, err := os.Open(filepath.Join(home, ".config", "passlet", "agent.toml"))
-	if err != nil {
-		return nil, authenticationError("agent_configuration_missing")
-	}
-	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, 8193))
-	var config struct {
-		PrivateKeyFile    string `toml:"private_key_file"`
-		ApproverPublicKey string `toml:"approver_public_key"`
-	}
-	decoder := toml.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err != nil || len(data) > 8192 || decoder.Decode(&config) != nil {
+		if os.IsNotExist(err) {
+			return nil, authenticationError("agent_configuration_missing")
+		}
 		return nil, authenticationError("invalid_agent_configuration")
 	}
-	if config.PrivateKeyFile == "" {
-		config.PrivateKeyFile = filepath.Join(StateDir(), "agent.pem")
-	}
-	private, err := LoadOrCreatePairingKey(config.PrivateKeyFile, filepath.Join(StateDir(), "agent.pub"))
+	private, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "agent.pem"), filepath.Join(StateDir(), "agent.pub"))
 	if err != nil {
 		return nil, err
 	}
-	public, err := ParsePublicKey(config.ApproverPublicKey)
-	if err != nil {
-		return nil, err
-	}
+	public, _ := base64.RawURLEncoding.DecodeString(config.Approver)
 	return pairedTLS(private, public)
 }
 
@@ -259,13 +257,13 @@ func PairingProblem(err error) string {
 	}
 	switch auth {
 	case "agent_configuration_unavailable", "agent_configuration_missing":
-		return "Agent pairing is not configured. Configure ~/.config/passlet/agent.toml before connecting."
+		return "Agent pairing is not configured. Run `passlet approver pair` on your Mac, then use its pairing command on this Agent."
 	case "pairing_key_creation_failed", "invalid_pairing_key_path":
 		return "Cannot create the pairing private key. Check its configured path and directory permissions."
 	case "pairing_public_key_export_failed":
 		return "Cannot export the pairing public key. Check permissions in ~/.local/share/passlet."
 	case "invalid_agent_configuration":
-		return "Agent pairing configuration is invalid. Check ~/.config/passlet/agent.toml."
+		return "Saved pairing is invalid. Run `passlet pair` with a fresh code from your Mac."
 	case "agent_private_key_requires_absolute_path", "agent_private_key_unavailable":
 		return "Cannot read the pairing private key. Check private_key_file and provision the key on this machine."
 	case "agent_private_key_requires_owner_and_mode_0600":
@@ -279,4 +277,14 @@ func PairingProblem(err error) string {
 	default:
 		return "Pairing authentication failed. Check the trusted keys on both machines."
 	}
+}
+
+func NewManagedPairing(private ed25519.PrivateKey, confirm func(context.Context, string) error) (*Pairing, error) {
+	p, err := NewPairing(private, nil)
+	if err != nil {
+		return nil, err
+	}
+	p.confirm = confirm
+	p.enrollmentBusy = make(chan struct{}, 1)
+	return p, nil
 }

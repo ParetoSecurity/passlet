@@ -140,7 +140,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	prompt := requested.Prompt(caller)
 	if doctor {
-		prompt = "verify stored credentials"
+		prompt = "verify stored credentials for " + caller.displayName()
 	}
 	session, err := s.Approval.Approve(ctx, prompt)
 	if err != nil {

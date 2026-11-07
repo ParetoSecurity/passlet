@@ -127,10 +127,23 @@ Feature: Review a request in the Touch ID pane
       • contents: read.
       """
 
-  Scenario: Review a diagnostic check
-    Given an Agent paired as "alice@cruncher" connecting through SSH
+  Scenario Outline: Review a diagnostic check
+    Given an Agent paired as "<label>" connecting through <transport>
     When I run `passlet doctor`
     Then the Touch ID pane shows:
       """
-      Passlet is trying to verify stored credentials.
+      Passlet is trying to verify stored credentials for <label>.
+      """
+
+    Examples:
+      | label         | transport |
+      | alice@cruncher | SSH       |
+      | alice@lima     | Tailscale |
+
+  Scenario: Review a diagnostic check from a local Agent
+    Given an Agent on this Mac
+    When I run `passlet doctor`
+    Then the Touch ID pane shows:
+      """
+      Passlet is trying to verify stored credentials for local.
       """

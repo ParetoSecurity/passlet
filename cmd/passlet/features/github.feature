@@ -61,8 +61,11 @@ Feature: Set up a personal GitHub App
       App: passlet-alice
       Account: alice
 
+      Local Agent paired and connected to this Mac.
+
       Run `passlet approver github setup` again to add another organization.
       """
+    And the local Agent is paired and its saved connection points to this Mac
     And the command exits successfully
 
   Scenario: GitHub authorization is denied
@@ -172,9 +175,12 @@ Feature: Set up a personal GitHub App
       """
       GitHub access enabled for Globex.
 
+      Local Agent paired and connected to this Mac.
+
       Run `passlet approver github setup` again to add another organization.
       """
     And the existing Keychain credentials remain unchanged
+    And the local Agent is paired and its saved connection points to this Mac
     And the command exits successfully
 
   Scenario: Localhost port is already occupied

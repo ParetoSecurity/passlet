@@ -25,6 +25,8 @@ Uninstalling through the package manager removes startup while retaining credent
 
 ## Pair agents
 
+Successful `passlet approver github setup` pairs the local Agent automatically and switches its saved connection to this Mac, replacing any saved remote endpoint. Existing keys are reused. If the local Agent was revoked, setup requires explicit pairing instead of restoring its access.
+
 Installation, service startup, and Tailscale settings are declarative. Pairing is managed by Passlet and survives Home Manager rebuilds. There are no public keys or pairing secrets to copy into Nix configuration.
 
 On your Mac, run:
@@ -39,7 +41,7 @@ Copy the printed command to the Agent machine. With verified Tailscale forwardin
 passlet pair https://your-mac.your-tailnet.ts.net:17400 --code <code>
 ```
 
-For an SSH-forwarded socket, substitute the socket path on the Agent. For a local Agent on the Mac, omit the endpoint:
+For an SSH-forwarded socket, substitute the socket path on the Agent. To explicitly re-pair a local Agent on the Mac, omit the endpoint:
 
 ```sh
 passlet pair --code <code>

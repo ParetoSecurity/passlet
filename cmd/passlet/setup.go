@@ -137,7 +137,10 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		writeSetupText(deps.output, fmt.Sprintf("Using your GitHub App: %s\nSigned in as: %s", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
 		writeSetupText(deps.output, "Choose an organization in your browser, then select \"All repositories\".")
 		return passlet.RunInstallationSetup(ctx, listener, credentials, deps.provider, func(_ context.Context, verified passlet.AccountInfo) error {
-			writeSetupText(deps.output, fmt.Sprintf("GitHub access enabled for %s.\n\nRun `passlet approver github setup` again to add another organization.", verified.InstallationOwner))
+			if err := passlet.PairLocalAgent(); err != nil {
+				return err
+			}
+			writeSetupText(deps.output, fmt.Sprintf("GitHub access enabled for %s.\n\nLocal Agent paired and connected to this Mac.\n\nRun `passlet approver github setup` again to add another organization.", verified.InstallationOwner))
 			return nil
 		}, func(u string) error {
 			writeSetupText(deps.output, fmt.Sprintf("If your browser didn't open:\n%s", u))
@@ -198,7 +201,10 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 			return err
 		}
 
-		writeSetupText(deps.output, fmt.Sprintf("GitHub setup complete.\n\nApp: %s\nAccount: %s\n\nRun `passlet approver github setup` again to add another organization.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
+		if err := passlet.PairLocalAgent(); err != nil {
+			return err
+		}
+		writeSetupText(deps.output, fmt.Sprintf("GitHub setup complete.\n\nApp: %s\nAccount: %s\n\nLocal Agent paired and connected to this Mac.\n\nRun `passlet approver github setup` again to add another organization.", strings.TrimPrefix(account.AppURL, "https://github.com/apps/"), account.Login))
 		return nil
 	}, open, func(ctx context.Context) error {
 		writeInstallationInstructions(deps.output)

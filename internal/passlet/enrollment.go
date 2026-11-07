@@ -28,6 +28,7 @@ type pairedAgent struct {
 }
 type pairingState struct {
 	Agents     map[string]pairedAgent `json:"agents"`
+	Revoked    map[string]bool        `json:"revoked,omitempty"`
 	Invitation string                 `json:"invitation,omitempty"`
 	Expires    time.Time              `json:"expires,omitempty"`
 }
@@ -100,6 +101,10 @@ func RevokeAgent(name string) error {
 	return withPairingState(true, func(s *pairingState) error {
 		for id, a := range s.Agents {
 			if a.Name == name {
+				if s.Revoked == nil {
+					s.Revoked = map[string]bool{}
+				}
+				s.Revoked[id] = true
 				delete(s.Agents, id)
 				return nil
 			}
@@ -189,6 +194,7 @@ func (p *Pairing) enroll(w http.ResponseWriter, r *http.Request) {
 				return errors.New("agent name already paired; revoke it before replacing it")
 			}
 		}
+		delete(s.Revoked, keyID(key))
 		s.Agents[keyID(key)] = pairedAgent{Name: req.Name, PublicKey: base64.RawURLEncoding.EncodeToString(key)}
 		return nil
 	})

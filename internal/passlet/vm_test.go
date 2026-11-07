@@ -12,7 +12,6 @@ import (
 	"net/http/cgi"
 	"os"
 	"os/signal"
-	"passlet.dev/passlet/testutil/testkeys"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,14 +23,29 @@ import (
 
 type vmApproval struct{ user, modeFile string }
 
-func (a vmApproval) Approve(ctx context.Context, _ string) (CredentialSession, error) {
+func (a vmApproval) Confirm(ctx context.Context, prompt string) error {
+	f, err := os.OpenFile(a.modeFile+".prompts", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(prompt + "\n"); err != nil {
+		return err
+	}
 	mode, _ := os.ReadFile(a.modeFile)
 	switch strings.TrimSpace(string(mode)) {
 	case "deny":
-		return nil, errors.New("approval_denied")
+		return errors.New("approval_denied")
 	case "wait":
 		<-ctx.Done()
-		return nil, errors.New("approval_cancelled")
+		return errors.New("approval_cancelled")
+	}
+	return nil
+}
+
+func (a vmApproval) Approve(ctx context.Context, prompt string) (CredentialSession, error) {
+	if err := a.Confirm(ctx, prompt); err != nil {
+		return nil, err
 	}
 	return &testSession{c: Credentials{Account: AccountInfo{Login: a.user, AppID: 1, AppURL: "https://github.com/apps/passlet-" + a.user, VerifiedAt: time.Now()}, ClientID: "fixture", ClientSecret: "fixture-client-secret", AccessToken: "parent-" + a.user, RefreshToken: "fixture-refresh", ExpiresAt: time.Now().Add(time.Hour)}}, nil
 }
@@ -43,10 +57,6 @@ func TestVMFixture(t *testing.T) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer cancel()
-	if role == "configure" {
-		testkeys.WriteNamed(t, os.Getenv("HOME"), filepath.Base(os.Getenv("HOME"))+"-")
-		return
-	}
 	if role == "github" {
 		runVMGitHub(t, ctx)
 		return
@@ -54,7 +64,10 @@ func TestVMFixture(t *testing.T) {
 	if role != "alice" && role != "bob" {
 		t.Fatal("invalid fixture role")
 	}
-	testkeys.WriteNamed(t, os.Getenv("HOME"), role+"-")
+	private, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "approver.pem"), filepath.Join(StateDir(), "approver.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(StateDir(), "passlet.sock")
 	l, err := ListenUnix(path)
 	if err != nil {
@@ -68,18 +81,30 @@ func TestVMFixture(t *testing.T) {
 	defer a.Close()
 	g := NewGitHub()
 	g.API = "https://api.github.com"
-	s := NewServer(vmApproval{user: role, modeFile: filepath.Join(StateDir(), "mode")}, g, a)
+	approval := vmApproval{user: role, modeFile: filepath.Join(StateDir(), "mode")}
+	s := NewServer(approval, g, a)
 	// Short deadline for deterministic cancellation tests; only this test
 	// binary changes it. The production server retains 120 seconds.
 	s.Deadline = 15 * time.Second
-	p, err := NewPairing(testkeys.Private(role+"-approver"), map[string]string{role: testkeys.Public(role + "-agent")})
+	p, err := NewManagedPairing(private, approval.Confirm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := &http.Server{Handler: p.Handler(s), BaseContext: func(net.Listener) context.Context { return ctx }}
-	go func() { <-ctx.Done(); h.Close() }()
-	if err := h.Serve(tls.NewListener(l, p.ServerConfig())); err != nil && err != http.ErrServerClosed {
+	tcp, err := net.Listen("tcp", ":17400")
+	if err != nil {
 		t.Fatal(err)
+	}
+	defer tcp.Close()
+	go func() { <-ctx.Done(); h.Close() }()
+	results := make(chan error, 2)
+	for _, listener := range []net.Listener{l, tcp} {
+		go func() { results <- h.Serve(tls.NewListener(listener, p.ServerConfig())) }()
+	}
+	for range 2 {
+		if err := <-results; err != nil && err != http.ErrServerClosed {
+			t.Fatal(err)
+		}
 	}
 }
 

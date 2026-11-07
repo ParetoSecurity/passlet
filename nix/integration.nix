@@ -107,7 +107,7 @@ in pkgs.testers.runNixOSTest {
         return shlex.split(next(line for line in output.splitlines() if "passlet pair " in line))[-1]
 
     def pair(machine, user, endpoint, code, success=True):
-        command = as_user(user, f"passlet pair {shlex.quote(endpoint)} --code {shlex.quote(code)}")
+        command = as_user(user, f"passlet pair --endpoint {shlex.quote(endpoint)} --code {shlex.quote(code)}")
         return machine.succeed(command) if success else machine.fail(command)
 
     def doctor(machine, user, success=True):

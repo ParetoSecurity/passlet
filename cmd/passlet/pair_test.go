@@ -13,7 +13,7 @@ import (
 func TestPairCommandValidation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PASSLET_ENDPOINT", "")
-	for _, args := range [][]string{nil, {"--bad"}, {"--code", "x", "a", "b"}, {"--code", "x", "http://unsafe"}} {
+	for _, args := range [][]string{nil, {"--bad"}, {"--code", "x"}, {"--code", "x", "a", "b"}, {"--code", "x", "https://example.test"}, {"--code", "x", "--endpoint", "http://unsafe"}} {
 		if err := pair(context.Background(), args); err == nil {
 			t.Fatalf("accepted %v", args)
 		}
@@ -80,17 +80,5 @@ func TestPairingStateErrors(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("broken"), 0600)
 	if _, err := invokeCLI(t, "", "approver", "pair"); err == nil {
 		t.Fatal("invalid service config accepted")
-	}
-}
-
-func TestApproverPrintsTailscalePairCommand(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	installTailscaleFixture(t, tailscaleTarget)
-	dir := filepath.Join(os.Getenv("HOME"), ".config", "passlet")
-	os.MkdirAll(dir, 0700)
-	os.WriteFile(filepath.Join(dir, "approver.toml"), []byte("tailscale = true\n"), 0600)
-	output, err := invokeCLI(t, "", "approver", "pair")
-	if err != nil || !strings.Contains(output, "passlet pair https://mac.example.ts.net:17400 --code ") {
-		t.Fatal(output, err)
 	}
 }

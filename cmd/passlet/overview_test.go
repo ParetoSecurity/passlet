@@ -139,7 +139,7 @@ func TestOverviewUnverifiedTailscaleForwarding(t *testing.T) {
 			if time.Since(start) >= 3*time.Second {
 				t.Fatal("overview exceeded lookup budget")
 			}
-			if !strings.Contains(output, "✓ Local socket: listening") || strings.Contains(output, "passlet pair https://") || strings.Contains(output, "Tell remote agents") {
+			if !strings.Contains(output, "✓ Local socket: listening") || strings.Contains(output, "passlet pair --endpoint https://") || strings.Contains(output, "Tell remote agents") {
 				t.Fatal(output)
 			}
 		})

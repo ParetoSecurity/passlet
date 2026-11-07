@@ -35,13 +35,13 @@ On your Mac, run:
 passlet approver pair
 ```
 
-Copy the printed command to the Agent machine. With verified Tailscale forwarding, it includes your Mac's address:
+Use the printed command that matches the Agent's connection. For Tailscale, use the command with your Mac's address:
 
 ```sh
-passlet pair https://your-mac.your-tailnet.ts.net:17400 --code <code>
+passlet pair --endpoint https://your-mac.your-tailnet.ts.net:17400 --code <code>
 ```
 
-For an SSH-forwarded socket, substitute the socket path on the Agent. To explicitly re-pair a local Agent on the Mac, omit the endpoint:
+For the default socket on the Agent, omit the endpoint. This applies both to a local Agent on the Mac and to an SSH-forwarded socket at `~/.local/share/passlet/passlet.sock`:
 
 ```sh
 passlet pair --code <code>
@@ -64,7 +64,7 @@ Revocation takes effect on subsequent requests without restarting the service, i
 
 Commands select their endpoint in this order: `--endpoint`, `PASSLET_ENDPOINT`, the saved pairing, then the local socket. An endpoint override does not change the pinned Approver key. Unset `PASSLET_ENDPOINT` before pairing. Use `passlet doctor` to check an existing pairing.
 
-When upgrading from v0.5.0, remove `programs.passlet.agent`, `programs.passlet.service.agents`, and `programs.passlet.service.privateKeyFile` from Home Manager. Remove `agents` and `private_key_file` from manually managed `approver.toml`. Keep service and Tailscale settings. Upgrade both ends, then pair each Agent, including local Agents. Old `agent.toml` and `endpoint` files are unused and may be removed. Existing private keys at the default paths are retained.
+When upgrading from v0.5.0, remove `programs.passlet.agent`, `programs.passlet.service.agents`, and `programs.passlet.service.privateKeyFile` from Home Manager. Remove `agents` and `private_key_file` from manually managed `approver.toml`. Keep service and Tailscale settings. Upgrade both ends. Successful GitHub setup pairs the local Agent automatically; pair other Agents explicitly. Old `agent.toml` and `endpoint` files are unused and may be removed. Existing private keys at the default paths are retained.
 
 ## SSH forwarding
 
@@ -103,7 +103,7 @@ ssh -NT -o ExitOnForwardFailure=yes \
   -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" alice@cruncher
 ```
 
-Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account pairs with `passlet pair unix:///home/alice/.local/share/passlet/passlet.sock --code <code>`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
+Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account pairs with `passlet pair --endpoint unix:///home/alice/.local/share/passlet/passlet.sock --code <code>`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
 
 Unix permissions isolate Alice from Bob, but not either from remote root or other processes sharing their account. Never describe this as attesting the agent executable. Root can request approval through either socket and read delivered tokens. A compromised same-user process can also request approval; examine the scopes in the native prompt.
 

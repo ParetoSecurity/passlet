@@ -22,6 +22,7 @@ let
   };
   approver = user: { ... }: {
     imports = [ common ];
+    networking.firewall.allowedTCPPorts = [ 17400 ];
     users.users.${user} = { isNormalUser = true; };
     systemd.services.passlet-fixture = {
       wantedBy = [ "multi-user.target" ];
@@ -44,7 +45,7 @@ let
     };
   };
 in pkgs.testers.runNixOSTest {
-  name = "passlet-ssh-multi-user";
+  name = "passlet-pairing-multi-user";
   globalTimeout = 900;
   nodes = {
     alice = approver "alice";
@@ -101,8 +102,84 @@ in pkgs.testers.runNixOSTest {
     def as_user(user, command):
         return "su - " + user + " -c " + shlex.quote(command)
 
-    for user in ("alice", "bob"):
-        cruncher.succeed(as_user(user, "PASSLET_VM_ROLE=configure ${fixture}"))
+    def invite(machine, user):
+        output = machine.succeed(as_user(user, "passlet approver pair"))
+        return shlex.split(next(line for line in output.splitlines() if "passlet pair " in line))[-1]
+
+    def pair(machine, user, endpoint, code, success=True):
+        command = as_user(user, f"passlet pair {shlex.quote(endpoint)} --code {shlex.quote(code)}")
+        return machine.succeed(command) if success else machine.fail(command)
+
+    def doctor(machine, user, success=True):
+        command = as_user(user, "passlet doctor")
+        if success:
+            assert "GitHub authorization: valid" in machine.succeed(command)
+        else:
+            machine.fail(command)
+
+    with subtest("Fresh local, SSH, and remote TLS Agents pair, revoke, and pair again"):
+        for approver, user in ((alice, "alice"), (bob, "bob")):
+            approver.wait_for_open_port(17400)
+            assert "No paired Agents." in approver.succeed(as_user(user, "passlet approver agents list"))
+            transports = (
+                (approver, f"unix:///home/{user}/.local/share/passlet/passlet.sock", f"{user}@{user}"),
+                (cruncher, f"unix:///home/{user}/.local/share/passlet/mac.sock", f"{user}@cruncher"),
+                (cruncher, f"https://{user}:17400", f"{user}@cruncher"),
+            )
+            for agent, endpoint, label in transports:
+                # Revoke the SSH pairing before exercising the same Agent over TCP.
+                if endpoint.startswith("https:"):
+                    approver.succeed(as_user(user, f"passlet approver agents revoke {label}"))
+                agent.fail(as_user(user, f"passlet doctor --endpoint {endpoint}"))
+                code = invite(approver, user)
+                pair(agent, user, endpoint, code)
+                assert label in approver.succeed(as_user(user, "passlet approver agents list")).splitlines()
+                doctor(agent, user)
+                saved = agent.succeed(f"sha256sum /home/{user}/.local/share/passlet/connection.json")
+                prompts = approver.succeed(f"cat /home/{user}/.local/share/passlet/mode.prompts")
+                pair(agent, user, endpoint, code, success=False)
+                assert agent.succeed(f"sha256sum /home/{user}/.local/share/passlet/connection.json") == saved
+                assert approver.succeed(f"cat /home/{user}/.local/share/passlet/mode.prompts") == prompts
+                approver.succeed(as_user(user, f"passlet approver agents revoke {label}"))
+                doctor(agent, user, success=False)
+                pair(agent, user, endpoint, invite(approver, user))
+                doctor(agent, user)
+                for filename in ("agent.pem", "connection.json"):
+                    agent.succeed(f"test $(stat -c %a /home/{user}/.local/share/passlet/{filename}) = 600")
+            approver.succeed("systemctl restart passlet-fixture")
+            approver.wait_for_open_port(17400)
+            doctor(approver, user)
+            doctor(cruncher, user)
+
+    with subtest("Replaced, expired, denied, and wrong-Approver invitations preserve the saved connection"):
+        endpoint = "https://alice:17400"
+        saved = cruncher.succeed("sha256sum /home/alice/.local/share/passlet/connection.json")
+        old = invite(alice, "alice")
+        code = invite(alice, "alice")
+        prompts = alice.succeed("cat /home/alice/.local/share/passlet/mode.prompts")
+        pair(cruncher, "alice", endpoint, old, success=False)
+        pair(cruncher, "alice", "https://bob:17400", code, success=False)
+        expire = "import json; p='/home/alice/.local/share/passlet/pairings.json'; d=json.load(open(p)); d['expires']='2000-01-01T00:00:00Z'; open(p,'w').write(json.dumps(d))"
+        alice.succeed(as_user("alice", "python3 -c " + shlex.quote(expire)))
+        pair(cruncher, "alice", endpoint, code, success=False)
+        assert alice.succeed("cat /home/alice/.local/share/passlet/mode.prompts") == prompts
+        code = invite(alice, "alice")
+        alice.succeed("echo deny > /home/alice/.local/share/passlet/mode")
+        pair(cruncher, "alice", endpoint, code, success=False)
+        alice.succeed("rm /home/alice/.local/share/passlet/mode")
+        pair(cruncher, "alice", endpoint, code, success=False)
+        assert cruncher.succeed("sha256sum /home/alice/.local/share/passlet/connection.json") == saved
+        doctor(cruncher, "alice")
+
+    with subtest("A different key cannot replace an existing Agent label"):
+        cruncher.succeed("cp -p /home/alice/.local/share/passlet/agent.pem /home/alice/.local/share/passlet/agent.pem.saved")
+        try:
+            cruncher.succeed("rm /home/alice/.local/share/passlet/agent.pem")
+            pair(cruncher, "alice", "https://alice:17400", invite(alice, "alice"), success=False)
+            doctor(cruncher, "alice", success=False)
+        finally:
+            cruncher.succeed("mv /home/alice/.local/share/passlet/agent.pem.saved /home/alice/.local/share/passlet/agent.pem")
+        doctor(cruncher, "alice")
 
     def request(user, repo, name, permission="write"):
         return as_user(user, f"passlet request --endpoint unix:///home/{user}/.local/share/passlet/mac.sock --repos acme/{repo} --permissions contents:{permission} --out /home/{user}/.local/share/passlet/{name}.json")
@@ -122,7 +199,7 @@ in pkgs.testers.runNixOSTest {
     with subtest("A different user's key cannot authenticate through Alice's tunnel"):
         count = "sqlite3 /home/alice/.local/share/passlet/audit.sqlite 'select count(*) from events'"
         before = alice.succeed(count)
-        cruncher.succeed("cp /home/alice/.local/share/passlet/agent.pem /home/alice/.local/share/passlet/agent.pem.saved")
+        cruncher.succeed("cp -p /home/alice/.local/share/passlet/agent.pem /home/alice/.local/share/passlet/agent.pem.saved")
         try:
             cruncher.succeed("cat /home/bob/.local/share/passlet/agent.pem > /home/alice/.local/share/passlet/agent.pem")
             cruncher.fail(request("alice", "test-a", "wrong-key"))

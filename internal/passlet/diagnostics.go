@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -29,9 +31,21 @@ func (a AccountInfo) Validate() error {
 	return nil
 }
 
+func SandboxNetworkProblem(err error) string {
+	var connection *net.OpError
+	if os.Getenv("CODEX_SANDBOX_NETWORK_DISABLED") == "1" &&
+		errors.As(err, &connection) && connection.Op == "dial" && errors.Is(err, os.ErrPermission) {
+		return "The Codex sandbox denied this connection. Allow access to the endpoint or approve running `passlet` outside the sandbox."
+	}
+	return ""
+}
+
 type healthConnectionError struct{ cause error }
 
 func (e healthConnectionError) Error() string {
+	if problem := SandboxNetworkProblem(e.cause); problem != "" {
+		return problem
+	}
 	return "approver_unavailable_check_service_or_SSH_tunnel"
 }
 func (e healthConnectionError) Unwrap() error { return e.cause }

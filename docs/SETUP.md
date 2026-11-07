@@ -81,6 +81,10 @@ Host cruncher
 
 SSH creates the first socket on Cruncher, whose parent directory must exist with mode `0700`. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. Other servers can forward to the same Mac socket and authenticate using their own keys.
 
+To share the tunnel across SSH sessions, add `ControlMaster auto`, `ControlPersist 10m`, and `ControlPath ~/.ssh/master-%C` to that host block. The master connection owns the forward and remains open for ten minutes after the last session exits. Start a new master connection when changing forwarding settings, since an existing master retains its previous configuration.
+
+Resetting a disposable sandbox removes its Agent key and saved pairing. Pair the replacement sandbox again and revoke the old Agent on your Mac. Reusing a hostname does not restore its identity.
+
 `passlet approver doctor` checks the shared local listener. It cannot determine whether an SSH tunnel is connected. Run `passlet doctor` on the remote machine to check the complete authenticated connection. Missing or stale forwarded sockets receive tunnel troubleshooting advice.
 
 ## SSH server configuration
@@ -111,6 +115,15 @@ Unix permissions isolate Alice from Bob, but not either from remote root or othe
 
 Enable `programs.passlet.service.tailscale = true;` with Home Manager, or merge `tailscale = true` into the Homebrew Approver configuration. Restart after changing configuration. Tailscale must be running and signed in, and the service must be allowed to configure Serve. Passlet never invokes sudo or changes tailnet policy.
 
+Passlet launches `tailscale` as an executable, so a shell alias is insufficient. When using the macOS GUI app, put an executable wrapper named `tailscale` in a directory on your PATH:
+
+```sh
+#!/bin/sh
+exec /Applications/Tailscale.app/Contents/MacOS/Tailscale "$@"
+```
+
+Use a wrapper rather than symlinking the app executable: launching it through a symlink can prevent it from recognizing its app bundle. The login service has its own PATH, independent of your interactive shell. A successful `tailscale status` in your terminal does not establish that the Approver service can find the command.
+
 The Approver binds `127.0.0.1:17401` and configures `tailscale serve --bg --tcp=17400 tcp://127.0.0.1:17401`. [Serve forwards the encrypted TCP stream](https://tailscale.com/docs/reference/tailscale-cli/serve) without terminating TLS. Passlet authenticates both peers and encrypts tokens itself, so it works with the GUI Tailscale app without giving its sandbox access to Unix sockets. Tailnet HTTPS certificates are not needed. Agents still use `https://your-mac.your-tailnet.ts.net:17400`, with the Approver public key pinned in their pairing configuration.
 
 Startup reuses matching forwarding, creates it when absent, and refuses conflicts without changing unrelated ports. If port 17400 still has an old Passlet HTTPS proxy, verify it belongs to Passlet and remove only that route with `tailscale serve --https=17400 off` before restarting. Never reset unrelated Serve configuration. Funnel and TLS termination on this route are rejected.
@@ -120,6 +133,22 @@ Permit intended devices on TCP 17400 in tailnet policy. Pairing additionally dis
 `passlet approver doctor` checks Tailscale status, the loopback listener, and Serve forwarding. It explains missing or mismatched configuration without changing it. Run `passlet doctor` on the Agent to verify end-to-end connectivity and authentication.
 
 Disabling Tailscale stops the loopback listener after restart. The saved Serve route remains but cannot reach Passlet. To remove it, first verify it still belongs to Passlet, then use `tailscale serve --tcp=17400 off`.
+
+## Coding-agent sandboxes
+
+For HTTPS endpoints, Passlet uses the environment's proxy settings, including `HTTPS_PROXY` and `NO_PROXY`. Pairing and authenticated requests retain end-to-end TLS with the Approver key pinned. The proxy can see the destination and interrupt the connection, but cannot read credentials or impersonate the Approver. Unix sockets bypass proxies.
+
+When Codex reports disabled networking and a connection is denied, Passlet identifies the sandbox restriction. Missing sockets, refused connections, and timeouts retain their own troubleshooting messages. Configure the required endpoint access, or approve running the individual Passlet command outside the sandbox. Do not automatically enable unrestricted networking or exclude every Passlet command.
+
+A sandbox must allow connections to the selected Unix socket as well as access to the Agent's pairing files under `~/.local/share/passlet`. On a local Mac, the socket is `~/.local/share/passlet/passlet.sock`. Use the absolute path when configuring an allowlist. For Claude Code, this belongs in `sandbox.network.allowUnixSockets`. Do not make the socket world-accessible to work around a sandbox denial.
+
+Run `passlet doctor` inside the same sandbox as the failing command. A permission denial can come from filesystem permissions or sandbox policy; it does not prove the Approver is stopped. Compare with a check outside the sandbox when diagnosing policy restrictions, remembering that doctor requests Touch ID approval.
+
+Successful pairing and doctor checks establish access to the Approver. Git and `gh` still need their own network access. On macOS, sandbox restrictions on system trust services can also prevent `gh` from validating HTTPS certificates. Consult the coding agent's sandbox configuration and allow the required access without disabling TLS verification. Opening all network access is not a Passlet requirement.
+
+`passlet exec` removes inherited Git configuration to prevent ambient credential helpers from supplying credentials. It preserves Git's effective `http.proxyAuthMethod` for GitHub through `GIT_HTTP_PROXY_AUTHMETHOD`, accepting only Git's supported authentication methods. An explicitly set `GIT_HTTP_PROXY_AUTHMETHOD` takes precedence. Proxy addresses must remain available through the command's environment, such as `HTTPS_PROXY`; other inherited Git configuration is not copied. Never include proxy credentials in diagnostic output.
+
+When managing plugins through Nix, avoid having both Nix and a plugin manager own the same cache directory. Codex can replace a managed symlink with a directory, causing Home Manager's link-target check to fail on the next rebuild. Resolve only the conflicting plugin cache entry before activation; preserve pairing files, grants, and writable agent configuration. This is a plugin installation conflict, not an Approver failure.
 
 ## Diagnostics
 

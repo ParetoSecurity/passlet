@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -241,6 +242,9 @@ func authenticationFailure(err error) error {
 	var auth authenticationError
 	if errors.As(err, &auth) {
 		return auth
+	}
+	if problem := SandboxNetworkProblem(err); problem != "" {
+		return fmt.Errorf("%s", problem)
 	}
 	return errors.New("approver_unavailable_or_connection_lost")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,9 +71,12 @@ func TestDoctorConnectionHints(t *testing.T) {
 		want     string
 	}{
 		{"unix:///tmp/forwarded.sock", os.ErrPermission, "ownership and permissions"},
+		{"unix:///tmp/forwarded.sock", syscall.EPERM, "allow access to this Unix socket"},
+		{"unix://" + passlet.DefaultSocket(), os.ErrNotExist, "Your SSH tunnel may not be running"},
+		{"unix://" + passlet.DefaultSocket(), syscall.ECONNREFUSED, "Restart your SSH tunnel"},
 		{"https://mac.example.ts.net:17400", syscall.ECONNREFUSED, "Tailscale endpoint"},
 	} {
-		got := doctorConnectionHint(tc.endpoint, fmt.Errorf("connection: %w", tc.cause))
+		got := doctorConnectionHint(tc.endpoint, "linux", fmt.Errorf("connection: %w", tc.cause))
 		if !strings.Contains(got, tc.want) {
 			t.Fatal(got)
 		}
@@ -119,16 +123,29 @@ func TestLocalDoctorConnectionHints(t *testing.T) {
 	}{
 		{os.ErrNotExist, "local Approver service is not running"},
 		{syscall.ECONNREFUSED, "local Approver service is not running"},
-		{os.ErrPermission, "Cannot access the local Approver socket. Check its ownership and permissions."},
+		{os.ErrPermission, "Cannot access socket " + passlet.DefaultSocket() + ". Check its ownership and permissions. If running in a sandbox, allow access to this Unix socket."},
 		{context.DeadlineExceeded, "The local Approver health check timed out."},
 		{context.Canceled, "The local Approver health check was canceled."},
 		{errors.New("approver_health_check_failed"), "The local socket did not return a healthy Approver response."},
 	} {
 		t.Run(tc.cause.Error(), func(t *testing.T) {
-			got := doctorConnectionHint("unix://"+passlet.DefaultSocket(), fmt.Errorf("health check: %w", tc.cause))
+			got := doctorConnectionHint("unix://"+passlet.DefaultSocket(), "darwin", fmt.Errorf("health check: %w", tc.cause))
 			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestDoctorExplainsDeniedCodexConnection(t *testing.T) {
+	t.Setenv("CODEX_SANDBOX_NETWORK_DISABLED", "1")
+	for _, endpoint := range []string{"unix:///tmp/forwarded.sock", "https://mac.example.ts.net:17400"} {
+		err := &net.OpError{Op: "dial", Err: syscall.EPERM}
+		if got := doctorConnectionHint(endpoint, "linux", err); got != passlet.SandboxNetworkProblem(err) {
+			t.Fatal(got)
+		}
+	}
+	if got := doctorConnectionHint("unix:///tmp/missing.sock", "linux", os.ErrNotExist); !strings.Contains(got, "No forwarded socket") {
+		t.Fatal(got)
 	}
 }

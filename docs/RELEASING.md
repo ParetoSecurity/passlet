@@ -54,6 +54,8 @@ Open the release PR in this repository against main. Include concise, user-facin
 
 Preparation runs the pinned tests, builds universal macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
 
+Stapling and ticket validation retry the observed Apple connection-loss error (`NSURLErrorDomain Code=-1005`, exit 68) up to four attempts, waiting 15, 30, and 45 seconds between attempts. Other failures stop immediately. These retries reuse the signed, notarized app without rebuilding or resubmitting it.
+
 Download both artifacts from that successful run. Verify checksums and production signatures, then add to that same PR `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. The release JSON identifies the exact preparation run and source SHA. Do not edit generated files, invent checksums, or bump plugin versions separately.
 
 Review the generated metadata and squash-merge the release PR, then push the final `vX.Y.Z` tag at that commit on main. Only those five generated files may differ from the prepared source. Verification compares file contents rather than requiring the pre-squash commit to be an ancestor, so code and metadata can land as one commit. If a rebase or merge resolution changes other files, prepare a new release rather than publishing binaries for different code. Merge immediately before final publication: consumers following main can see the new package URLs before the assets are public, so do not leave this intermediate state deployed.

@@ -52,14 +52,14 @@ Requires Touch ID approval to verify saved credentials.`)
 	if fs.NArg() != 0 {
 		return errors.New("unexpected_arguments")
 	}
-	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), runtime.GOOS)
+	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), "darwin")
 }
 
 func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
 	fmt.Println("passlet", version)
 	fmt.Println("Endpoint:", endpoint)
 	if err := passlet.Health(ctx, endpoint); err != nil {
-		return errors.New(doctorConnectionHint(endpoint, err))
+		return errors.New(doctorConnectionHint(endpoint, hostOS, err))
 	}
 	fmt.Println("Approver: running")
 	if endpoint == "unix://"+passlet.DefaultSocket() && hostOS == "darwin" {
@@ -118,16 +118,20 @@ func doctorFailureMessage(err error) string {
 	}
 }
 
-func doctorConnectionHint(endpoint string, err error) string {
+func doctorConnectionHint(endpoint, hostOS string, err error) string {
 	if problem := passlet.PairingProblem(err); problem != "" {
 		return problem
 	}
-	if endpoint == "unix://"+passlet.DefaultSocket() {
+	if problem := passlet.SandboxNetworkProblem(err); problem != "" {
+		return problem
+	}
+	if strings.HasPrefix(endpoint, "unix://") && (errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM)) {
+		return fmt.Sprintf("Cannot access socket %s. Check its ownership and permissions. If running in a sandbox, allow access to this Unix socket.", strings.TrimPrefix(endpoint, "unix://"))
+	}
+	if hostOS == "darwin" && endpoint == "unix://"+passlet.DefaultSocket() {
 		switch {
 		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ECONNREFUSED):
 			return "local Approver service is not running"
-		case errors.Is(err, os.ErrPermission):
-			return "Cannot access the local Approver socket. Check its ownership and permissions."
 		case errors.Is(err, context.DeadlineExceeded):
 			return "The local Approver health check timed out."
 		case errors.Is(err, context.Canceled):
@@ -144,8 +148,6 @@ func doctorConnectionHint(endpoint string, err error) string {
 		return "No forwarded socket found. Your SSH tunnel may not be running."
 	case errors.Is(err, syscall.ECONNREFUSED):
 		return "The forwarded socket is not accepting connections. Restart your SSH tunnel."
-	case errors.Is(err, os.ErrPermission):
-		return "Cannot access the forwarded socket. Check its ownership and permissions."
 	default:
 		return "The socket did not return a healthy Approver response. Check that Passlet Approver is running on your Mac and that the SSH tunnel forwards to its socket."
 	}

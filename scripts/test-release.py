@@ -20,6 +20,64 @@ preparation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preparation)
 
 
+class StaplerTests(unittest.TestCase):
+    def run_stapler(self, failures):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "failures.json").write_text(json.dumps(failures))
+            (root / "xcrun").write_text("#!" + os.sys.executable + "\n" + textwrap.dedent(r"""
+                import json, pathlib, sys
+                root = pathlib.Path(__file__).parent
+                with (root / "calls").open("a") as stream:
+                    stream.write(" ".join(sys.argv[1:]) + "\n")
+                failures = json.loads((root / "failures.json").read_text())
+                action = sys.argv[2]
+                sequence = failures.get(action, [])
+                if sequence:
+                    status, message = sequence.pop(0)
+                    (root / "failures.json").write_text(json.dumps(failures))
+                    print(message)
+                    sys.exit(status)
+            """))
+            (root / "sleep").write_text('#!/bin/sh\nprintf "%s\\n" "$1" >> "$(dirname "$0")/delays"\n')
+            for name in ["xcrun", "sleep"]:
+                (root / name).chmod(0o700)
+            result = subprocess.run(["sh", str(ROOT / "scripts/staple.sh"), "App With Spaces.app"], env=dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"]), capture_output=True, text=True)
+            calls = (root / "calls").read_text().splitlines()
+            delays = (root / "delays").read_text().splitlines() if (root / "delays").exists() else []
+            return result, calls, delays
+
+    def test_success_does_not_retry(self):
+        result, calls, delays = self.run_stapler({})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["stapler staple App With Spaces.app", "stapler validate App With Spaces.app"])
+        self.assertEqual(delays, [])
+
+    def test_connection_loss_retries_both_actions(self):
+        network = [68, "Error Domain=NSURLErrorDomain Code=-1005 connection lost"]
+        result, calls, delays = self.run_stapler({"staple": [network, network], "validate": [network]})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(delays, ["15", "30", "15"])
+        self.assertEqual(len(calls), 5)
+
+    def test_connection_loss_exhausts_budget(self):
+        network = [68, "Error Domain=NSURLErrorDomain Code=-1005 connection lost"]
+        result, calls, delays = self.run_stapler({"staple": [network] * 4})
+        self.assertEqual(result.returncode, 68)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(delays, ["15", "30", "45"])
+        self.assertNotIn("stapler validate", "\n".join(calls))
+
+    def test_other_errors_fail_immediately(self):
+        for action in ["staple", "validate"]:
+            for failure in [[68, "ticket invalid"], [65, "NSURLErrorDomain Code=-1005"]]:
+                with self.subTest(action=action, failure=failure):
+                    result, calls, delays = self.run_stapler({action: [failure]})
+                    self.assertEqual(result.returncode, failure[0])
+                    self.assertEqual(delays, [])
+                    self.assertEqual(len(calls), 1 if action == "staple" else 2)
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

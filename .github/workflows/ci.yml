@@ -1,6 +1,7 @@
 name: CI
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -34,16 +35,16 @@ jobs:
         run: mkdir -p "$HOME/.cache/nix"
       - name: Restore Nix store and source cache
         if: runner.os == 'Linux'
-        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
         with:
           primary-key: nix-v1-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
       - if: runner.os == 'Linux'
-        uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+        uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
         with:
           cache: devenv
       - if: runner.os == 'macOS'
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
           cache: false
@@ -53,7 +54,7 @@ jobs:
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore Go modules and build cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ${{ steps.go-cache.outputs.modules }}
@@ -105,7 +106,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
       - name: Build package fixture without release credentials
@@ -128,12 +129,12 @@ jobs:
       - name: Prepare user cache directory
         run: mkdir -p "$HOME/.cache/nix"
       - name: Restore shared Linux Nix cache
-        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
         with:
           primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
           save: false
-      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+      - uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
         with:
           cache: devenv
       - name: Enable KVM for the Nix build users

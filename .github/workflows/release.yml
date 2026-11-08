@@ -76,7 +76,7 @@ jobs:
         run: |
           bash_path=$(nix-build ./nix --attr bash --no-out-link)
           echo "$bash_path/bin" >> "$GITHUB_PATH"
-      - uses: teamniteo/gha-actions/nix@7e90d58c2bbdc0c7d6f7395b9fb2c6ba641a6bd2 # v42
+      - uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
         with:
           auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Import Developer ID certificate and profile

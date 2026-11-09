@@ -73,6 +73,17 @@ The metadata URLs refer to the pending release. Merge immediately before final p
 - [ ] Verify the final tag and main contain the intended package metadata and both plugin manifests at the release version.
 - [ ] Build the real published package with `nix build .#packages.aarch64-darwin.default --no-link` (or the corresponding supported system). Verify `passlet --version` and that the macOS bundle retains its signature. Verify Linux Agent behavior and applicable production service lifecycle checks, distinguishing tests not run.
 - [ ] Confirm the final `github:ParetoSecurity/passlet/vX.Y.Z` input resolves to the same release version. Consumers may pin this tag and update their lock file. Do not activate user machines unless requested.
-- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
+- [ ] Announce the verified release as described below. Show the user every post and wait for their approval before publishing any of them. Authorization to publish the release does not cover the announcement.
+- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, which announcements were posted, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
 
 If work stops awaiting environment approval, metadata review, or manual validation, preserve those exact next steps.
+
+## Announce the release
+
+Drafting, approval, and posting follow the `socials-post` skill in the maintainer's socials checkout. Read `~/work/socials/.claude/skills/socials-post/SKILL.md` and follow it with this scope:
+
+- Brand: personal, posted from the maintainer's own accounts.
+- Networks: X, Bluesky, LinkedIn, and Discord in https://discord.com/channels/1401988469252948108/1401988469835960474.
+- Material: `docs/releases/vX.Y.Z.md` and https://github.com/ParetoSecurity/passlet/releases/tag/vX.Y.Z. The Discord post is `Passlet vX.Y.Z is out:` followed by that URL, a blank line, then the notes verbatim. Every other variant links to the release.
+
+If that file is missing, give the user the Discord text to post by hand and report the announcement as not posted. Do not look for another way to post.

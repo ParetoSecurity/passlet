@@ -2,11 +2,12 @@
 
 Ideas for future features, in no particular order. Inclusion here is not a commitment to delivery, timing, or a release version.
 
+- Paranoid mode. Optionally require temporary enablement for each service and paired Agent before requests can trigger Touch ID or the provider’s normal approval. Block requests without prompting while disabled, expired, or revoked. Support minutes, hours, and days, defaulting to one hour. Enabling a service never bypasses its normal approval policy. Apply this consistently to SSH-agent forwarding, GitHub, and future services.
 - Organization approval during GitHub setup. Recognize when an installation needs an organization owner's approval, explain what happens next, and let the user complete setup after approval without recreating their app.
 - GitHub reauthorization. Renew revoked or expired authorization through the browser while preserving the user's GitHub App and its installations. Update the protected Keychain credentials after verifying the authorized identity.
 - 100% test coverage for the Swift codebase, with meaningful tests for the native helper.
 - Fly.io, AWS, Cloudflare, and Vercel providers.
-- Approve remote sudo requests with Touch ID through Passlet, including remote Rex sessions without SSH agent forwarding. Integrate with PAM and reuse paired Agent identities and authenticated transport. Bind each short-lived, single-use approval to the requesting user, host, and exact sudo invocation, with replay protection and trustworthy command attribution. Denial, timeout, or an unavailable Approver must not authorize sudo. This approval must not unlock provider credentials.
+- Command-specific sudo approvals beyond SSH-agent forwarding. Bind each short-lived, single-use approval to the requesting user, host, and exact sudo invocation, with replay protection and trustworthy command attribution. The SSH-agent proxy supports existing PAM authentication but authorizes SSH signing rather than a specific command.
 - Native approval on Linux and Windows. Agents already run on macOS and Linux, while approval currently requires macOS.
 - iOS and Android companion apps for reviewing and approving requests.
 - Encrypt token responses for the requesting Agent. Bind the recipient key and encrypted response to the authenticated request so only that Agent can decrypt the token, even when Tailscale Serve or another proxy terminates HTTPS. Authenticate the Approver’s response and reject responses belonging to another request.

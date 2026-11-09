@@ -29,6 +29,12 @@ let
       environment = { HOME = "/home/${user}"; PASSLET_VM_ROLE = user; SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt"; };
       serviceConfig = { User = user; ExecStart = fixture; Restart = "on-failure"; RestartSec = 1; };
     };
+    systemd.services.ssh-key-agent = {
+      serviceConfig = {
+        User = user;
+        ExecStart = "${pkgs.openssh}/bin/ssh-agent -D -a /home/${user}/.ssh/key-agent.sock";
+      };
+    };
     systemd.services.tunnel = {
       after = [ "network.target" "passlet-fixture.service" ];
       path = [ pkgs.openssh pkgs.coreutils ];
@@ -59,8 +65,27 @@ in pkgs.testers.runNixOSTest {
         enable = true;
         settings = { PasswordAuthentication = false; AllowStreamLocalForwarding = "yes"; StreamLocalBindUnlink = "yes"; };
       };
-      users.users.alice = { isNormalUser = true; openssh.authorizedKeys.keyFiles = [ "${keys}/alice.pub" ]; };
+      users.users.alice = { isNormalUser = true; extraGroups = [ "wheel" ]; openssh.authorizedKeys.keyFiles = [ "${keys}/alice.pub" ]; };
       users.users.bob = { isNormalUser = true; openssh.authorizedKeys.keyFiles = [ "${keys}/bob.pub" ]; };
+      security.pam.sshAgentAuth.enable = true;
+      security.sudo.extraConfig = ''
+        Defaults env_keep += "SSH_AUTH_SOCK"
+        Defaults timestamp_timeout=0
+      '';
+      systemd.services.fake-ssh-agent = {
+        serviceConfig = {
+          User = "alice";
+          ExecStart = "${pkgs.openssh}/bin/ssh-agent -D -a /home/alice/.local/share/passlet/ssh-agent.sock";
+        };
+      };
+      systemd.sockets.ssh-agent-proxy = {
+        listenStreams = [ "/home/alice/.local/share/passlet/ssh-agent.sock" ];
+        socketConfig = { Accept = true; MaxConnections = 32; RemoveOnStop = true; SocketMode = "0600"; SocketUser = "alice"; };
+      };
+      systemd.services."ssh-agent-proxy@" = {
+        environment.HOME = "/home/alice";
+        serviceConfig = { User = "alice"; ExecStart = "${passlet}/bin/passlet ssh-agent --stdio"; StandardInput = "socket"; StandardOutput = "journal"; };
+      };
       systemd.tmpfiles.rules = [
         "d /home/alice/.local 0700 alice users -" "d /home/alice/.local/share 0700 alice users -" "d /home/alice/.local/share/passlet 0700 alice users -"
         "d /home/bob/.local 0700 bob users -" "d /home/bob/.local/share 0700 bob users -" "d /home/bob/.local/share/passlet 0700 bob users -"
@@ -150,6 +175,35 @@ in pkgs.testers.runNixOSTest {
             approver.wait_for_open_port(17400)
             doctor(approver, user)
             doctor(cruncher, user)
+
+    with subtest("Sudo uses the on-demand SSH-agent proxy without an SSH session"):
+        alice.succeed("systemctl start ssh-key-agent")
+        alice.wait_until_succeeds("test -S /home/alice/.ssh/key-agent.sock")
+        alice.succeed(as_user("alice", "SSH_AUTH_SOCK=/home/alice/.ssh/key-agent.sock ssh-add /home/alice/.ssh/id_ed25519"))
+        cruncher.succeed("systemctl start ssh-agent-proxy.socket")
+        cruncher.wait_until_succeeds("test -S /home/alice/.local/share/passlet/ssh-agent.sock")
+        no_proxy = "test -z \"$(systemctl list-units 'ssh-agent-proxy@*.service' --state=running --no-legend)\""
+        cruncher.succeed(no_proxy)
+        proxy_env = "SSH_AUTH_SOCK=/home/alice/.local/share/passlet/ssh-agent.sock "
+        sudo = proxy_env + "sudo -k -S id -un </dev/null"
+        alice.succeed("systemctl stop tunnel")
+        assert cruncher.succeed(as_user("alice", sudo)).strip() == "root"
+        cruncher.wait_until_succeeds(no_proxy)
+        assert cruncher.succeed(as_user("alice", sudo)).strip() == "root"
+        cruncher.wait_until_succeeds(no_proxy)
+        cruncher.fail(as_user("bob", "SSH_AUTH_SOCK=/home/alice/.local/share/passlet/ssh-agent.sock ssh-add -L"))
+        alice.succeed("systemctl restart passlet-fixture")
+        alice.wait_for_open_port(17400)
+        assert cruncher.succeed(as_user("alice", sudo)).strip() == "root"
+        alice.succeed("systemctl start tunnel")
+        cruncher.succeed("systemctl stop ssh-agent-proxy.socket")
+        cruncher.succeed("systemctl start fake-ssh-agent")
+        cruncher.wait_until_succeeds("test -S /home/alice/.local/share/passlet/ssh-agent.sock")
+        cruncher.succeed(as_user("alice", "cp ${keys}/bob /home/alice/fake-key && chmod 600 /home/alice/fake-key"))
+        cruncher.succeed(as_user("alice", proxy_env + "ssh-add /home/alice/fake-key"))
+        cruncher.fail(as_user("alice", sudo))
+        cruncher.succeed("systemctl stop fake-ssh-agent")
+        cruncher.succeed("systemctl start ssh-agent-proxy.socket")
 
     with subtest("Replaced, expired, denied, and wrong-Approver invitations preserve the saved connection"):
         endpoint = "https://alice:17400"

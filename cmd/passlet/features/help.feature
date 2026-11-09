@@ -147,3 +147,14 @@ Feature: Show command help
         Usage: passlet approver agents list
                passlet approver agents revoke <name>
         """
+
+  Rule: SSH-agent commands
+
+    Scenario: Show SSH-agent proxy help
+      When I run `passlet ssh-agent --help`
+      Then the terminal shows:
+        """
+        Provide a private SSH-agent socket for this machine. Requests are forwarded on demand to your paired Approver. Configure the upstream SSH-agent socket on your Approver Mac.
+
+        Usage of ssh-agent:
+        """

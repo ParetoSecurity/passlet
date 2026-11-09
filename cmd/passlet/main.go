@@ -61,6 +61,8 @@ func runWithOverview(showOverview func(context.Context) error) (result error) {
 	case "--help", "-h", "help":
 		fmt.Print(commandHelp)
 		return nil
+	case "ssh-agent":
+		return sshAgent(ctx, os.Args[2:])
 	case "pair":
 		return pair(ctx, os.Args[2:])
 	case "doctor":

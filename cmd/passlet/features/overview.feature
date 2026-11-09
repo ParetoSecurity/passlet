@@ -18,6 +18,7 @@ Feature: Get started with Passlet
         exec          Run a command with scoped access
         pair          Pair with an Approver
         request       Request scoped access
+        ssh-agent     Forward your Mac's SSH agent on demand
 
       Run `passlet <command> --help` for command options.
       """

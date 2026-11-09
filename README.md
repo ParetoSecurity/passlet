@@ -26,6 +26,7 @@ Passlet delivers a short-lived token the agent can use with Git and `gh`, even a
 | Local and remote agents | Connect through a local socket, SSH forwarding, or opt-in Tailscale HTTPS. |
 | macOS and Linux agents | Run your agents on macOS or Linux. |
 | Claude Code and Codex plugins | Let your agent request access and reuse approved grants through the bundled skill. |
+| SSH-agent forwarding | Let paired Agents use your Mac’s SSH agent with its normal signing approval, without a persistent tunnel. |
 | Work after approval | Use delivered tokens until expiry, even while your Mac is offline. |
 | Audit history | Inspect requests, decisions, scopes, and delivery outcomes without recording credentials. |
 
@@ -201,6 +202,8 @@ passlet approver audit --limit 20
 - Tokens are bearer credentials. Anyone who obtains one can use its granted access until expiry. Effective access is constrained by the requested scope, app permissions/installation, and the author's GitHub access. Some GitHub listing endpoints expose metadata beyond the scoped content repositories.
 - Requests accept one repository owner, at most three repositories and eight permissions, with bounded prompt text. No caller-provided description or requested TTL is accepted.
 - A successful response write records delivery from the server's perspective, not proof the agent saved it. Failed rotated-credential storage may require fresh GitHub authorization.
+
+See [SSH-agent forwarding](docs/SETUP.md#ssh-agent-forwarding) for using Secretive from a remote terminal or sudo session.
 
 ## Development and validation
 

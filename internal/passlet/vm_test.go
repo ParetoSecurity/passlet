@@ -90,7 +90,12 @@ func TestVMFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &http.Server{Handler: p.Handler(s), BaseContext: func(net.Listener) context.Context { return ctx }}
+	forwarder := NewSSHAgentForwarder()
+	forwarder.Socket = filepath.Join(os.Getenv("HOME"), ".ssh", "key-agent.sock")
+	mux := http.NewServeMux()
+	mux.Handle("/v1/ssh-agent", forwarder)
+	mux.Handle("/", s)
+	h := &http.Server{Handler: p.Handler(mux), BaseContext: func(net.Listener) context.Context { return ctx }}
 	tcp, err := net.Listen("tcp", ":17400")
 	if err != nil {
 		t.Fatal(err)

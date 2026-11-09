@@ -207,3 +207,45 @@ For an existing account, setup unlocks the protected credentials with native app
 Run `passlet approver github reset` to remove the protected GitHub credential item. Confirm removal with Touch ID. There is no separate terminal confirmation. The GitHub App and installations are not deleted; the command prints the app settings link and instructions for starting setup again. If no credentials exist, reset exits successfully without prompting.
 
 Setup reserves localhost port 17402 before prompting for a handle or opening Keychain. If it is occupied, close the application using the port and retry. Denied authorization, an unexpected GitHub identity, and failed Keychain storage never report completion. Errors include recovery instructions without exposing credentials. Organization approval remains planned in the roadmap until the live callback has been verified.
+
+## SSH-agent forwarding
+
+Passlet can forward your Mac's SSH agent to a paired Agent without keeping an SSH tunnel or network connection open. This works with Secretive or another SSH agent. Passlet holds no SSH private keys and does not bypass the upstream agent's signing approval policy.
+
+On Linux, enable forwarding declaratively with Home Manager. It enables a systemd socket and sets `SSH_AUTH_SOCK` to `~/.local/share/passlet/ssh-agent.sock`:
+
+```nix
+programs.passlet = {
+  enable = true;
+  sshAgent.enable = true;
+};
+```
+
+Systemd starts a Passlet process only when a client connects. That process exits when the client disconnects or its connection times out. No Passlet proxy process runs while the socket is unused.
+
+For manual use or debugging, run `passlet ssh-agent` in one terminal. It stays in the foreground. In another terminal, set `export SSH_AUTH_SOCK="$HOME/.local/share/passlet/ssh-agent.sock"` before using SSH or sudo.
+
+A persistent terminal server such as Rex must inherit `SSH_AUTH_SOCK` with that path. Restart its user service after changing its environment, or export the variable in the existing terminal. This proxy is local only; each agent-protocol request opens a fresh connection to the saved, paired Approver.
+
+On the Approver Mac, configure the upstream socket. For Secretive with Home Manager:
+
+```nix
+programs.passlet.service.sshAgentSocket =
+  "/Users/alice/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh";
+```
+
+For Homebrew, set the absolute path in `~/.config/passlet/approver.toml` and restart the Approver:
+
+```toml
+ssh_agent_socket = "/Users/alice/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+```
+
+Forwarding is disabled when no upstream socket is configured. When configured, paired Agents can list keys and request signatures immediately. The upstream SSH agent controls which keys are available and whether signing requires Touch ID. No separate Passlet allowance is needed. Remove the setting and restart the Approver to disable forwarding, or revoke an Agent's pairing to block that Agent entirely.
+
+Every request uses the Agent's paired identity, which is checked again before returning a signature. An unavailable upstream agent or denied signature produces an SSH-agent failure. Passlet does not fall back to another agent. Only key listing and signing are supported, not adding/removing keys, unlocking an agent, or agent extensions.
+
+### Using it for sudo on Linux
+
+The Linux server must already allow the corresponding SSH public key for sudo. On NixOS, enable `security.pam.sshAgentAuth.enable = true;` and manage the user's authorized keys through the system configuration. Keep the trusted public-key files under administrator control. Set `SSH_AUTH_SOCK` to the proxy socket in the Rex shell, then use ordinary `sudo` commands. PAM sends a fresh challenge through Passlet and verifies the SSH agent's signature, rather than trusting a boolean approval response from the socket.
+
+SSH-agent forwarding permits general SSH signing, not a particular sudo command. Processes running as your Unix user, and root, may access the proxy. Your SSH agent's approval/caching policy still applies. Disabling forwarding does not invalidate sudo's authentication cache, established SSH sessions, or already delivered signatures. Set sudo's `timestamp_timeout` to zero if every invocation must authenticate anew. This does not protect a server from an attacker who already controls root.

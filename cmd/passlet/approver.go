@@ -122,8 +122,13 @@ func approver(ctx context.Context, args []string) error {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	forwarder := passlet.NewSSHAgentForwarder()
+	forwarder.Socket = config.SSHAgentSocket
 	handler := passlet.NewServer(passlet.NativeHelper{Path: *helper}, passlet.NewGitHub(), a)
-	server := &http.Server{Handler: pairing.Handler(handler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 125 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, BaseContext: func(net.Listener) context.Context { return ctx }}
+	mux := http.NewServeMux()
+	mux.Handle("/v1/ssh-agent", forwarder)
+	mux.Handle("/", handler)
+	server := &http.Server{Handler: pairing.Handler(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 125 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, BaseContext: func(net.Listener) context.Context { return ctx }}
 	results := make(chan error, len(listeners))
 	for _, listener := range listeners {
 		go func() { results <- server.Serve(tls.NewListener(listener, pairing.ServerConfig())) }()

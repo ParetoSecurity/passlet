@@ -71,3 +71,14 @@ func TestApproverConfigIOErrors(t *testing.T) {
 		t.Fatalf("symlink loop: %v", err)
 	}
 }
+
+func TestApproverSSHAgentConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "approver.toml")
+	if err := os.WriteFile(path, []byte("ssh_agent_socket = '/path/to/secretive.sock'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := readApproverConfig(path)
+	if err != nil || config.SSHAgentSocket != "/path/to/secretive.sock" {
+		t.Fatal(config, err)
+	}
+}

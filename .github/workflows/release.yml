@@ -78,7 +78,7 @@ jobs:
           echo "$bash_path/bin" >> "$GITHUB_PATH"
       - uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
         with:
-          auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          cache: devenv
       - name: Import Developer ID certificate and profile
         env:
           APPLICATION_CERTIFICATE_DATA: ${{ secrets.APPLICATION_CERTIFICATE_DATA }}

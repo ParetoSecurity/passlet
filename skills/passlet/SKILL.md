@@ -21,6 +21,7 @@ Choose explicit `owner/repository` names and the minimum permissions needed:
 | Push a branch and create/update its PR | `contents:write,pull_requests:write` |
 | Read or update issues | `issues:read` or `issues:write` |
 | Inspect Actions runs | `actions:read` |
+| Read a commit's CI check results | `checks:read` |
 
 For administrative work, use `administration:write` with `--repos` for a repository. Organization permissions use `--org NAME` (for example `members:write`); account permissions use `--account HANDLE` (for example `git_ssh_keys:write`). These scope selectors are mutually exclusive. Organization/account grants are explicitly wider than a repository grant and include metadata read access to all installed repositories for that target. Never substitute an organization or account grant for a repository grant without explaining and obtaining approval for the wider scope. Use `--out` and reuse grants as below for every scope.
 
@@ -64,7 +65,7 @@ Retain the grant file and its private directory after each command, task, and pr
 - Approval denied or cancelled: do not immediately prompt again or try another credential. Explain which work needs access and wait for the user to direct the next step.
 - `approver_busy`: do other work; do not poll or repeatedly request approval.
 - Expired grant: explain that a new approval is needed and make a fresh explicit request for the still-needed scope. Never reuse or expose the expired token, and never implement a background renewal loop.
-- GitHub denies an operation: do not assume it needs write access. Check the requested operation, granted scope recorded in your session, and repository installation. Explain any specifically missing permission before requesting a different grant. Do not broaden access automatically to make an error disappear.
+- GitHub denies an operation: do not assume it needs write access. Check the requested operation, granted scope recorded in your session, and repository installation. Name the specifically missing permission, request a grant for exactly that, and finish the operation yourself. Never ask the user to check GitHub by hand because the current grant cannot. Do not broaden access automatically to make an error disappear.
 - Repository not installed: ask the user to add that repository to the GitHub App installation. If they cannot, for example a third-party repository they do not administer, tell them that Git over SSH works through the SSH agent Passlet forwards from their Mac, and use an SSH remote for that repository only when they choose it. Do not request access to a different repository as a workaround.
 
 Repository-listing endpoints can expose metadata beyond the scoped repositories. A listing is not proof of content access. Validate access through the intended operation rather than probing unrelated repositories.

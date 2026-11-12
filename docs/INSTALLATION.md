@@ -15,7 +15,7 @@ Approver requires macOS 14 or later and a logged-in graphical session. Apple Sil
 
 ### Nix / Home Manager
 
-Home Manager installs Approver and Agent, starts Approver at graphical login, and restarts it after upgrades. Remove any existing Homebrew-managed Passlet service before enabling it through Home Manager.
+Home Manager installs Approver and Agent, starts Approver at graphical login, and restarts it after upgrades. The service runs a copy of the signed app at `~/.local/share/passlet/Passlet.app`, so it can start before the Nix store volume mounts. Remove any existing Homebrew-managed Passlet service before enabling it through Home Manager.
 
 #### Add the flake
 

@@ -9,6 +9,8 @@ let
     mkdir -p "$out/bin" "$out/Applications/Passlet.app/Contents/MacOS"
     printf '#!/bin/sh\nexit 0\n' > "$out/bin/passlet"
     chmod +x "$out/bin/passlet"
+    cp "$out/bin/passlet" "$out/Applications/Passlet.app/Contents/MacOS/passlet"
+    cp "$out/bin/passlet" "$out/Applications/Passlet.app/Contents/MacOS/PassletHelper"
   '';
   evaluate = system: enabled: service: tailscale: package:
     let platformPkgs = import pkgs.path { inherit system; };
@@ -31,7 +33,11 @@ let
   invalidLinux = evaluate "x86_64-linux" true true false fakePackage;
   plist = mac.programs.passlet.service.plist.text;
   activation = mac.home.activation.passletAgent.data;
-  result = { inherit plist; };
+  result = { inherit plist; } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+    inherit activation;
+    package = fakePackage;
+    plistFile = mac.programs.passlet.service.plist;
+  };
 in
 assert builtins.all (a: a.assertion) mac.assertions;
 assert builtins.all (a: a.assertion) linux.assertions;
@@ -45,7 +51,9 @@ assert linux.systemd.user.sockets.passlet-ssh-agent.Install.WantedBy == [ "socke
 assert !(mac.systemd.user.sockets ? passlet-ssh-agent);
 assert !(mac.systemd.user.services ? "passlet-ssh-agent@");
 assert lib.hasInfix "<string>dev.passlet.agent</string>" plist;
-assert lib.hasInfix (builtins.unsafeDiscardStringContext "<string>${fakePackage}/bin/passlet</string>") plist;
+assert lib.hasInfix "<string>/Users/alice/.local/share/passlet/Passlet.app/Contents/MacOS/passlet</string>" plist;
+assert lib.hasInfix "<string>/Users/alice/.local/share/passlet/Passlet.app/Contents/MacOS/PassletHelper</string>" plist;
+assert lib.hasInfix (builtins.unsafeDiscardStringContext "<string>${fakePackage}</string>") plist;
 assert lib.hasInfix "<string>approver</string>" plist;
 assert lib.hasInfix "<string>start</string>" plist;
 assert lib.hasInfix "<string>dev.passlet.app</string>" plist;

@@ -2,7 +2,8 @@
 let
   cfg = config.programs.passlet;
   executable = "${cfg.package}/bin/passlet";
-  helper = "${cfg.package}/Applications/Passlet.app/Contents/MacOS/PassletHelper";
+  app = "${config.home.homeDirectory}/.local/share/passlet/Passlet.app";
+  helper = "${app}/Contents/MacOS/PassletHelper";
   settings = {
     tailscale = cfg.service.tailscale;
   } // lib.optionalAttrs (cfg.service.sshAgentSocket != null) {
@@ -32,7 +33,8 @@ in {
     # macOS names a background item after the program launchd spawns and groups
     # it under the app with the same signing team. Home Manager's launchd.agents
     # wraps every program in /bin/sh, which shows up as "sh" from an unidentified
-    # developer, so the agent runs the signed binary directly.
+    # developer, so the agent runs a local copy of the signed app directly.
+    # The Nix store volume may not be mounted when launchd starts login agents.
     service.plist = lib.mkOption {
       type = lib.types.package;
       internal = true;
@@ -46,7 +48,8 @@ in {
         LimitLoadToSessionType = "Aqua";
         # A settings change must restart the service even when its arguments match.
         PassletConfiguration = builtins.toJSON settings;
-        ProgramArguments = [ executable "approver" "start" "--helper" helper ];
+        PassletPackage = toString cfg.package;
+        ProgramArguments = [ "${app}/Contents/MacOS/passlet" "approver" "start" "--helper" helper ];
         RunAtLoad = true;
         ThrottleInterval = 10;
         Umask = 63;
@@ -98,9 +101,17 @@ in {
     '');
     home.activation.passletAgent = lib.mkIf cfg.service.enable (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       plist=${lib.escapeShellArg plist}
-      if ! cmp -s ${cfg.service.plist} "$plist"; then
+      app=${lib.escapeShellArg app}
+      if ! cmp -s ${cfg.service.plist} "$plist" || [ ! -x "$app/Contents/MacOS/passlet" ]; then
+        run mkdir -p "$(dirname "$app")"
+        if [ -d "$app.staging" ]; then run chmod -R u+w "$app.staging"; fi
+        run /bin/rm -rf "$app.staging"
+        run /usr/bin/ditto ${cfg.package}/Applications/Passlet.app "$app.staging"
+        run chmod -R u+w "$app.staging"
         run /bin/launchctl bootout --wait "gui/$UID/dev.passlet.agent" 2>/dev/null || true
-        run install -Dm444 ${cfg.service.plist} "$plist"
+        run /bin/rm -rf "$app"
+        run /bin/mv "$app.staging" "$app"
+        run ${pkgs.coreutils}/bin/install -Dm444 ${cfg.service.plist} "$plist"
         run /bin/launchctl bootstrap "gui/$UID" "$plist"
       fi
     '');

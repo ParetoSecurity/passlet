@@ -24,13 +24,14 @@ import (
 )
 
 type AppRegistration struct {
-	InstallationID int64             `json:"-"`
-	ID             int64             `json:"id"`
-	ClientID       string            `json:"client_id"`
-	ClientSecret   string            `json:"client_secret"`
-	HTMLURL        string            `json:"html_url"`
-	Permissions    map[string]string `json:"permissions"`
-	Owner          struct {
+	InstallationOwner string            `json:"-"`
+	InstallationID    int64             `json:"-"`
+	ID                int64             `json:"id"`
+	ClientID          string            `json:"client_id"`
+	ClientSecret      string            `json:"client_secret"`
+	HTMLURL           string            `json:"html_url"`
+	Permissions       map[string]string `json:"permissions"`
+	Owner             struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 	// Intentionally no PEM or webhook-secret fields: discard these response
@@ -144,6 +145,9 @@ func (g *GitHub) VerifySetup(ctx context.Context, app AppRegistration, c Credent
 		}
 		for _, install := range installs.Installations {
 			if install.AppID != app.ID || install.ID <= 0 || (app.InstallationID != 0 && install.ID != app.InstallationID) {
+				continue
+			}
+			if app.InstallationOwner != "" && (install.Account.Type != "Organization" || !strings.EqualFold(install.Account.Login, app.InstallationOwner)) {
 				continue
 			}
 			foundInstallation = true
@@ -420,21 +424,50 @@ func (s *SetupFlow) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.phase = "authorized"
 		http.Redirect(w, r, s.pending.app.HTMLURL+"/installations/new", http.StatusSeeOther)
 
-	case "/github/installed":
-		id, err := strconv.ParseInt(params.Get("installation_id"), 10, 64)
-		if s.phase != "authorized" || s.pending == nil || err != nil || id <= 0 || len(params["installation_id"]) != 1 {
+	case "/github/installed", s.prefix + "/approval-instructions", s.prefix + "/check-approval":
+		if s.phase != "authorized" || s.pending == nil {
 			http.Error(w, "Invalid or unexpected installation callback", http.StatusBadRequest)
 			return
 		}
-		s.phase = "verifying"
+		waiting := func(owner, message string) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = setupApprovalPage.Execute(w, map[string]string{"Action": s.prefix + "/check-approval", "OrganizationAction": s.prefix + "/approval-instructions", "Owner": owner, "Message": message, "AppName": strings.TrimPrefix(s.pending.app.HTMLURL, "https://github.com/apps/"), "ApprovalURL": "https://github.com/organizations/" + owner + "/settings/installations"})
+		}
+		checking := r.URL.Path == s.prefix+"/check-approval"
 		authorization := *s.pending
-		s.pending = nil
-		authorization.app.InstallationID = id
+		if checking || r.URL.Path == s.prefix+"/approval-instructions" {
+			owner := params.Get("owner")
+			if len(params["owner"]) != 1 || len(owner) > 39 || !githubHandle.MatchString(owner) {
+				waiting("", "Enter the organization's GitHub name, for example organization-name.")
+				return
+			}
+			if !checking {
+				waiting(owner, "")
+				return
+			}
+			authorization.app.InstallationOwner = owner
+		} else if params.Get("setup_action") == "request" && len(params["setup_action"]) == 1 && len(params["installation_id"]) == 0 {
+			waiting("", "")
+			return
+		} else {
+			id, err := strconv.ParseInt(params.Get("installation_id"), 10, 64)
+			if err != nil || id <= 0 || len(params["installation_id"]) != 1 || params.Get("setup_action") == "request" {
+				http.Error(w, "Invalid or unexpected installation callback", http.StatusBadRequest)
+				return
+			}
+			authorization.app.InstallationID = id
+		}
 		account, err := s.provider.VerifySetup(r.Context(), authorization.app, authorization.credentials)
 		if err != nil {
+			if checking && (err.Error() == "github_app_has_no_accessible_installation" || err.Error() == "github_app_installation_has_no_accessible_repositories" || strings.HasPrefix(err.Error(), "github_installation_missing_requested_permissions:")) {
+				waiting(authorization.app.InstallationOwner, "Access is not ready yet. Ask an organization owner to approve the installation and its requested permissions, and check that you have access to a selected repository. Then check again.")
+				return
+			}
 			fail(err)
 			return
 		}
+		s.phase = "verifying"
+		s.pending = nil
 		if r.Context().Err() != nil {
 			fail(errors.New("setup_cancelled"))
 			return

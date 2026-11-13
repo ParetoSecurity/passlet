@@ -186,7 +186,7 @@ func TestSetupCancelledClosesListener(t *testing.T) {
 }
 
 func TestSetupProviderRejectsNonExpiringAndUnverifiedCredentials(t *testing.T) {
-	for _, variant := range []string{"valid", "no_refresh", "too_long", "wrong_user", "no_install", "wrong_app", "wrong_installation", "no_permissions", "no_repos", "user-error", "install-error", "repos-error"} {
+	for _, variant := range []string{"valid", "no_refresh", "too_long", "wrong_user", "no_install", "wrong_app", "wrong_installation", "wrong_owner", "personal_owner", "organization_owner", "no_permissions", "no_repos", "user-error", "install-error", "repos-error"} {
 		t.Run(variant, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == map[string]string{"user-error": "/user", "install-error": "/user/installations", "repos-error": "/user/installations/1/repositories"}[variant] {
@@ -227,7 +227,11 @@ func TestSetupProviderRejectsNonExpiringAndUnverifiedCredentials(t *testing.T) {
 					if variant == "no_permissions" {
 						delete(permissions, "contents")
 					}
-					json.NewEncoder(w).Encode(map[string]any{"installations": []any{map[string]any{"id": 1, "app_id": id, "permissions": permissions}}})
+					accountType := "Organization"
+					if variant == "personal_owner" {
+						accountType = "User"
+					}
+					json.NewEncoder(w).Encode(map[string]any{"installations": []any{map[string]any{"id": 1, "app_id": id, "permissions": permissions, "account": map[string]string{"login": "ACME", "type": accountType}}}})
 				case "/user/installations/1/repositories":
 					if variant == "no_repos" {
 						w.Write([]byte(`{"repositories":[]}`))
@@ -246,11 +250,17 @@ func TestSetupProviderRejectsNonExpiringAndUnverifiedCredentials(t *testing.T) {
 			if variant == "wrong_installation" {
 				app.InstallationID = 999
 			}
+			if variant == "wrong_owner" {
+				app.InstallationOwner = "other"
+			}
+			if variant == "personal_owner" || variant == "organization_owner" {
+				app.InstallationOwner = "acme"
+			}
 			c, err := g.AuthorizeCode(context.Background(), app, "code", "http://127.0.0.1:1/callback", "verifier")
 			if err == nil {
 				_, err = g.VerifySetup(context.Background(), app, c)
 			}
-			if (err == nil) != (variant == "valid") {
+			if (err == nil) != (variant == "valid" || variant == "organization_owner") {
 				t.Fatal("unexpected setup verification", err)
 			}
 		})
@@ -444,5 +454,103 @@ func TestInstallationCallbackRequiresActiveAuthorizationAndRejectsReplay(t *test
 	}
 	if request("?installation_id=1").Code != 400 || stored != 1 {
 		t.Fatal("replay stored credentials again")
+	}
+}
+
+type approvalSetupProvider struct {
+	setupProvider
+	err   error
+	owner string
+}
+
+func (p *approvalSetupProvider) VerifySetup(ctx context.Context, app AppRegistration, c Credentials) (AccountInfo, error) {
+	p.owner = app.InstallationOwner
+	if p.err != nil {
+		return AccountInfo{}, p.err
+	}
+	return p.setupProvider.VerifySetup(ctx, app, c)
+}
+
+func TestOrganizationApprovalKeepsSetupUntilVerified(t *testing.T) {
+	p := &approvalSetupProvider{}
+	stored := 0
+	s, err := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"contents": "read"}, p, func(context.Context, Credentials, AccountInfo) error {
+		stored++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest("GET", s.base+path, nil))
+		return w
+	}
+	callback := "/github/installed?setup_action=request"
+	if request(callback).Code != 400 || setupRequest(s, "/check-approval?owner=acme").Code != 400 || setupRequest(s, "/approval-instructions?owner=acme").Code != 400 {
+		t.Fatal("approval accepted before authorization")
+	}
+	setupRequest(s, "/created?code=test&state="+s.state)
+	setupRequest(s, "/authorize?state="+s.oauthState)
+	setupRequest(s, "/authorized?code=test&state="+s.oauthState)
+	for _, query := range []string{"&installation_id=1", "&installation_id=", "&setup_action=request"} {
+		if request(callback+query).Code != 400 {
+			t.Fatal("ambiguous request callback accepted")
+		}
+	}
+	w := request(callback)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Which organization are you setting up?") || !strings.Contains(w.Body.String(), s.prefix+"/approval-instructions") {
+		t.Fatal("missing approval instructions", w.Body.String())
+	}
+	for _, query := range []string{"", "?owner=bad/name", "?owner=" + strings.Repeat("a", 40), "?owner=acme&owner=other"} {
+		w = setupRequest(s, "/check-approval"+query)
+		if !strings.Contains(w.Body.String(), "Enter the organization") || p.owner != "" {
+			t.Fatal("invalid organization checked")
+		}
+	}
+	w = setupRequest(s, "/approval-instructions?owner=acme")
+	for _, content := range []string{"Waiting for organization owner approval.", "<code>example</code>", `href="https://github.com/organizations/acme/settings/installations"`, `type="hidden" name="owner" value="acme"`, "<code>passlet approver github setup</code>"} {
+		if !strings.Contains(w.Body.String(), content) {
+			t.Fatal("missing organization-specific instructions", content)
+		}
+	}
+	if p.owner != "" || stored != 0 || s.pending == nil || len(s.done) != 0 {
+		t.Fatal("collecting organization name verified or completed setup")
+	}
+	for _, reason := range []string{"github_app_has_no_accessible_installation", "github_app_installation_has_no_accessible_repositories", "github_installation_missing_requested_permissions: contents"} {
+		p.err = errors.New(reason)
+		w = setupRequest(s, "/check-approval?owner=acme")
+		if !strings.Contains(w.Body.String(), "Access is not ready yet.") || p.owner != "acme" {
+			t.Fatal("missing retry response")
+		}
+		if s.pending == nil || s.phase != "authorized" || stored != 0 || len(s.done) != 0 || strings.Contains(w.Body.String(), "hidden-") {
+			t.Fatal("pending setup lost or exposed credentials")
+		}
+	}
+	p.err = nil
+	w = setupRequest(s, "/check-approval?owner=acme")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "GitHub setup complete.") || stored != 1 || s.pending != nil {
+		t.Fatal("approved installation did not finish setup")
+	}
+	if request(callback).Code != 400 || setupRequest(s, "/check-approval?owner=acme").Code != 400 || setupRequest(s, "/approval-instructions?owner=acme").Code != 400 || stored != 1 {
+		t.Fatal("completed setup accepted replay")
+	}
+}
+
+func TestOrganizationApprovalVerificationFailure(t *testing.T) {
+	p := &approvalSetupProvider{err: errors.New("github_installation_verification_failed")}
+	s, err := NewSetupFlow("http://127.0.0.1:12345", "alice", map[string]string{"contents": "read"}, p, func(context.Context, Credentials, AccountInfo) error {
+		t.Fatal("saved unverified credentials")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupRequest(s, "/created?code=test&state="+s.state)
+	setupRequest(s, "/authorize?state="+s.oauthState)
+	setupRequest(s, "/authorized?code=test&state="+s.oauthState)
+	w := setupRequest(s, "/check-approval?owner=acme")
+	if w.Code != 400 || s.pending != nil || s.phase != "failed" || len(s.done) != 1 {
+		t.Fatal("provider failure did not clear pending setup")
 	}
 }

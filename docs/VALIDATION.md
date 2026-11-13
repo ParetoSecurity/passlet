@@ -38,7 +38,7 @@ and Swift-helper fixtures. Run them with:
 go test -v -run '^TestGitHubSetupFeatures$' ./cmd/passlet
 ```
 
-They also run in `make check` and CI. Linux scenarios verify that setup stops before asking for a handle, opening a browser or callback listener, or invoking the Keychain helper. Organization-owner approval is tracked in `docs/ROADMAP.md` until its live callback has been verified. These fixtures do not test real Touch ID or macOS Keychain protection.
+They also run in `make check` and CI. Linux scenarios verify that setup stops before asking for a handle, opening a browser or callback listener, or invoking the Keychain helper. Organization-owner approval tests cover pending callbacks, organization-name validation, approval instructions, retrying verification, and completion for the requested organization. These fixtures do not test real Touch ID or macOS Keychain protection.
 
 Access scenarios in `cmd/passlet/features/access.feature` run the CLI in subprocesses against a real Approver over a private Unix socket, a fake approval helper, and a local GitHub API fixture. They cover saved grants, offline reuse, process substitution with preserved stdin, denied approval, and expired grants. The fixture checks provider authentication and requested scope, and the scenarios check credential delivery without exposing tokens in terminal output. Run them with `go test -v -run '^TestAccessFeatures$' ./cmd/passlet`. The NixOS suite separately exercises packaged commands through real SSH tunnels, Git, and gh.
 
@@ -90,7 +90,7 @@ Run onboarding in a dedicated Mac test account if the existing Keychain identity
 Use disposable GitHub repositories only for mutation tests. Record each item as pass, fail, or not run, with the OS/app version. Do not paste grant contents or credentials into the report.
 
 1. Build a development-signed v0.2 app with its explicit profile, or use the reviewed signed release candidate. Verify codesign and the expected Keychain identity. Use a dedicated macOS test account for fresh onboarding so the existing production authorization is not overwritten.
-2. Run `passlet approver github setup`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm setup reports the verified user and `passlet doctor` requests native approval and verifies the GitHub identity. Confirm no private signing key or credential file was saved by setup. Organization approval handling is planned; do not count it as implemented.
+2. Run `passlet approver github setup`. Review the browser's app permissions, install on the two disposable repositories, authorize the same GitHub user, and confirm setup reports the verified user and `passlet doctor` requests native approval and verifies the GitHub identity. Confirm no private signing key or credential file was saved by setup. As an organization member, request installation, enter the organization name, have its owner approve on another machine, and confirm Check approval completes setup without forwarding the owner's localhost URL.
 3. Install through Homebrew or enable the Home Manager module, then run `passlet approver doctor`. Confirm no default TCP listener. Log out and back in; confirm service startup and no unsolicited credential prompt. Kill only this test service's Go process and confirm launchd restarts it and the socket works again.
 4. Start a request with explicit repositories and permissions and a private `--out` path. Verify the native prompt shows the honest socket caller, complete repositories/permissions, and approximate provider expiry. Approve with Touch ID: exactly one prompt must release the protected credential and produce a scoped token. Repeat using password, then denial. Denial must create no grant.
 5. Leave a request unapproved for the 120-second server deadline. Confirm the native prompt disappears and no grant is delivered. Repeat by cancelling the requesting CLI or closing its SSH tunnel. A late interaction must never produce a grant for a cancelled request.
@@ -104,6 +104,8 @@ Use disposable GitHub repositories only for mutation tests. Record each item as 
 Signing/notarization of the final v0.2 release and its production Keychain behavior remain release-time checks. The prior v0.1 release is not evidence that a new build passed those checks.
 
 ## GitHub onboarding
+
+2026-11-13: live testing completed organization-owner approval for `bimtorg` with `zupo` as a member and `bimt` approving on another machine. The source-built CLI reused the installed v0.8.0 signed helper and existing app credentials. Check approval completed setup without forwarding a callback URL. A scoped grant listed `bimtorg/memberrepo`, and GitHub reported push permission after the member received Write access. No repository mutation was performed. This does not validate fresh credential import or a new signed release's Keychain behavior.
 
 2026-10-31: live browser testing completed personal app creation, manifest permission verification, OAuth authorization, installation/identity verification, and replacement of existing credentials through the installed signed helper after native approval. Replacement used an ignored local test harness; production fresh import and later scoped-token use remain separate checks.
 

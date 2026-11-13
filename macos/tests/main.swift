@@ -177,3 +177,27 @@ for input in ["", "not json\n", "[]\n", "{\"credentials\":{}}\n", String(repeati
         try runHelper(arguments: ["--import"], input: input, expectedError: "invalid_credentials", expectedStatus: 1)
     }
 }
+
+
+test("Cloudflare credentials are isolated from GitHub") {
+    let cloudflare: [String: Any] = ["provider": "cloudflare", "access_token": "fixture-secret", "cloudflare_token_id": String(repeating: "a", count: 32)]
+    check(credentialData(cloudflare, provider: "cloudflare") != nil, "valid Cloudflare credential rejected")
+    check(credentialData(cloudflare) == nil, "Cloudflare credential accepted as GitHub")
+    check(credentialData(credentials, provider: "cloudflare") == nil, "GitHub credential accepted as Cloudflare")
+    check(credentialData(credentials, provider: "unknown") == nil, "unknown provider accepted")
+    for value: Any? in [nil, NSNull(), "", 42] {
+        var invalid = cloudflare
+        invalid["access_token"] = value
+        check(credentialData(invalid, provider: "cloudflare") == nil, "invalid Cloudflare token accepted")
+    }
+    for id in ["", "user", String(repeating: "a", count: 33), String(repeating: "a", count: 32) + "\n"] {
+        var invalid = cloudflare
+        invalid["cloudflare_token_id"] = id
+        check(credentialData(invalid, provider: "cloudflare") == nil, "invalid Cloudflare token ID accepted")
+    }
+}
+
+test("Cloudflare import rejects GitHub credentials before Keychain access") {
+    let data = try JSONSerialization.data(withJSONObject: ["credentials": credentials])
+    try runHelper(arguments: ["--import", "--provider", "cloudflare"], input: String(decoding: data, as: UTF8.self) + "\n", expectedError: "invalid_credentials", expectedStatus: 1)
+}

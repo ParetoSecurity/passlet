@@ -36,6 +36,7 @@ Usage: passlet approver <command>
 Commands:
   agents        List or revoke paired Agents
   audit         Show audit history
+  cloudflare    Manage Cloudflare credentials
   doctor        Check service health and credentials
   github        Manage GitHub credentials
   pair          Create a one-time pairing code
@@ -64,6 +65,8 @@ func approverCommand(ctx context.Context, args []string, showOverview func(conte
 			return err
 		}
 		return showOverview(ctx)
+	case "cloudflare":
+		return cloudflareCommand(ctx, args[1:])
 	case "github":
 		return githubOverview(ctx, args[1:])
 	case "audit":
@@ -125,6 +128,8 @@ func approver(ctx context.Context, args []string) error {
 	forwarder := passlet.NewSSHAgentForwarder()
 	forwarder.Socket = config.SSHAgentSocket
 	handler := passlet.NewServer(passlet.NativeHelper{Path: *helper}, passlet.NewGitHub(), a)
+	handler.Cloudflare = passlet.NewCloudflare()
+	handler.CloudflareApproval = passlet.NativeHelper{Path: *helper, Provider: "cloudflare"}
 	mux := http.NewServeMux()
 	mux.Handle("/v1/ssh-agent", forwarder)
 	mux.Handle("/", handler)

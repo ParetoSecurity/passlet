@@ -20,6 +20,7 @@ Passlet delivers a short-lived token the agent can use with Git and `gh`, even a
 
 | Feature | What it does |
 | --- | --- |
+| Scoped Cloudflare access | Review account and zone names with exact IDs, then approve permissions for one-hour API tokens. |
 | Scoped GitHub access | Approve the repositories and permissions needed for each task. |
 | Native approval | Review each request on your Mac and approve with Touch ID. |
 | Protected credentials | Keep parent tokens, refresh tokens, and client secrets in your Mac's Keychain. Only the scoped token reaches the agent. |
@@ -34,7 +35,7 @@ We're hoping to do these next:
 
 | Feature | Status |
 | --- | --- |
-| Fly.io, AWS, Cloudflare, and Vercel providers | Coming soon |
+| Fly.io, AWS, and Vercel providers | Coming soon |
 | Approve requests on Linux and Windows | Coming soon |
 | iOS and Android companion apps for approvals | Coming soon |
 | Resume setup after organization approval | Coming soon |
@@ -132,6 +133,21 @@ The grant travels through a separate pipe, leaving the child command's standard 
 
 Use HTTPS Git remotes. `exec --grant` uses the delivered token without contacting the Mac, overrides ambient Git/gh credentials for the child, and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
 
+## Cloudflare
+
+Run `passlet approver cloudflare setup` on your Mac. Create a user-owned token with Cloudflare's Create additional tokens template, then paste it into the hidden terminal prompt. Passlet verifies its token-creation permission and stores it separately from GitHub credentials in protected Keychain. Setup has the broadest authority available to your Cloudflare user, with no Passlet resource allowlist. Only the exact resources and permissions approved through Touch ID reach agents.
+
+Request either up to three explicit zone IDs or one account ID. Each grant lasts at most one hour:
+
+```sh
+passlet request --provider cloudflare \
+  --zones 0123456789abcdef0123456789abcdef \
+  --permissions dns:write --out cloudflare-grant.json
+passlet exec --grant cloudflare-grant.json -- sh -c 'curl --fail --silent --show-error -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/zones/0123456789abcdef0123456789abcdef/dns_records'
+```
+
+`exec` sets `CLOUDFLARE_API_TOKEN` and, for account grants, `CLOUDFLARE_ACCOUNT_ID`. It clears ambient Cloudflare API keys, tokens, email addresses, and account overrides. Use `--account ACCOUNT_ID --permissions workers_scripts:write` for Workers access. Account permissions apply to the named account, not an individual Worker. See [Cloudflare setup and permissions](docs/SETUP.md#cloudflare).
+
 ## Tailscale, explicitly opt-in
 
 Enable `programs.passlet.service.tailscale = true;` with [Home Manager](docs/INSTALLATION.md#configure-tailscale-forwarding), or set `tailscale = true` in `~/.config/passlet/approver.toml` for Homebrew and restart the service.
@@ -183,10 +199,11 @@ Use `brew upgrade --cask paretosecurity/passlet/passlet`, or update your pinned 
 
 Run `passlet` or `passlet --help` for the command list. Client commands stay at the top level: `connect`, `request`, `exec`, and `doctor`. Local service and credential commands live under `passlet approver`: `start`, `doctor`, `github setup`, `github reset`, and `audit`. A Mac can approve requests and also run client commands, without choosing an installation mode.
 
-Run `passlet approver` to discover commands for managing approvals and credentials. `passlet doctor` checks the selected endpoint, while `passlet approver doctor` always checks the local service, ignoring `PASSLET_ENDPOINT` and the saved connection. Both verify GitHub access with native approval and issue no token. A stopped local service fails without prompting. Local socket permission errors, timeouts, and unhealthy responses are reported separately. Denying approval stops diagnostics immediately. After successful verification, local diagnostics show socket and Tailscale listener status and connection instructions for verified Tailscale forwarding.
+Run `passlet approver` to discover commands for managing approvals and credentials. `passlet doctor` checks the selected endpoint, while `passlet approver doctor` always checks the local service, ignoring `PASSLET_ENDPOINT` and the saved connection. Both verify GitHub access by default. Add `--provider cloudflare` to verify Cloudflare token-creation authority instead. Each requires native approval and issues no token. A stopped local service fails without prompting. Local socket permission errors, timeouts, and unhealthy responses are reported separately. Denying approval stops diagnostics immediately. After successful verification, local diagnostics show socket and Tailscale listener status and connection instructions for verified Tailscale forwarding.
 
 ```sh
 passlet doctor
+passlet doctor --provider cloudflare
 passlet approver audit --limit 20
 ```
 

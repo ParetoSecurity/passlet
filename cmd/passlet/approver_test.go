@@ -215,7 +215,7 @@ func TestApproverRejectsInvalidPairingKeyBeforeBinding(t *testing.T) {
 	if _, err := os.Stat(passlet.DefaultSocket()); !os.IsNotExist(err) {
 		t.Fatal("unpaired service created a listener")
 	}
-	if got := doctorFailureMessage(err); !strings.Contains(got, "PKCS#8 PEM") {
+	if got := doctorFailureMessage(err, ""); !strings.Contains(got, "PKCS#8 PEM") {
 		t.Fatal(got)
 	}
 }

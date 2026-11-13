@@ -4,11 +4,18 @@ import Security
 
 // JSON travels only through private parent/child pipes. Never log request bodies,
 // Keychain data, provider credentials, or helper replies to a file.
-let service = "dev.passlet.github-master.v1"
+let provider: String = {
+    guard let index = CommandLine.arguments.firstIndex(of: "--provider") else { return "github" }
+    guard index + 1 < CommandLine.arguments.count else { exit(1) }
+    let value = CommandLine.arguments[index + 1]
+    guard ["github", "cloudflare"].contains(value) else { exit(1) }
+    return value
+}()
+let service = "dev.passlet.\(provider)-master.v1"
 func query() -> [String: Any] {
     [kSecClass as String: kSecClassGenericPassword,
      kSecAttrService as String: service,
-     kSecAttrAccount as String: "github",
+     kSecAttrAccount as String: provider,
      kSecUseDataProtectionKeychain as String: true]
 }
 func reply(_ value: [String: Any]) {
@@ -36,7 +43,7 @@ if CommandLine.arguments.contains("--status") {
 if CommandLine.arguments.contains("--import") {
     guard let line = readLine(), line.utf8.count <= 65536,
           let msg = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-          let data = credentialData(msg["credentials"]),
+          let data = credentialData(msg["credentials"], provider: provider),
           let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, .userPresence, nil) else {
         reply(["ok": false, "error": "invalid_credentials"]); exit(1)
     }
@@ -134,7 +141,7 @@ final class Helper: NSObject, NSApplicationDelegate {
                 }
             }
         case "store":
-            guard let ctx = context, let data = credentialData(msg["credentials"]), state.consumeRotation() else { finish("invalid_request"); return }
+            guard let ctx = context, let data = credentialData(msg["credentials"], provider: provider), state.consumeRotation() else { finish("invalid_request"); return }
             DispatchQueue.global().async {
                 var q = query()
                 q[kSecUseAuthenticationContext as String] = ctx

@@ -106,7 +106,7 @@ func setupWithDependencies(ctx context.Context, args []string, deps setupDepende
 		return errors.New("setup_listener_unavailable")
 	}
 	defer func() { _ = listener.Close() }()
-	state, err := passlet.KeychainStatus(ctx, *helper)
+	state, err := (passlet.NativeHelper{Path: *helper}).Status(ctx)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func setupReadLine(deps setupDependencies, prompt, initial string) (string, erro
 	return line, nil
 }
 func resetGitHub(ctx context.Context, helper string, deps setupDependencies) error {
-	state, err := passlet.KeychainStatus(ctx, helper)
+	state, err := (passlet.NativeHelper{Path: helper}).Status(ctx)
 	if err != nil {
 		return err
 	}

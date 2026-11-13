@@ -16,6 +16,8 @@ const ClientDeadline = 130 * time.Second
 const ConnectDeadline = 5 * time.Second
 
 type Request struct {
+	Provider     string            `json:"provider,omitempty"`
+	Zones        []string          `json:"zones,omitempty"`
 	Agent        string            `json:"agent,omitempty"`
 	Organization string            `json:"organization,omitempty"`
 	Account      string            `json:"account,omitempty"`
@@ -31,25 +33,39 @@ type Caller struct {
 	Tags      []string `json:"tags,omitempty"`
 }
 type Grant struct {
-	Organization string            `json:"organization,omitempty"`
-	Account      string            `json:"account,omitempty"`
-	ID           string            `json:"grant_id"`
-	Token        string            `json:"token"`
-	ExpiresAt    time.Time         `json:"expires_at"`
-	Repositories []string          `json:"repositories"`
-	Permissions  map[string]string `json:"permissions"`
-	User         string            `json:"user"`
+	CloudflareTokenID string            `json:"cloudflare_token_id,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+	Zones             []string          `json:"zones,omitempty"`
+	Organization      string            `json:"organization,omitempty"`
+	Account           string            `json:"account,omitempty"`
+	ID                string            `json:"grant_id"`
+	Token             string            `json:"token"`
+	ExpiresAt         time.Time         `json:"expires_at"`
+	Repositories      []string          `json:"repositories"`
+	Permissions       map[string]string `json:"permissions"`
+	User              string            `json:"user"`
 }
 type Credentials struct {
-	Account      AccountInfo `json:"account"`
-	ClientID     string      `json:"client_id"`
-	ClientSecret string      `json:"client_secret"`
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	ExpiresAt    time.Time   `json:"expires_at"`
+	CloudflareTokenID string      `json:"cloudflare_token_id,omitempty"`
+	Provider          string      `json:"provider,omitempty"`
+	Account           AccountInfo `json:"account"`
+	ClientID          string      `json:"client_id"`
+	ClientSecret      string      `json:"client_secret"`
+	AccessToken       string      `json:"access_token"`
+	RefreshToken      string      `json:"refresh_token"`
+	ExpiresAt         time.Time   `json:"expires_at"`
 }
 
 func (c Credentials) Validate() error {
+	if c.Provider == "cloudflare" {
+		if c.AccessToken == "" || !cloudflareID.MatchString(c.CloudflareTokenID) {
+			return errors.New("incomplete_credentials")
+		}
+		return nil
+	}
+	if c.Provider != "" {
+		return errors.New("invalid_provider")
+	}
 	if c.ClientID == "" || c.ClientSecret == "" || c.AccessToken == "" || c.RefreshToken == "" || c.ExpiresAt.IsZero() {
 		return errors.New("incomplete_credentials")
 	}
@@ -61,6 +77,12 @@ var component = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
 func (r *Request) Validate() error {
 	if len(r.Agent) > 40 || r.Agent != strings.TrimSpace(r.Agent) || r.Agent != safeLabel(r.Agent) {
 		return errors.New("invalid_agent_label")
+	}
+	if r.Provider == "cloudflare" {
+		return r.validateCloudflare()
+	}
+	if r.Provider != "" || len(r.Zones) != 0 {
+		return errors.New("invalid_provider")
 	}
 	if len(r.Repositories) > 100 || len(r.Permissions) < 1 || len(r.Permissions) > 9 {
 		return errors.New("invalid_request")
@@ -140,6 +162,9 @@ func (c Caller) displayName() string {
 }
 
 func (r Request) Prompt(c Caller) string {
+	if r.Provider == "cloudflare" {
+		return r.cloudflarePrompt(c)
+	}
 	keys := make([]string, 0, len(r.Permissions))
 	for k := range r.Permissions {
 		if k != "metadata" {

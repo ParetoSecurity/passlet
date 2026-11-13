@@ -84,6 +84,7 @@ Drafting, approval, and posting follow the `socials-post` skill in the maintaine
 
 - Brand: personal, posted from the maintainer's own accounts.
 - Networks: X, Bluesky, LinkedIn, and Discord in https://discord.com/channels/1401988469252948108/1401988469835960474.
+- Additional brand: Pareto Security on X. Draft a separate product-voice variant, confirm the exact account with the user, and include it in the approval and posting flow from `socials-post`.
 - Material: `docs/releases/vX.Y.Z.md` and https://github.com/ParetoSecurity/passlet/releases/tag/vX.Y.Z. The Discord post is `Passlet vX.Y.Z is out:` followed by that URL, a blank line, then the notes verbatim. Every other variant links to the release.
 
 If that file is missing, give the user the Discord text to post by hand and report the announcement as not posted. Do not look for another way to post.

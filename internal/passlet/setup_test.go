@@ -417,8 +417,27 @@ func TestInstallationCallbackRequiresActiveAuthorizationAndRejectsReplay(t *test
 			t.Fatal("invalid installation callback accepted")
 		}
 	}
-	if w := request("?installation_id=1"); w.Code != 200 || !strings.Contains(w.Body.String(), "GitHub setup complete.") {
+	w := request("?installation_id=1")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "GitHub setup complete.") {
 		t.Fatal("missing completion response")
+	}
+	for _, content := range []string{
+		"Optional: add the Passlet logo",
+		`href="https://github.com/settings/apps/example#:~:text=Display%20information"`,
+		`src="https://passlet.dev/passlet-github-app-logo.png"`,
+		`draggable="true"`,
+		`target="_blank" rel="noopener noreferrer"`,
+		"popup,width=900,height=850,noopener,noreferrer",
+		"Drag the logo below",
+	} {
+		if !strings.Contains(w.Body.String(), content) {
+			t.Fatal("missing app settings or draggable hosted logo")
+		}
+	}
+	logoScriptHash := sha256.Sum256([]byte(setupLogoScript))
+	policy := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "img-src 'self' https://passlet.dev;") || !strings.Contains(policy, "'sha256-"+base64.StdEncoding.EncodeToString(logoScriptHash[:])+"'") {
+		t.Fatal("completion page logo or window script blocked by CSP")
 	}
 	if stored != 1 || p.verifies != 1 || s.pending != nil {
 		t.Fatal("incorrect verification/store lifecycle")

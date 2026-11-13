@@ -10,6 +10,8 @@ After app creation and authorization, GitHub's authorization callback redirects 
 
 If organization approval is pending, ask its administrator to approve the installation and permissions. If setup fails before saving credentials, delete the incomplete personal app from GitHub's Developer settings before restarting. Do not copy callback URLs, OAuth codes, or secret responses into support reports. If Keychain already contains credentials, setup asks for Touch ID to read the configured app identity and opens GitHub’s installation page without replacing credentials. Use `passlet approver github reset` to deliberately remove local credentials before starting over; protected items may not appear in Keychain Access.
 
+The setup-complete page includes an optional logo step. Open your GitHub App settings in a separate window, drag the displayed logo onto the logo area under “Display information”, then click “Set new avatar”. The settings link targets that section directly in browsers that support text fragments. The logo is hosted at https://passlet.dev/passlet-github-app-logo.png, so it remains available after setup exits. A download link is available if your browser does not support dragging the image into GitHub.
+
 App/account identity and tokens are stored together in one protected Keychain item. There is no separate metadata file. Noninteractive status checks do not unlock credentials or display account identity.
 
 

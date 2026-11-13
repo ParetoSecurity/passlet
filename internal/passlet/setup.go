@@ -446,7 +446,7 @@ func (s *SetupFlow) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.phase = "complete"
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = setupCompletePage.Execute(w, nil)
+		_ = setupCompletePage.Execute(w, map[string]string{"SettingsURL": GitHubAppSettingsURL(authorization.app.HTMLURL)})
 		s.done <- nil
 	default:
 		http.NotFound(w, r)

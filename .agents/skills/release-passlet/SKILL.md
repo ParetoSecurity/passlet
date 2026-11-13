@@ -83,8 +83,7 @@ If work stops awaiting environment approval, metadata review, or manual validati
 Drafting, approval, and posting follow the `socials-post` skill in the maintainer's socials checkout. Read `~/work/socials/.claude/skills/socials-post/SKILL.md` and follow it with this scope:
 
 - Brand: personal, posted from the maintainer's own accounts.
-- Networks: X, Bluesky, LinkedIn, and Discord in https://discord.com/channels/1401988469252948108/1401988469835960474.
-- Additional brand: Pareto Security on X. Draft a separate product-voice variant, confirm the exact account with the user, and include it in the approval and posting flow from `socials-post`.
+- Networks: X (post as ParetoSecurity), Bluesky, LinkedIn, and Discord in https://discord.com/channels/1401988469252948108/1401988469835960474.
 - Material: `docs/releases/vX.Y.Z.md` and https://github.com/ParetoSecurity/passlet/releases/tag/vX.Y.Z. The Discord post is `Passlet vX.Y.Z is out:` followed by that URL, a blank line, then the notes verbatim. Every other variant links to the release.
 
 If that file is missing, give the user the Discord text to post by hand and report the announcement as not posted. Do not look for another way to post.

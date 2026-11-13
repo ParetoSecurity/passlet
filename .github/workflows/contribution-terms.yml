@@ -1,0 +1,41 @@
+name: Contribution terms
+on:
+  pull_request_target:
+    types: [edited, opened, reopened]
+permissions:
+  pull-requests: write
+concurrency:
+  group: contribution-terms-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  acknowledge:
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      # Only inspect PR metadata. Fork code must never run with this write token.
+      - name: Add the contribution acknowledgment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+          repository = os.environ["GITHUB_REPOSITORY"]
+          endpoint = f"repos/{repository}/pulls/{event['pull_request']['number']}"
+          pull = json.loads(subprocess.check_output(["gh", "api", endpoint], text=True))
+          if pull["state"] != "open" or (pull["head"].get("repo") or {}).get("full_name") == repository:
+              raise SystemExit(0)
+          body = pull["body"] or ""
+          terms = "I have the right to submit this contribution, including any required employer permission, and agree to license it under the MIT License."
+          if any(line.strip() == f"- [{state}] {terms}" for line in body.splitlines() for state in [" ", "x", "X"]):
+              raise SystemExit(0)
+          link = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/blob/main/CONTRIBUTING.md"
+          acknowledgment = f"[Contribution terms]({link})\n\n- [ ] {terms}"
+          updated = body.rstrip() + ("\n\n" if body.strip() else "") + acknowledgment
+          subprocess.run(["gh", "api", "--method", "PATCH", endpoint, "--input", "-", "--silent"], input=json.dumps({"body": updated}), text=True, check=True)
+          PYTHON

@@ -1,9 +1,9 @@
 ---
 name: passlet
-description: Obtain scoped GitHub access through Passlet before using git or gh against private repositories, reading PRs or issues, or pushing changes. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
+description: Obtain scoped GitHub or Cloudflare access through Passlet before authenticated operations. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
 ---
 
-# GitHub access through Passlet
+# Scoped access through Passlet
 
 Run Claude normally. Request GitHub access yourself when the task needs it. `passlet` must be on PATH. Local Mac agents use the default private Unix socket when `PASSLET_ENDPOINT` is unset. Remote agents use their own SSH-forwarded socket (for example `unix:///home/alice/.local/share/passlet/mac.sock`) or an explicitly configured Tailscale HTTPS origin. Never guess a teammate’s endpoint. Use `passlet doctor` to check the selected connection when troubleshooting is requested. On the Approver Mac, use `passlet approver doctor` to check the local service regardless of saved or environment-selected endpoints. It prompts for native approval on the Approver’s Mac, unlocks credentials, refreshes authorization when needed, and verifies GitHub identity without issuing an agent token. Tell the user to expect the prompt, and do not run it as an unattended preflight or retry loop. Every transport requires paired keys. The user pairs each Agent with the one-time command from `passlet approver pair` and approves with Touch ID. Do not initiate pairing or change trust as an automatic recovery step. Passlet generates missing private keys at runtime and exports public keys under `~/.local/share/passlet/`; see [pairing setup](../../docs/SETUP.md#pair-agents). Pairing identifies the trusted key, not the Claude or Codex executable. Other processes that can read the private key, including remote root, remain trusted. The user authenticates on the Mac, and only a scoped GitHub user token reaches this agent. Actions retain the user's GitHub attribution.
 
@@ -69,3 +69,22 @@ Retain the grant file and its private directory after each command, task, and pr
 - Repository not installed: ask the user to add that repository to the GitHub App installation. If they cannot, for example a third-party repository they do not administer, tell them that Git over SSH works through the SSH agent Passlet forwards from their Mac, and use an SSH remote for that repository only when they choose it. Do not request access to a different repository as a workaround.
 
 Repository-listing endpoints can expose metadata beyond the scoped repositories. A listing is not proof of content access. Validate access through the intended operation rather than probing unrelated repositories.
+
+
+## Cloudflare access
+
+For Cloudflare operations, use the same approval and grant-reuse workflow with `--provider cloudflare`. Setup on the Mac is `passlet approver cloudflare setup`, which stores broad token-creation authority in protected Keychain. Never read or copy that parent credential. Do not fall back to ambient Cloudflare credentials.
+
+Request explicit zone IDs with `--zones ID[,ID...]` (up to three) or one account ID with `--account ID`. Do not combine these with GitHub scopes or substitute account access for zone access. Permissions use Cloudflare group names in snake_case with an access level, for example `dns:read`, `dns:write`, or `workers_scripts:write`. Edit is spelled `write`. Up to four permissions are accepted. Token-management permissions are excluded. For unfamiliar groups, consult [Cloudflare's permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and choose the group matching the requested resource type.
+
+Tell the user the exact resources and permissions, then request once with `--out` and allow time for native approval:
+
+```sh
+passlet request --provider cloudflare \
+  --zones 0123456789abcdef0123456789abcdef \
+  --permissions dns:read --out /concrete/private/path/cloudflare-grant.json
+passlet exec --grant /concrete/private/path/cloudflare-grant.json -- \
+  sh -c 'curl --fail --silent --show-error -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/zones/0123456789abcdef0123456789abcdef/dns_records'
+```
+
+Create a private grant directory as in the GitHub example. Keep the grant path, approved scope, and expiry for reuse. Tokens last at most one hour. `exec` sets `CLOUDFLARE_API_TOKEN` and, for account grants, `CLOUDFLARE_ACCOUNT_ID`, while clearing ambient Cloudflare credentials and account overrides. Never print these variables or use verbose HTTP logging. The existing denial, unavailable-Mac, expiry, and no-retry rules apply. For requested Cloudflare troubleshooting, use `passlet doctor --provider cloudflare`, or `passlet approver doctor --provider cloudflare` to check the local Mac. Explain that native approval is required. The check verifies token-creation authority without issuing a token.

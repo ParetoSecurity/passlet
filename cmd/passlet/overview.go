@@ -22,7 +22,7 @@ Usage: passlet <command>
 
 Commands:
   approver      Manage the local Approver on your Mac
-  doctor        Check your connection and verify GitHub access
+  doctor        Check your connection and verify provider access
   exec          Run a command with scoped access
   pair          Pair with an Approver
   request       Request scoped access

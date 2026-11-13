@@ -18,6 +18,13 @@ func formatAudit(entries []passlet.AuditEntry) string {
 		event := entry.Event
 		scope := "Repositories: " + strings.Join(event.Request.Repositories, ", ")
 		switch {
+		case event.Operation == "doctor" && event.Request.Provider == "cloudflare":
+			scope = "Cloudflare token-creation authority check"
+		case event.Request.Provider == "cloudflare":
+			scope = "Cloudflare zones: " + strings.Join(event.Request.Zones, ", ")
+			if event.Request.Account != "" {
+				scope = "Cloudflare account: " + event.Request.Account
+			}
 		case event.Operation == "doctor":
 			scope = "GitHub identity check"
 		case event.Request.Account != "":

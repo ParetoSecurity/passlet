@@ -107,7 +107,7 @@ func TestDoctorFailureMessages(t *testing.T) {
 	} {
 		for _, code := range tc.codes {
 			t.Run(code, func(t *testing.T) {
-				if got := doctorFailureMessage(errors.New(code)); got != tc.want {
+				if got := doctorFailureMessage(errors.New(code), ""); got != tc.want {
 					t.Fatalf("got %q, want %q", got, tc.want)
 				}
 			})

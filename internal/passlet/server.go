@@ -19,7 +19,12 @@ type Minter interface {
 	Mint(context.Context, Credentials, Request) (Grant, error)
 }
 type Server struct {
-	Approval Approval
+	Approval           Approval
+	CloudflareApproval Approval
+	Cloudflare         interface {
+		Verify(context.Context, string) (Credentials, error)
+		Mint(context.Context, Credentials, Request) (Grant, error)
+	}
 	GitHub   Minter
 	Audit    Recorder
 	Identity func(context.Context, string) (Caller, error)
@@ -88,7 +93,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var requested Request
 	invalid := strictJSON(data, &requested) != nil || requested.Validate() != nil
 	if doctor {
-		invalid = strictJSON(data, &struct{}{}) != nil
+		var diagnostic doctorRequest
+		invalid = strictJSON(data, &diagnostic) != nil || (diagnostic.Provider != "" && diagnostic.Provider != "cloudflare")
+		requested = Request{Provider: diagnostic.Provider}
 	}
 	if invalid {
 		apiError(w, 400, "invalid_request")
@@ -141,8 +148,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	prompt := requested.Prompt(caller)
 	if doctor {
 		prompt = "verify stored credentials for " + caller.displayName()
+		if requested.Provider == "cloudflare" {
+			prompt = "verify stored Cloudflare credentials for " + caller.displayName()
+		}
 	}
-	session, err := s.Approval.Approve(ctx, prompt)
+	approval := s.Approval
+	if requested.Provider == "cloudflare" {
+		if s.CloudflareApproval == nil || s.Cloudflare == nil {
+			fail("provider_unavailable", 503)
+			return
+		}
+		approval = s.CloudflareApproval
+	}
+	session, err := approval.Approve(ctx, prompt)
 	if err != nil {
 		fail(err.Error(), 403)
 		return
@@ -159,24 +177,39 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := session.Credentials()
-	if doctor && c.Account.Validate() != nil {
+	if doctor && requested.Provider != "cloudflare" && c.Account.Validate() != nil {
 		fail("invalid_protected_account_identity", 502)
 		return
 	}
-	updated, err := s.GitHub.Refresh(ctx, c)
-	if err != nil {
-		fail(err.Error(), 502)
+	if c.Provider != requested.Provider {
+		fail("invalid_credentials", 502)
 		return
 	}
-	if updated != c {
-		if err = session.Store(updated); err != nil {
-			fail("credential_rotation_not_saved", 503)
+	if requested.Provider != "cloudflare" {
+		updated, err := s.GitHub.Refresh(ctx, c)
+		if err != nil {
+			fail(err.Error(), 502)
 			return
 		}
-		c = updated
+		if updated != c {
+			if err = session.Store(updated); err != nil {
+				fail("credential_rotation_not_saved", 503)
+				return
+			}
+			c = updated
+		}
 	}
 	var response any
-	if doctor {
+	if doctor && requested.Provider == "cloudflare" {
+		verified, err := s.Cloudflare.Verify(ctx, c.AccessToken)
+		if err != nil || c.Validate() != nil || verified.CloudflareTokenID != c.CloudflareTokenID {
+			fail("cloudflare_credentials_verification_failed", 502)
+			return
+		}
+		response = DoctorResult{Provider: "cloudflare", CloudflareTokenID: verified.CloudflareTokenID}
+		event.CloudflareTokenID = verified.CloudflareTokenID
+		event.Outcome = "verified"
+	} else if doctor {
 		if err := s.GitHub.VerifyIdentity(ctx, c, c.Account.Login); err != nil {
 			fail("github_identity_verification_failed", 502)
 			return
@@ -185,7 +218,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		event.GitHubUser = c.Account.Login
 		event.Outcome = "verified"
 	} else {
-		grant, err := s.GitHub.Mint(ctx, c, requested)
+		var grant Grant
+		var err error
+		if requested.Provider == "cloudflare" {
+			grant, err = s.Cloudflare.Mint(ctx, c, requested)
+		} else {
+			grant, err = s.GitHub.Mint(ctx, c, requested)
+		}
 		if err != nil {
 			fail(err.Error(), 502)
 			return
@@ -196,7 +235,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		event.GrantedAccount = grant.Account
 		event.GrantedPermissions = grant.Permissions
 		event.GrantedRepositories = grant.Repositories
-		event.GitHubUser = grant.User
+		if requested.Provider == "cloudflare" {
+			event.CloudflareTokenID = grant.CloudflareTokenID
+			event.GrantedZones = grant.Zones
+		} else {
+			event.GitHubUser = grant.User
+		}
 		event.Outcome = "minted"
 		response = grant
 	}

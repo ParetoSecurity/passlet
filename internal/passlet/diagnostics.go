@@ -74,10 +74,14 @@ func Health(ctx context.Context, endpoint string) error {
 	return nil
 }
 
-func KeychainStatus(ctx context.Context, helper string) (string, error) {
+func (h NativeHelper) Status(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, ConnectDeadline)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, helper, "--status")
+	args := []string{"--status"}
+	if h.Provider != "" {
+		args = append(args, "--provider", h.Provider)
+	}
+	cmd := exec.CommandContext(ctx, h.Path, args...)
 	pipe, err := cmd.StdoutPipe()
 	if err != nil { // coverage-ignore: Fresh command; only process-wide file-descriptor exhaustion can fail pipe creation.
 		return "", errors.New("helper_unavailable")

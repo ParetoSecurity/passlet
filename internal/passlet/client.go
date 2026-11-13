@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -146,6 +147,8 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		}
 		if json.Unmarshal(payload, &problem) == nil {
 			switch problem.Error {
+			case "cloudflare_http_401", "cloudflare_http_403", "unknown_or_ambiguous_cloudflare_permission", "provider_unavailable":
+				return Grant{}, errors.New(problem.Error)
 			case "github_http_403":
 				return Grant{}, errors.New("github_access_denied_check_App_permissions_installation_approval_and_org_policy")
 			case "github_http_401":
@@ -157,10 +160,10 @@ func requestGrant(ctx context.Context, endpoint string, r Request, client *http.
 		return Grant{}, errors.New("grant_failed")
 	}
 	var grant Grant
-	if strictJSON(payload, &grant) != nil || grant.Token == "" || grant.ID == "" || grant.User == "" || !grant.ExpiresAt.After(time.Now()) || time.Until(grant.ExpiresAt) > 8*time.Hour+time.Minute {
+	if strictJSON(payload, &grant) != nil || grant.Token == "" || grant.ID == "" || (grant.Provider != "cloudflare" && grant.User == "") || (grant.Provider == "cloudflare" && !cloudflareID.MatchString(grant.CloudflareTokenID)) || !grant.ExpiresAt.After(time.Now()) || time.Until(grant.ExpiresAt) > 8*time.Hour+time.Minute {
 		return Grant{}, errors.New("invalid_grant")
 	}
-	if grant.Organization != r.Organization || grant.Account != r.Account || len(grant.Repositories) != len(r.Repositories) || len(grant.Permissions) != len(r.Permissions) {
+	if grant.Provider != r.Provider || !slices.Equal(grant.Zones, r.Zones) || (r.Provider == "cloudflare" && time.Until(grant.ExpiresAt) > time.Hour+time.Minute) || grant.Organization != r.Organization || grant.Account != r.Account || len(grant.Repositories) != len(r.Repositories) || len(grant.Permissions) != len(r.Permissions) {
 		return Grant{}, errors.New("unexpected_grant_scope")
 	}
 	for i, repo := range r.Repositories {

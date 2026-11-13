@@ -26,18 +26,20 @@ Feature: Show command help
       When I run `passlet doctor --help`
       Then the terminal shows:
         """
-        Check your Approver connection and verify GitHub access. Requires approval on your Approver Mac.
+        Check your Approver connection and verify provider access. Requires approval on your Approver Mac.
 
         Usage of doctor:
           --endpoint string
                 override the environment, saved endpoint, or default local socket
+          --provider string
+                credential provider: github (default) or cloudflare
         """
 
     Scenario: Show exec help
       When I run `passlet exec --help`
       Then the terminal shows:
         """
-        Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+        Run a command with an approved grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
 
         Example:
           passlet request --repos alice/repo --permissions contents:read --out grant.json
@@ -63,15 +65,19 @@ Feature: Show command help
 
         Usage of request:
           --account string
-                account-wide permission target (exclusive with --repos/--org)
+                GitHub handle or Cloudflare account ID (exclusive with --repos/--org/--zones)
           --org string
                 organization-wide permission target (exclusive with --repos/--account)
           --out string
                 write grant JSON to a new mode-0600 file
           --permissions string
-                comma-separated permission:read|write|admin list
+                comma-separated permission:level list (Cloudflare: read|write|run|revoke)
+          --provider string
+                credential provider: github (default) or cloudflare
           --repos string
                 comma-separated owner/repository list
+          --zones string
+                comma-separated Cloudflare zone IDs (exclusive with --account)
         """
 
   Rule: Approver commands
@@ -96,6 +102,7 @@ Feature: Show command help
         Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
 
         Requires Touch ID approval to verify saved credentials.
+        Use --provider cloudflare to check Cloudflare instead of GitHub.
         """
 
     Scenario: Show approver start help

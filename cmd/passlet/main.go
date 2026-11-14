@@ -82,20 +82,22 @@ Save and use a grant:
 One-time grant use directly with exec (Bash/Zsh):
   passlet exec --grant <(passlet request --repos alice/repo --permissions contents:read) -- gh repo view alice/repo`
 		if os.Args[1] == "exec" {
-			description = `Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+			description = `Run a command with an approved grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
 
 Example:
   passlet request --repos alice/repo --permissions contents:read --out grant.json
   passlet exec --grant grant.json -- gh repo view alice/repo`
 		}
 		fs := commandFlags(os.Args[1], description, "endpoint")
-		var endpoint, repos, org, account, perms, out, grantFile string
+		var endpoint, repos, org, account, perms, out, grantFile, provider, zones string
 		if os.Args[1] == "request" {
 			fs.StringVar(&endpoint, "endpoint", "", "override the environment, saved endpoint, or default local socket")
+			fs.StringVar(&provider, "provider", "", "credential provider: github (default) or cloudflare")
+			fs.StringVar(&zones, "zones", "", "comma-separated Cloudflare zone IDs (exclusive with --account)")
 			fs.StringVar(&repos, "repos", "", "comma-separated owner/repository list")
 			fs.StringVar(&org, "org", "", "organization-wide permission target (exclusive with --repos/--account)")
-			fs.StringVar(&account, "account", "", "account-wide permission target (exclusive with --repos/--org)")
-			fs.StringVar(&perms, "permissions", "", "comma-separated permission:read|write|admin list")
+			fs.StringVar(&account, "account", "", "GitHub handle or Cloudflare account ID (exclusive with --repos/--org/--zones)")
+			fs.StringVar(&perms, "permissions", "", "comma-separated permission:level list (Cloudflare: read|write|run|revoke)")
 			fs.StringVar(&out, "out", "", "write grant JSON to a new mode-0600 file")
 		} else {
 			fs.StringVar(&grantFile, "grant", "", "grant JSON file or process-substitution path (required)")
@@ -117,7 +119,13 @@ Example:
 				return errors.New("grant_expired_or_invalid")
 			}
 		} else {
-			requested := passlet.Request{Agent: inferAgentName(), Organization: org, Account: account, Permissions: map[string]string{}}
+			if provider == "github" {
+				provider = ""
+			}
+			requested := passlet.Request{Provider: provider, Agent: inferAgentName(), Organization: org, Account: account, Permissions: map[string]string{}}
+			if zones != "" {
+				requested.Zones = strings.Split(zones, ",")
+			}
 			if repos != "" {
 				requested.Repositories = strings.Split(repos, ",")
 			}
@@ -141,7 +149,11 @@ Example:
 				return err
 			}
 		}
-		fmt.Fprintf(os.Stderr, "Grant %s for %s expires %s\n", grant.ID, grant.User, grant.ExpiresAt.Format(time.RFC3339))
+		identity := grant.User
+		if grant.Provider == "cloudflare" {
+			identity = "Cloudflare token " + grant.CloudflareTokenID
+		}
+		fmt.Fprintf(os.Stderr, "Grant %s for %s expires %s\n", grant.ID, identity, grant.ExpiresAt.Format(time.RFC3339))
 		if os.Args[1] == "request" {
 			if out != "" {
 				f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -156,6 +168,12 @@ Example:
 		args := fs.Args()
 		if len(args) == 0 {
 			return errors.New("exec requires -- COMMAND [ARGS]")
+		}
+		if grant.Provider == "cloudflare" {
+			return execCloudflare(ctx, grant, args)
+		}
+		if grant.Provider != "" {
+			return errors.New("invalid_provider")
 		}
 		// Temporary credential helper serves the token only to github.com. Git receives
 		// it via stdin/stdout, never via a URL, process argument, or persisted config.

@@ -20,7 +20,8 @@ func diagnostics(ctx context.Context, args []string) error {
 }
 
 func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
-	fs := commandFlags("doctor", "Check your Approver connection and verify GitHub access. Requires approval on your Approver Mac.")
+	fs := commandFlags("doctor", "Check your Approver connection and verify provider access. Requires approval on your Approver Mac.")
+	provider := fs.String("provider", "", "credential provider: github (default) or cloudflare")
 	endpoint := fs.String("endpoint", "", "override the environment, saved endpoint, or default local socket")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -36,15 +37,17 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 	if _, err := passlet.EndpointURL(*endpoint, "/v1/health"); err != nil {
 		return errors.New("invalid_endpoint_use_unix_absolute_socket_or_Tailscale_HTTPS_origin")
 	}
-	return diagnoseEndpoint(ctx, *endpoint, hostOS)
+	return diagnoseEndpoint(ctx, *endpoint, hostOS, *provider)
 }
 
 func localDiagnostics(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("approver doctor", flag.ContinueOnError)
+	provider := fs.String("provider", "", "credential provider: github (default) or cloudflare")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintln(fs.Output(), `Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
 
-Requires Touch ID approval to verify saved credentials.`)
+Requires Touch ID approval to verify saved credentials.
+Use --provider cloudflare to check Cloudflare instead of GitHub.`)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -52,10 +55,16 @@ Requires Touch ID approval to verify saved credentials.`)
 	if fs.NArg() != 0 {
 		return errors.New("unexpected_arguments")
 	}
-	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), "darwin")
+	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), "darwin", *provider)
 }
 
-func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
+func diagnoseEndpoint(ctx context.Context, endpoint, hostOS, provider string) error {
+	if provider == "github" {
+		provider = ""
+	}
+	if provider != "" && provider != "cloudflare" {
+		return errors.New("invalid_provider")
+	}
 	fmt.Println("passlet", version)
 	fmt.Println("Endpoint:", endpoint)
 	if err := passlet.Health(ctx, endpoint); err != nil {
@@ -68,17 +77,27 @@ func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
 		}
 	}
 	fmt.Println("Approve the diagnostic check on your Mac with Touch ID.")
-	result, err := passlet.Doctor(ctx, endpoint)
+	result, err := passlet.Doctor(ctx, endpoint, provider)
 	if err != nil {
-		return errors.New(doctorFailureMessage(err))
+		return errors.New(doctorFailureMessage(err, provider))
 	}
 	fmt.Println("Keychain: unlocked")
-	fmt.Println("GitHub authorization: valid")
-	fmt.Println("GitHub identity:", result.Login)
+	if provider == "cloudflare" {
+		fmt.Println("Cloudflare token-creation authority: valid")
+		fmt.Println("Cloudflare parent token:", result.CloudflareTokenID)
+	} else {
+		fmt.Println("GitHub authorization: valid")
+		fmt.Println("GitHub identity:", result.Login)
+	}
 	return nil
 }
 
-func doctorFailureMessage(err error) string {
+func doctorFailureMessage(err error, provider string) (message string) {
+	defer func() {
+		if provider == "cloudflare" {
+			message = strings.NewReplacer("GitHub", "Cloudflare", "github setup", "cloudflare setup").Replace(message)
+		}
+	}()
 	if problem := passlet.PairingProblem(err); problem != "" {
 		return problem
 	}
@@ -95,6 +114,10 @@ func doctorFailureMessage(err error) string {
 		return "Saved GitHub authorization could not be verified.\nRun `passlet approver github setup` on your Mac."
 	case "credential_rotation_not_saved":
 		return "Updated GitHub credentials could not be saved.\nRun `passlet approver github setup` on your Mac."
+	case "cloudflare_credentials_verification_failed":
+		return "Saved Cloudflare token-creation authority could not be verified. Check the parent token in Cloudflare. If replacing it, run `passlet approver cloudflare reset`, then `passlet approver cloudflare setup` on your Mac."
+	case "provider_unavailable":
+		return "Update Passlet on your Approver Mac to enable Cloudflare diagnostics."
 	case "github_identity_verification_failed":
 		return "GitHub identity could not be verified."
 	case "helper_failed", "helper_unavailable":

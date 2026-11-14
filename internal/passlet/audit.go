@@ -11,6 +11,8 @@ import (
 )
 
 type Event struct {
+	CloudflareTokenID   string            `json:"cloudflare_token_id,omitempty"`
+	GrantedZones        []string          `json:"granted_zones,omitempty"`
 	Operation           string            `json:"operation,omitempty"`
 	GrantedOrganization string            `json:"granted_organization,omitempty"`
 	GrantedAccount      string            `json:"granted_account,omitempty"`

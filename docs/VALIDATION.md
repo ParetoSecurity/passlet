@@ -126,3 +126,19 @@ For the CLI setup changes, use a disposable app and Keychain item to check `pass
 Audit scenarios in `cmd/passlet/features/audit.feature` assert complete terminal output for readable events, newest-first ordering, limits, JSON export, empty logs, missing databases, and corrupted-record warnings. Warnings stay on stderr so JSON stdout remains parseable. They use a private SQLite fixture with fixed timestamps and an invalid Approver endpoint. Successful exit is checked after each scenario unless failure is explicitly expected. Run them with `go test -v -run '^TestAuditFeatures$' ./cmd/passlet`.
 
 Pairing tests exercise real TLS 1.3 over TCP and Unix sockets, reject unknown keys and incorrect Approver pins, and replay captured TLS records against a fresh connection to verify rejection before the request handler runs. Enrollment tests also verify one-time code consumption, expiry, denial, concurrent attempts, identity pinning, malformed responses, and revocation on existing connections. Run `go test -run "TestPaired|TestCaptured|TestPairing|TestPrivateKey|TestEnrollment|TestInvitation|TestConcurrentEnrollment" ./internal/passlet`.
+
+## Cloudflare
+
+Automated Cloudflare tests cover exact grant policies and expiry, provider isolation, local and remote doctor requests, repeated setup, empty reset, discovery pagination, cancellation and token revocation, cached approval labels, and offline child-token execution with ambient Cloudflare credentials removed. Discovery tests verify that temporary tokens have only Account Settings Read or Zone Read, last at most five minutes, and are revoked on both successful and failed lookups. These HTTP fixtures do not establish live Cloudflare or signed Keychain behavior.
+
+For a live test, build the development app with an explicit provisioning profile and signing identity as described above. Use its CLI and helper together. Do not use an older installed helper that predates Cloudflare support.
+
+1. Run `passlet approver cloudflare setup --helper /absolute/path/Passlet.app/Contents/MacOS/PassletHelper` and paste a Create additional tokens credential into the hidden terminal prompt.
+2. Check that setup caches account and zone names, that discovery tokens have been removed in Cloudflare, and that the parent credential is absent from terminal output and local files.
+3. Repeat setup. Approve verification and resource discovery, confirm no new parent-token prompt appears, and check local pairing.
+4. Run an isolated Approver service using the new CLI/helper, then run local and remotely forwarded `doctor --provider cloudflare`. Confirm Touch ID denial prevents access and successful diagnostics issue no tokens.
+5. Request `zone:read` for one disposable zone. Confirm the native prompt shows its exact ID, cached name, permission, and one-hour expiry. Check the token can read that zone and cannot access a different zone. Inspect its exact policy in Cloudflare.
+6. Disconnect the Approver and reuse the saved grant with `passlet exec`. Confirm only the child token reaches the subprocess and the read still succeeds until expiry.
+7. Reset Cloudflare, deny once and confirm credentials remain, then approve removal. Repeat reset and confirm no prompt. Verify GitHub credentials still work.
+
+Live Cloudflare API, Touch ID, and signed Keychain checks remain unperformed. The local environment must supply `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY` before building the signed helper.

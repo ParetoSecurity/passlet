@@ -14,7 +14,7 @@ Feature: Get started with Passlet
 
       Commands:
         approver      Manage the local Approver on your Mac
-        doctor        Check your connection and verify GitHub access
+        doctor        Check your connection and verify provider access
         exec          Run a command with scoped access
         pair          Pair with an Approver
         request       Request scoped access
@@ -36,6 +36,7 @@ Feature: Get started with Passlet
       Commands:
         agents        List or revoke paired Agents
         audit         Show audit history
+        cloudflare    Manage Cloudflare credentials
         doctor        Check service health and credentials
         github        Manage GitHub credentials
         pair          Create a one-time pairing code

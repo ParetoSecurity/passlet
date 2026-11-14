@@ -20,7 +20,10 @@ type CredentialSession interface {
 	Store(Credentials) error
 	Close()
 }
-type NativeHelper struct{ Path string }
+type NativeHelper struct {
+	Path     string
+	Provider string
+}
 type helperSession struct {
 	cmd         *exec.Cmd
 	in          io.WriteCloser
@@ -37,7 +40,11 @@ type helperReply struct {
 }
 
 func (h NativeHelper) Approve(ctx context.Context, prompt string) (CredentialSession, error) {
-	cmd := exec.Command(h.Path)
+	args := []string{}
+	if h.Provider != "" {
+		args = append(args, "--provider", h.Provider)
+	}
+	cmd := exec.Command(h.Path, args...)
 	in, err := cmd.StdinPipe()
 	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return nil, errors.New("helper_unavailable")
@@ -67,7 +74,7 @@ func (h NativeHelper) Approve(ctx context.Context, prompt string) (CredentialSes
 		s.Close()
 		return nil, err
 	}
-	if reply.Credentials == nil || reply.Credentials.Validate() != nil {
+	if reply.Credentials == nil || reply.Credentials.Validate() != nil || reply.Credentials.Provider != h.Provider {
 		s.Close()
 		return nil, errors.New("invalid_credentials")
 	}
@@ -123,13 +130,17 @@ func (s *helperSession) Close() {
 	})
 }
 func ImportCredentials(ctx context.Context, path string, c Credentials) error {
-	if err := c.Account.Validate(); err != nil {
+	if err := c.Account.Validate(); c.Provider != "cloudflare" && err != nil {
 		return err
 	}
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, path, "--import")
+	args := []string{"--import"}
+	if c.Provider != "" {
+		args = append(args, "--provider", c.Provider)
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
 	in, err := cmd.StdinPipe()
 	if err != nil { // coverage-ignore: Fresh command; failure requires process-wide file-descriptor exhaustion.
 		return err
@@ -161,7 +172,11 @@ func ImportCredentials(ctx context.Context, path string, c Credentials) error {
 
 // Reset requires native approval and deletes only Passlet's own credential item.
 func (h NativeHelper) Reset(ctx context.Context) (AccountInfo, error) {
-	session, err := h.Approve(ctx, "remove your Passlet GitHub credentials")
+	provider := "GitHub"
+	if h.Provider == "cloudflare" {
+		provider = "Cloudflare"
+	}
+	session, err := h.Approve(ctx, "remove your Passlet "+provider+" credentials")
 	if err != nil {
 		return AccountInfo{}, err
 	}

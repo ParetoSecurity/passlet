@@ -251,3 +251,29 @@ Every request uses the Agent's paired identity, which is checked again before re
 The Linux server must already allow the corresponding SSH public key for sudo. On NixOS, enable `security.pam.sshAgentAuth.enable = true;` and manage the user's authorized keys through the system configuration. Keep the trusted public-key files under administrator control. Set `SSH_AUTH_SOCK` to the proxy socket in the Rex shell, then use ordinary `sudo` commands. PAM sends a fresh challenge through Passlet and verifies the SSH agent's signature, rather than trusting a boolean approval response from the socket.
 
 SSH-agent forwarding permits general SSH signing, not a particular sudo command. Processes running as your Unix user, and root, may access the proxy. Your SSH agent's approval/caching policy still applies. Disabling forwarding does not invalidate sudo's authentication cache, established SSH sessions, or already delivered signatures. Set sudo's `timestamp_timeout` to zero if every invocation must authenticate anew. This does not protect a server from an attacker who already controls root.
+
+
+## Cloudflare
+
+On your Approver Mac, run `passlet approver cloudflare setup`. The command opens [Cloudflare API tokens](https://dash.cloudflare.com/profile/api-tokens). Choose the Create additional tokens template with its API Tokens: Edit permission. Keep broad resource access and do not add unrelated permissions. Paste the resulting token into Passlet's hidden terminal prompt. The token travels through private pipes into its own user-presence-protected Keychain item. Setup pairs the local Agent. Running it again verifies the saved credential through Touch ID, refreshes resource names, and repairs local pairing without asking for another token.
+
+This credential can create tokens with any permissions available to your Cloudflare user. Passlet imposes no setup allowlist. Every agent request must still name exact resources and permissions, and requires Touch ID approval. Agent tokens cannot manage API tokens. Cloudflare enforces the approved policy and expiry even when your Mac is offline.
+
+Setup discovers account and zone names using temporary five-minute tokens with Account Settings Read or Zone Read, then revokes them. Only names and IDs are cached on the Mac. Approval prompts always show exact IDs, with cached names as supporting labels. Missing or unreadable catalogs fall back to IDs. Run setup again after adding or renaming resources. The catalog is not an allowlist and does not limit access to newly added resources. If discovery fails after import, the credential remains saved so setup can retry. A revocation failure is reported, and the temporary token expires within five minutes.
+
+Requests use `--provider cloudflare` and either `--zones ID[,ID...]` (up to three zones) or `--account ID` (one account). IDs are 32 lowercase hexadecimal characters, available in the Cloudflare dashboard. Wildcards, mixed GitHub/Cloudflare scopes, and mixed account/zone scopes are rejected. Up to four permissions fit in one approval prompt.
+
+Permission names follow Cloudflare's permission groups: lowercase the name, replace punctuation and spaces with underscores, and separate the final access level with a colon. For example, DNS Write becomes `dns:write`, Workers Scripts Write becomes `workers_scripts:write`, and Access: Apps and Policies Read becomes `access_apps_and_policies:read`. Cloudflare's Edit level is spelled `write`. Supported levels are `read`, `write`, `run`, and `revoke`. Passlet resolves names against Cloudflare's permission-group API and rejects unknown, ambiguous, or incorrectly scoped permissions. See [Cloudflare's permissions reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
+
+```sh
+passlet request --provider cloudflare \
+  --account 0123456789abcdef0123456789abcdef \
+  --permissions workers_scripts:write --out cloudflare-grant.json
+passlet exec --grant cloudflare-grant.json -- wrangler deploy
+```
+
+Each request asks for a one-hour token and checks the returned policy and expiry before delivery. `exec` injects only the child token as `CLOUDFLARE_API_TOKEN`, and sets `CLOUDFLARE_ACCOUNT_ID` for account grants. It clears ambient Cloudflare API tokens, global API keys, email addresses, and account overrides. Other tools may need their own configuration to use these environment variables. A grant can be reused until expiry without contacting the Approver.
+
+`passlet approver cloudflare reset` requires native approval and removes only the Cloudflare Keychain item. If no credential is saved, reset exits without prompting. It leaves GitHub credentials untouched and does not revoke tokens already issued. Revoke tokens in Cloudflare's dashboard if needed. Run `passlet doctor --provider cloudflare` from an Agent to check its selected Approver, or `passlet approver doctor --provider cloudflare` on the Mac to check the local service. Both require native approval, unlock only the Cloudflare credential, and verify that the saved parent token is active and can create tokens. They display its token ID, never its secret, and record the diagnostic outcome in the audit log. These checks make read-only Cloudflare calls and never issue a token.
+
+A `cloudflare_http_401` or `cloudflare_http_403` means Cloudflare rejected the credential or requested authority. Check the parent token's status and token-creation permission in the dashboard. If replacing the parent token, run `reset` followed by `setup`. An `unknown_or_ambiguous_cloudflare_permission` means the requested name does not resolve to exactly one permission group for the selected resource type. Review the permission spelling and whether it is account- or zone-scoped.

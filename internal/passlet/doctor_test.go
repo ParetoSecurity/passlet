@@ -13,12 +13,12 @@ import (
 
 func TestDoctorClientFailures(t *testing.T) {
 	for _, endpoint := range []string{"http://invalid", "unix://" + socketPath(t)} {
-		if _, err := Doctor(context.Background(), endpoint); err == nil {
+		if _, err := Doctor(context.Background(), endpoint, ""); err == nil {
 			t.Fatal("unavailable endpoint passed")
 		}
 	}
 	var missingContext context.Context
-	if _, err := Doctor(missingContext, "unix://"+socketPath(t)); err == nil {
+	if _, err := Doctor(missingContext, "unix://"+socketPath(t), ""); err == nil {
 		t.Fatal("missing context accepted")
 	}
 	for _, tc := range []struct {
@@ -44,7 +44,7 @@ func TestDoctorClientFailures(t *testing.T) {
 			listener = pairedFixture(t, server, listener)
 			go func() { _ = server.Serve(listener) }()
 			defer server.Close()
-			if _, err := Doctor(context.Background(), "unix://"+path); err == nil || err.Error() != tc.want {
+			if _, err := Doctor(context.Background(), "unix://"+path, ""); err == nil || err.Error() != tc.want {
 				t.Fatalf("want %s, got %v", tc.want, err)
 			}
 		})

@@ -49,7 +49,7 @@ func TestKeychainStatusFailures(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := KeychainStatus(context.Background(), path); err == nil || err.Error() != tc.want {
+			if _, err := (NativeHelper{Path: path}).Status(context.Background()); err == nil || err.Error() != tc.want {
 				t.Fatalf("want %s, got %v", tc.want, err)
 			}
 		})
@@ -161,5 +161,19 @@ func TestSandboxConnectionFailures(t *testing.T) {
 	}
 	if got := SandboxNetworkProblem(&os.PathError{Op: "open", Path: "agent.pem", Err: syscall.EACCES}); got != "" {
 		t.Fatal("file access mislabeled as network denial")
+	}
+}
+
+func TestCloudflareKeychainStatus(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "helper")
+	script := "#!/bin/sh\n" + `test "$1" = --status && test "$2" = --provider && test "$3" = cloudflare || exit 1
+printf '%s' '{"status":"missing"}'
+`
+	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	status, err := (NativeHelper{Path: path, Provider: "cloudflare"}).Status(context.Background())
+	if err != nil || status != "missing" {
+		t.Fatalf("%s: %v", status, err)
 	}
 }

@@ -4,48 +4,62 @@
     "id": "getting-started/what-is-passlet",
     "title": "What is Passlet?",
     "description": "Give coding agents scoped GitHub access with approval on your Mac.",
-    "order": 1
+    "order": 1,
+    "seoTitle": "Scoped GitHub access for your coding agents",
+    "seoDescription": "Give coding agents short-lived GitHub access with approval on your Mac. Learn how Passlet scopes permissions and keeps GitHub credentials under your control."
   },
   {
     "source": "docs/overview.mdx",
     "id": "getting-started/overview",
     "title": "How Passlet works",
     "description": "Understand Agents, Approver, and how scoped credentials reach your coding tools.",
-    "order": 4
+    "order": 4,
+    "seoTitle": "How Agents request scoped GitHub credentials",
+    "seoDescription": "Learn how Passlet Agents request scoped GitHub credentials from Approver on your Mac, how you approve access, and what happens when your Mac goes offline."
   },
   {
     "source": "docs/quick-start.mdx",
     "id": "getting-started/quick-start",
     "title": "Quick start",
     "description": "Install Passlet, connect GitHub, and approve your first request.",
-    "order": 2
+    "order": 2,
+    "seoTitle": "Quick start: approve your first GitHub request",
+    "seoDescription": "Install Passlet, connect your GitHub account, and add it to Claude Code or Codex. Approve your first scoped request on your Mac, then connect a remote Agent."
   },
   {
     "source": "docs/INSTALLATION.md",
     "id": "getting-started/installation",
     "title": "Installation",
     "description": "Install Approver on macOS and Agent on macOS or Linux using Homebrew or Nix.",
-    "order": 3
+    "order": 3,
+    "seoTitle": "Install Approver and Agent with Homebrew or Nix",
+    "seoDescription": "Install Passlet Approver on macOS and Agent on macOS or Linux using Homebrew or Nix. Configure startup, connect your Agents, and learn to update or uninstall."
   },
   {
     "source": "docs/SETUP.md",
     "id": "guides/setup",
     "title": "Setup and troubleshooting",
     "description": "Set up GitHub, pair Agents, configure SSH or Tailscale, and diagnose connection problems.",
-    "order": 1
+    "order": 1,
+    "seoTitle": "GitHub setup, Agent pairing and troubleshooting",
+    "seoDescription": "Set up GitHub, pair Passlet Agents, and connect through SSH or Tailscale. Diagnose connection problems, configure repository groups, and forward your SSH agent."
   },
   {
     "source": "CONTRIBUTING.md",
     "id": "contributing/overview",
     "title": "Contributing",
     "description": "Contribution licensing and acknowledgment for pull requests.",
-    "order": 1
+    "order": 1,
+    "seoTitle": "Contributing code and documentation to Passlet",
+    "seoDescription": "Learn the MIT licensing terms for contributing to Passlet, confirm your right to submit changes, and complete the contribution acknowledgment on a pull request."
   },
   {
     "source": "docs/authoring.mdx",
     "id": "contributing/documentation",
     "title": "Writing documentation",
     "description": "Write Markdown docs with OS tabs, diagrams, expandable details, and release labels.",
-    "order": 2
+    "order": 2,
+    "seoTitle": "Writing guides and documentation for Passlet",
+    "seoDescription": "Write and preview Passlet docs using Markdown, OS tabs, diagrams, callouts, and release labels. Learn how the website imports guides from its repository."
   }
 ]

@@ -1,0 +1,53 @@
+name: Documentation preview
+on:
+  push:
+    paths:
+      - '.github/workflows/docs-preview.yml'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+  workflow_dispatch:
+permissions:
+  statuses: write
+defaults:
+  run:
+    shell: bash
+jobs:
+  preview:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - name: Mark preview pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST repos/${{ github.repository }}/statuses/${{ github.sha }} -f state=pending -f context=docs/preview -f description='Building website preview'
+      - name: Build website preview
+        id: preview
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}
+          DOCS_SHA: ${{ github.sha }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Configure DOCS_PREVIEW_TOKEN with Actions read/write access to teamniteo/site-passlet.' >&2; exit 1; }
+          run_id=$(gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' repos/teamniteo/site-passlet/actions/workflows/docs-preview.yml/dispatches -f ref=main -f "inputs[docs_ref]=$DOCS_SHA" -F return_run_details=true --jq .workflow_run_id)
+          test "$run_id" != null
+          while true; do
+            result=$(gh api "repos/teamniteo/site-passlet/actions/runs/$run_id" --jq 'if .status == "completed" then .conclusion else "pending" end')
+            if [ "$result" = success ]; then break; fi
+            if [ "$result" != pending ]; then echo "Website preview failed: $result" >&2; exit 1; fi
+            sleep 10
+          done
+          gh run download "$run_id" --repo teamniteo/site-passlet --name preview-url --dir preview
+          url=$(cat preview/preview-url.txt)
+          [[ "$url" =~ ^https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev$ ]]
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "[Open documentation preview]($url)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish preview result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_RESULT: ${{ steps.preview.outcome }}
+        run: |
+          state=failure
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "$PREVIEW_RESULT" = success ]; then state=success; url="$PREVIEW_URL"; fi
+          gh api --method POST repos/${{ github.repository }}/statuses/${{ github.sha }} -f "state=$state" -f context=docs/preview -f "target_url=$url" -f description='Documentation website preview'

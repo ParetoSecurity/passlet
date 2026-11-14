@@ -121,7 +121,7 @@ class ReleaseNotesTests(unittest.TestCase):
         prepared.mkdir()
         (prepared / "fixture.zip").write_text("signed fixture")
         section = self.workflow.split("      - name: Publish the verified release\n", 1)[1]
-        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1].split("\n  documentation:", 1)[0])
         subprocess.run(["bash", "-euc", script], cwd=self.root, env=dict(self.env, PATH=str(binary) + os.pathsep + os.environ["PATH"]), check=True)
         events = [json.loads(line) for line in (self.root / "events.jsonl").read_text().splitlines()]
         self.assertEqual([e["args"][:2] for e in events], [["release", "create"], ["release", "upload"], ["release", "edit"]])
@@ -194,6 +194,8 @@ class PublicationTests(unittest.TestCase):
         self.commit()
         self.base = self.git("rev-parse", "HEAD").strip()
         (self.root / "app.go").write_text("reviewed source\n")
+        (self.root / "docs").mkdir()
+        (self.root / "docs/feature.mdx").write_text('# Feature\n<AddedIn version="unreleased" />\nFeature instructions.\n')
         self.commit()
         source = self.git("rev-parse", "HEAD").strip()
         self.run = {
@@ -225,6 +227,31 @@ class PublicationTests(unittest.TestCase):
 
     def verify(self):
         release.verify("1.2.3", self.artifacts, self.run, self.root)
+
+    def test_release_converts_labels_without_editing_examples(self):
+        self.assertIn('version="1.2.3"', (self.root / "docs/feature.mdx").read_text())
+        text = '<AddedIn version="unreleased" />\n```mdx\n<AddedIn version="unreleased" />\n```\n'
+        updated = release.package.docs_release.released_text(text, "1.2.3")
+        self.assertEqual(updated.count('version="1.2.3"'), 1)
+        self.assertEqual(updated.count('version="unreleased"'), 1)
+        self.assertEqual(release.package.docs_release.released_text(updated, "1.2.3"), updated)
+        with self.assertRaises(ValueError):
+            release.package.docs_release.released_text(text, "unreleased")
+        self.verify()
+
+    def test_rejects_arbitrary_doc_edits_after_preparation(self):
+        path = self.root / "docs/feature.mdx"
+        path.write_text(path.read_text() + "Unreviewed instructions.\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "documentation differs"):
+            self.verify()
+
+    def test_rejects_unconverted_labels(self):
+        path = self.root / "docs/feature.mdx"
+        path.write_text(path.read_text().replace("1.2.3", "unreleased"))
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "documentation differs"):
+            self.verify()
 
     def test_final_tag_matches_prepared_assets_and_both_plugins(self):
         self.verify()

@@ -1,0 +1,67 @@
+# Quick start
+
+Start with Agent and Approver on the same Mac. You need macOS 14 or later, Homebrew, and a GitHub account. For Nix or a remote Agent, see [Installation](INSTALLATION.md).
+
+## Install Passlet
+
+Run these commands in a terminal on your Mac:
+
+```sh
+brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
+brew install --cask paretosecurity/passlet/passlet
+```
+
+The cask installs both Agent and Approver and configures Approver to start at login.
+
+## Set up GitHub
+
+Run setup as your normal user from your Mac’s graphical desktop:
+
+```sh
+unset PASSLET_ENDPOINT
+passlet approver github setup
+passlet doctor
+```
+
+Follow the browser steps to create, install, and authorize your GitHub App. If an organization owner needs to approve installation, keep the browser tab and setup command open while waiting. [GitHub onboarding](SETUP.md#github-onboarding) explains that flow.
+
+Successful setup pairs the local Agent automatically. You do not need SSH, Tailscale, or a separate pairing code to use Passlet on this Mac.
+
+## Add Passlet to your coding tool
+
+<Tabs syncKey="coding-tool" label="Coding tool">
+<Tab id="quick-start-claude" label="Claude Code" value="claude">
+
+### Claude Code
+
+```sh
+claude plugin marketplace add ParetoSecurity/passlet
+claude plugin install passlet@passlet --scope user
+```
+
+</Tab>
+<Tab id="quick-start-codex" label="Codex" value="codex">
+
+### Codex CLI
+
+```sh
+codex plugin marketplace add ParetoSecurity/passlet
+codex plugin add passlet@passlet
+```
+
+</Tab>
+</Tabs>
+
+Start a new coding-agent session after installing the plugin. The plugin uses the Passlet CLI to request access when needed.
+
+## Approve your first request
+
+Ask your coding agent to use Passlet to read a repository you can access, naming the repository explicitly. For example, replace `your-account/your-repository` in this prompt:
+
+> Use Passlet to request contents:read access to your-account/your-repository, then show me its README.
+
+Review the repository and requested permissions in the prompt on your Mac, then approve with Touch ID. The agent can use the resulting token to complete the task.
+
+## Use a remote Agent
+
+Install Agent on the remote machine and follow the [pairing instructions](SETUP.md#pair-agents). Connect it to Approver through [SSH forwarding](SETUP.md#ssh-forwarding) or [Tailscale](SETUP.md#tailscale).

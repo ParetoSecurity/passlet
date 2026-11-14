@@ -1,0 +1,51 @@
+[
+  {
+    "source": "docs/what-is-passlet.md",
+    "id": "getting-started/what-is-passlet",
+    "title": "What is Passlet?",
+    "description": "Give coding agents scoped GitHub access with approval on your Mac.",
+    "order": 1
+  },
+  {
+    "source": "docs/overview.mdx",
+    "id": "getting-started/overview",
+    "title": "How Passlet works",
+    "description": "Understand Agents, Approver, and how scoped credentials reach your coding tools.",
+    "order": 4
+  },
+  {
+    "source": "docs/quick-start.mdx",
+    "id": "getting-started/quick-start",
+    "title": "Quick start",
+    "description": "Install Passlet, connect GitHub, and approve your first request.",
+    "order": 2
+  },
+  {
+    "source": "docs/INSTALLATION.md",
+    "id": "getting-started/installation",
+    "title": "Installation",
+    "description": "Install Approver on macOS and Agent on macOS or Linux using Homebrew or Nix.",
+    "order": 3
+  },
+  {
+    "source": "docs/SETUP.md",
+    "id": "guides/setup",
+    "title": "Setup and troubleshooting",
+    "description": "Set up GitHub, pair Agents, configure SSH or Tailscale, and diagnose connection problems.",
+    "order": 1
+  },
+  {
+    "source": "CONTRIBUTING.md",
+    "id": "contributing/overview",
+    "title": "Contributing",
+    "description": "Contribution licensing and acknowledgment for pull requests.",
+    "order": 1
+  },
+  {
+    "source": "docs/authoring.mdx",
+    "id": "contributing/documentation",
+    "title": "Writing documentation",
+    "description": "Write Markdown docs with OS tabs, diagrams, expandable details, and release labels.",
+    "order": 2
+  }
+]

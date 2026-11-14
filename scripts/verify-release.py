@@ -44,8 +44,20 @@ def verify(version, artifacts, run, root=ROOT):
     ):
         raise ValueError("Artifacts must come from the successful preparation workflow for this release")
     changed = subprocess.check_output(["git", "diff", "--name-only", source, "HEAD"], cwd=root, text=True)
-    if set(changed.splitlines()) - METADATA:
+    docs = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", source, "--", "docs"], cwd=root, text=True).splitlines()
+    expected_docs = {}
+    for name in docs:
+        if not name.endswith(".mdx"):
+            continue
+        original = subprocess.check_output(["git", "show", f"{source}:{name}"], cwd=root, text=True)
+        updated = package.docs_release.released_text(original, version)
+        if original != updated:
+            expected_docs[name] = updated
+    if set(changed.splitlines()) - METADATA - expected_docs.keys():
         raise ValueError("Source changed after preparation; prepare a new release before publishing")
+    for name, expected in expected_docs.items():
+        if not (root / name).is_file() or (root / name).read_text() != expected:
+            raise ValueError(f"Tagged documentation differs beyond release labels: {name}")
     for name in ["plugin.json", ".claude-plugin/plugin.json"]:
         original = json.loads(subprocess.check_output(["git", "show", f"{source}:{name}"], cwd=root))
         original["version"] = version

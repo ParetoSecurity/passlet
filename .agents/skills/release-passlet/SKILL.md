@@ -57,14 +57,16 @@ For a failed run, report the failing stage and any draft or published assets. If
 - [ ] Copy them onto the existing release PR branch. Do not open a second metadata PR. If regeneration is necessary, run `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>` in the development shell. Never invent provenance or hashes.
 - [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Before publication, the final archive URLs are not public, so use the downloaded signed archives for installation validation. Never replace the maintainer's working installation or credentials as an implicit test.
 - [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical. Have the code and generated metadata reviewed, then squash-merge only with authorization.
-- [ ] After merge, verify only these five generated files differ between the prepared source tree and intended final tag tree. The preparation SHA need not be an ancestor after a squash merge. Other source changes require a new preparation, never an unverified rebuild or moved tag.
+- [ ] After merge, verify only these five generated metadata files and exact generated docs release-label replacements differ between the prepared source tree and intended final tag tree. The preparation SHA need not be an ancestor after a squash merge. Other source changes require a new preparation, never an unverified rebuild or moved tag.
 
 The metadata URLs refer to the pending release. Merge immediately before final publication; do not deploy this intermediate main revision while its URLs are unavailable.
+
+Include generated `docs/` files from `passlet-package-updates` alongside the package metadata. These contain exact `AddedIn` release-label replacements. Do not edit them independently after preparation. Verify the website rebuild after publication, including the new version labels.
 
 ## 4. Publish the final tag
 
 - [ ] With publication authorized and the reviewed release PR squash-merged, push the unused `vX.Y.Z` tag at that merged commit on main. Do not create the release manually or reuse the preparation tag as the final tag.
-- [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata, checksums, and exact regenerated metadata before uploading anything.
+- [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata and docs release-label replacements, checksums, and exact regenerated metadata before uploading anything.
 - [ ] Monitor draft creation, upload, and publication. This phase downloads the already signed artifacts and never rebuilds them. If preparation artifacts have expired, stop and prepare again with freshly reviewed metadata. If a draft or upload fails, inspect it before choosing recovery. Do not delete artifacts or blindly retry a partially uploaded release.
 - [ ] Verify the published three archives and checksum file match the approved preparation artifacts. The workflow sets the reviewed notes from `docs/releases/vX.Y.Z.md` when creating the draft, before uploading assets and publishing the immutable release. Read back the published notes and compare them with that file.
 

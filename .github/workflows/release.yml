@@ -163,3 +163,10 @@ jobs:
           gh release create "$PASSLET_TAG" --draft --verify-tag --title "$PASSLET_TAG" --notes-file "docs/releases/$PASSLET_TAG.md"
           gh release upload "$PASSLET_TAG" "$RUNNER_TEMP/prepared/"*
           gh release edit "$PASSLET_TAG" --draft=false
+
+  documentation:
+    if: needs.verify.outputs.prepare == 'false'
+    needs: [publish, verify]
+    uses: ./.github/workflows/docs-website.yml
+    secrets:
+      DOCS_PREVIEW_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}

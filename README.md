@@ -49,8 +49,8 @@ Install [Passlet Approver on your Mac](docs/INSTALLATION.md#install-approver-on-
 Install through [Homebrew or Nix/Home Manager](docs/INSTALLATION.md). The package manager installs the CLI and signed approval helper, starts the per-user service, and owns updates and removal.
 
 ```sh
-brew tap paretosecurity/passlet https://github.com/ParetoSecurity/passlet.git
-brew install --cask paretosecurity/passlet/passlet
+brew tap ParetoSecurity/passlet https://github.com/ParetoSecurity/passlet.git
+brew install --cask ParetoSecurity/passlet/passlet
 passlet approver github setup
 passlet doctor
 ```
@@ -177,7 +177,7 @@ The app and both agent plugins share the same version. The release process gener
 
 ## Updating
 
-Use `brew upgrade --cask paretosecurity/passlet/passlet`, or update your pinned Passlet Nix source and activate Home Manager. The package manager restarts the service. Uninstall through the same manager. Credentials and audit history remain in place.
+Use `brew upgrade --cask ParetoSecurity/passlet/passlet`, or update your pinned Passlet Nix source and activate Home Manager. The package manager restarts the service. Uninstall through the same manager. Credentials and audit history remain in place.
 
 ## Diagnostics and audit
 
@@ -235,3 +235,15 @@ The macOS CI job builds and uploads a universal app before running its tests. Li
 Preview builds use ad-hoc signatures without an Apple signing identity, provisioning profile, or notarization. They have a separate `dev.passlet.preview` bundle identifier and cannot exercise the production protected-Keychain flow. Use them to test CLI features that do not require credentials. Keep the released app installed for real credentials. Do not run preview and release services simultaneously because they share the local service configuration. macOS may require allowing the downloaded preview in System Settings → Privacy & Security. Only run artifacts from code you trust, including when downloading PR builds.
 
 Developer ID signing and notarization remain exclusive to approved releases. To reproduce the preview locally, run `PASSLET_BUILD_MODE=unsigned ./scripts/build-macos.sh` inside devenv.
+
+## Website documentation
+
+Public docs are authored here and rendered at https://passlet.dev/docs/ by `teamniteo/site-passlet`. `docs/site.json` selects the pages and their stable URLs. Use Markdown for ordinary pages and MDX for tabs, callouts, and `<AddedIn version="unreleased" />` labels. See [authoring](https://passlet.dev/docs/contributing/documentation/) and [release labels](docs/RELEASING.md#documentation-release-labels).
+
+Docs merges dispatch the website’s `docs-deploy.yml` workflow using the existing `DOCS_PREVIEW_TOKEN` repository secret. Successful releases dispatch it again to update release labels. The website builds the latest merged docs, runs its checks, and deploys with its existing `CLOUDFLARE_API_TOKEN`. Both website workflows must be on main before dispatch succeeds. No additional deploy-hook secret is needed.
+
+### Documentation previews
+
+Pushes that change `docs/` or `CONTRIBUTING.md` in `ParetoSecurity/passlet` build the website from that exact commit. The `docs/preview` commit status links to the preview. This applies to branches in the Passlet repository, not fork pushes. Cloudflare version uploads leave the production deployment unchanged.
+
+For initial setup, merge the Passlet documentation first, then the website changes, whose build imports those docs. Preview statuses will fail until the website workflow is on main and both secrets are configured. Set `DOCS_PREVIEW_TOKEN` in Passlet to a credential with Actions read/write access to `teamniteo/site-passlet`, and set `CLOUDFLARE_API_TOKEN` in the website repository to a token with Workers Scripts Edit access for its Cloudflare account. The website's `Documentation preview` workflow also accepts a full Passlet commit SHA manually. Builds run without deployment credentials, then a separate job uploads the generated static assets using trusted website code.

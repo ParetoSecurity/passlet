@@ -1,0 +1,75 @@
+# Writing documentation
+
+The public docs live in the Passlet repository. The Astro website in `teamniteo/site-passlet` owns the design and imports the pages listed in `docs/site.json` at build time.
+
+## Markdown first
+
+Use `.md` for ordinary pages and `.mdx` when you need components. Register a page’s source path, URL ID, title, description, and order in `docs/site.json`. Keep the source title as an H1, the importer removes it because the website renders the page title. Write one paragraph per line.
+
+Use relative links to other source files. Published pages resolve to website URLs, and other files resolve to their source on GitHub. All headings have linkable anchors. Keep headings stable after publication, or retain their old IDs when renaming them.
+
+## Operating-system tabs
+
+MDX pages can use these components without imports:
+
+```mdx
+<Tabs syncKey="os" label="Operating system">
+<Tab id="install-macos" label="macOS" value="macos">
+
+### macOS installation
+
+Your macOS instructions.
+
+</Tab>
+<Tab id="install-linux" label="Linux" value="linux">
+
+### Linux installation
+
+Your Linux instructions.
+
+</Tab>
+</Tabs>
+```
+
+Use a unique tab ID on each page and the same `syncKey` and `value` to remember choices across pages. Linking to a tab or a heading inside it opens that tab. All content stays readable without JavaScript.
+
+## Expandable details
+
+Use native HTML with blank lines around Markdown:
+
+```md
+<details>
+<summary>More detail</summary>
+
+### Extra explanation
+
+The explanation belongs here.
+
+</details>
+```
+
+A direct heading link opens its containing details automatically.
+
+## Release labels
+
+Mark a merged feature that has not been released:
+
+```mdx
+<AddedIn version="unreleased" />
+```
+
+This renders as “Merged, not yet released”. During release preparation, the release script generates replacements using the release version. Include those generated docs in the release PR with the package metadata. The website keeps the unreleased label until the matching GitHub release is published, then renders “Added in version X”.
+
+Use the marker immediately after the relevant heading. Only use `unreleased` for merged implementation, not plans. Preparation includes all unreleased markers in that candidate. A selective release must first exclude documentation for features it does not ship.
+
+## Diagrams
+
+Use a fenced `mermaid` block. Add `accTitle` and `accDescr` for an accessible description and explain the flow in surrounding text. The source remains available when JavaScript is disabled.
+
+## Callouts
+
+Use `<Aside title="Before you begin">` in MDX for prerequisites or warnings. Use Markdown blockquotes in ordinary Markdown.
+
+## Preview and checks
+
+From the website checkout, run `PASSLET_SOURCE=../passlet bun run dev` to import your local docs. Run `bun run sync-docs` again after changing source files. Use `PASSLET_SOURCE=../passlet bun run build` and `bun x playwright test` to verify search, links, tabs, diagrams, and mobile layout. Search uses the built Pagefind index and is unavailable in the development server.

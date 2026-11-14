@@ -1,0 +1,36 @@
+name: Rebuild documentation website
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/docs-website.yml'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      DOCS_PREVIEW_TOKEN:
+        required: true
+permissions: {}
+concurrency:
+  group: docs-website
+  cancel-in-progress: false
+jobs:
+  rebuild:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 35
+    steps:
+      - name: Build and deploy the website
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Configure DOCS_PREVIEW_TOKEN with Actions read/write access to teamniteo/site-passlet.' >&2; exit 1; }
+          run_id=$(gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' repos/teamniteo/site-passlet/actions/workflows/docs-deploy.yml/dispatches -f ref=main -F return_run_details=true --jq .workflow_run_id)
+          test "$run_id" != null
+          echo "[Website deployment](https://github.com/teamniteo/site-passlet/actions/runs/$run_id)" >> "$GITHUB_STEP_SUMMARY"
+          while true; do
+            result=$(gh api "repos/teamniteo/site-passlet/actions/runs/$run_id" --jq 'if .status == "completed" then .conclusion else "pending" end')
+            if [ "$result" = success ]; then break; fi
+            if [ "$result" != pending ]; then echo "Website deployment failed: $result" >&2; exit 1; fi
+            sleep 10
+          done

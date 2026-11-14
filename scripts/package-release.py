@@ -2,11 +2,15 @@
 """Generate plugin versions and pinned package metadata from release artifacts."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location("docs_release", ROOT / "scripts/docs-release.py")
+docs_release = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(docs_release)
 
 
 def generate(version, artifacts, output, run_id=None, source_sha=None, source=ROOT):
@@ -41,6 +45,7 @@ def generate(version, artifacts, output, run_id=None, source_sha=None, source=RO
         plugin = json.loads((source / name).read_text())
         plugin["version"] = version
         files[name] = json.dumps(plugin, indent=2) + "\n"
+    files.update(docs_release.updates(source, version))
     for name, content in files.items():
         path = output / name
         path.parent.mkdir(parents=True, exist_ok=True)

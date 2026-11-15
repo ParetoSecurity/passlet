@@ -40,7 +40,7 @@ jobs:
           primary-key: nix-v1-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
       - if: runner.os == 'Linux'
-        uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
+        uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
         with:
           cache: devenv
       - if: runner.os == 'macOS'
@@ -54,7 +54,7 @@ jobs:
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore Go modules and build cache
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ steps.go-cache.outputs.modules }}
@@ -134,7 +134,7 @@ jobs:
           primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
           save: false
-      - uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
+      - uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
         with:
           cache: devenv
       - name: Enable KVM for the Nix build users

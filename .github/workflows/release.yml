@@ -76,7 +76,7 @@ jobs:
         run: |
           bash_path=$(nix-build ./nix --attr bash --no-out-link)
           echo "$bash_path/bin" >> "$GITHUB_PATH"
-      - uses: teamniteo/gha-actions/nix@4bddff5a20baab8eef4c2f8fbf96e008d8d9c46f # v44
+      - uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
         with:
           cache: devenv
       - name: Import Developer ID certificate and profile

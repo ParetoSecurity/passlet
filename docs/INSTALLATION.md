@@ -70,6 +70,24 @@ sudo darwin-rebuild switch --flake .#your-host
 
 Activate while logged into your Mac’s graphical desktop.
 
+#### Install agent plugins
+
+Enable either or both plugins on each agent account:
+
+```nix
+programs.passlet = {
+  enable = true;
+  plugins.claude-code.enable = true;
+  plugins.codex.enable = true;
+};
+```
+
+Both options default to false. Enabling a plugin also enables its Home Manager program, preserving any package you select through `programs.claude-code.package` or `programs.codex.package`. This requires Home Manager 26.05 or newer.
+
+The module registers the local marketplaces, loads the Claude Code plugin, and enables the Codex plugin with its versioned cache. Plugin contents come from your pinned Passlet input. Updating that input and activating Home Manager updates the plugins without marketplace commands. Codex follows `home.preferXdgDirectories` and `xdg.configHome` when locating its cache. Start a new agent session after activation.
+
+Remove any manually declared Passlet marketplace, plugin list entry, cache link, or standalone skill before switching to these options. Other plugins and settings can remain in your configuration. Configure Passlet pairing separately as described below.
+
 #### Configure Tailscale forwarding
 
 Install Tailscale 1.104.4 or newer and sign in on both machines. On the Approver Mac, enable Tailscale in the Home Manager module alongside the Passlet module import:

@@ -14,8 +14,6 @@ Ideas for future features, in no particular order. Inclusion here is not a commi
 - Detect ambient credentials with `passlet doctor`. Check the machine running doctor for tokens in environment variables, dotfiles, and credential configuration used by `gh`, Git, and similar tools. Report variable names and file locations without printing token values, explain how these credentials could bypass Passlet’s scoped grants, and suggest removal or revocation without changing credentials automatically.
 - Harden and document the release process, including signing approvals, Nix cache configuration, artifact validation, package metadata publication, and recovery from failed or partial releases.
 
-- Simple Home Manager options for installing the Claude Code and Codex plugins, such as `programs.passlet.plugins.codex.enable = true`. Handle marketplace registration and the versioned Codex plugin cache inside the module so users do not need to copy that wiring into their configuration.
-
 - Add `passlet approver restart` to restart the installed Approver service and apply configuration changes without requiring users to know the launchd service label or `launchctl` command. Support Homebrew and Home Manager installations, and explain when Nix configuration must be activated first. Reserve `reload` for a future operation that applies configuration without restarting the process.
 
 ## Codebase improvements with the feature set frozen

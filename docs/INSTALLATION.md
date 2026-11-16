@@ -7,7 +7,7 @@ Passlet has two parts:
 
 Install Approver on the machine where you approve requests. Agent is included, so you can use Passlet locally without another installation.
 
-These instructions target the upcoming CLI-only release. Its signed archives and package metadata must be published before installation works. The published v0.2.0 release uses the older menu-bar app and command interface. See [package maintenance](../packaging/README.md).
+Passlet requires macOS 26 or later on Apple Silicon. Linux Agents remain supported on amd64 and arm64. See [package maintenance](../packaging/README.md).
 
 ## Install Approver on macOS
 

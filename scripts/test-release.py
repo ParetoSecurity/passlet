@@ -209,7 +209,7 @@ class PublicationTests(unittest.TestCase):
             "conclusion": "success",
         }
         sums = ""
-        for platform, suffix in [("macos_arm64", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
+        for platform, suffix in [("macos", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
             name = f"passlet_1.2.3_{platform}.{suffix}"
             data = platform.encode()
             (self.artifacts / name).write_bytes(data)

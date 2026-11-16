@@ -1,7 +1,7 @@
 { system ? builtins.currentSystem, archive }:
 let
   pkgs = import ./. { inherit system; };
-  platform = if pkgs.stdenv.hostPlatform.isDarwin then "macos_arm64"
+  platform = if pkgs.stdenv.hostPlatform.isDarwin then "macos"
     else if pkgs.stdenv.hostPlatform.isAarch64 then "linux_arm64" else "linux_amd64";
   package = pkgs.callPackage ../packaging/nix/package.nix {
     release = {

@@ -1,6 +1,6 @@
 { lib, stdenvNoCC, fetchurl, unzip, release ? (if builtins.pathExists ../release.json then builtins.fromJSON (builtins.readFile ../release.json) else throw "Passlet package metadata is not published yet; use a reviewed package release revision.") }:
 let
-  platform = if stdenvNoCC.hostPlatform.isDarwin then "macos_arm64"
+  platform = if stdenvNoCC.hostPlatform.isDarwin then "macos"
     else if stdenvNoCC.hostPlatform.isAarch64 then "linux_arm64" else "linux_amd64";
   artifact = release.artifacts.${platform};
 in stdenvNoCC.mkDerivation {

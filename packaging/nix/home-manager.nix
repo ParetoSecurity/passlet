@@ -1,6 +1,19 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.programs.passlet;
+  pluginSource = lib.fileset.toSource {
+    root = ../..;
+    fileset = lib.fileset.unions [
+      ../../.agents/plugins
+      ../../.claude-plugin
+      ../../assets/passlet.png
+      ../../docs
+      ../../plugin.json
+      ../../skills
+    ];
+  };
+  pluginVersion = (builtins.fromJSON (builtins.readFile ../../plugin.json)).version;
+  codexDirectory = if config.home.preferXdgDirectories then "${lib.removePrefix "${config.home.homeDirectory}/" config.xdg.configHome}/codex" else ".codex";
   executable = "${cfg.package}/bin/passlet";
   app = "${config.home.homeDirectory}/.local/share/passlet/Passlet.app";
   helper = "${app}/Contents/MacOS/PassletHelper";
@@ -13,6 +26,8 @@ let
 in {
   options.programs.passlet = {
     enable = lib.mkEnableOption "Passlet";
+    plugins.claude-code.enable = lib.mkEnableOption "the Passlet plugin for Claude Code";
+    plugins.codex.enable = lib.mkEnableOption "the Passlet plugin for Codex";
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { };
@@ -58,6 +73,24 @@ in {
   };
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
+    programs.claude-code = lib.mkIf cfg.plugins.claude-code.enable {
+      enable = lib.mkDefault true;
+      marketplaces.passlet = pluginSource;
+      plugins = [ pluginSource ];
+    };
+    programs.codex = lib.mkIf cfg.plugins.codex.enable {
+      enable = lib.mkDefault true;
+      settings = {
+        marketplaces.passlet = {
+          source = toString pluginSource;
+          source_type = "local";
+        };
+        plugins."passlet@passlet".enabled = true;
+      };
+    };
+    home.file."${codexDirectory}/plugins/cache/passlet/passlet/${pluginVersion}" = lib.mkIf cfg.plugins.codex.enable {
+      source = pluginSource;
+    };
     home.sessionVariables = lib.mkIf cfg.sshAgent.enable {
       SSH_AUTH_SOCK = "${config.home.homeDirectory}/.local/share/passlet/ssh-agent.sock";
     };

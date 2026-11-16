@@ -58,6 +58,8 @@ Open the release PR in this repository against main. Include concise, user-facin
 
 Preparation runs the pinned tests, builds Apple Silicon macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
 
+Preparation then tests the Linux archives themselves. Each archive runs natively on an amd64 and an arm64 runner, which checks its version and that `passlet approver` refuses to run. The amd64 archive also replaces the source build as the Agent in the NixOS integration test, so the binary we publish pairs, requests grants and uses Git end to end. Publication only accepts a preparation run where all of these passed. To rerun them against an earlier preparation, start the `Test Linux release archives` workflow with that run ID and version.
+
 Stapling and ticket validation retry the observed Apple connection-loss error (`NSURLErrorDomain Code=-1005`, exit 68) up to four attempts, waiting 15, 30, and 45 seconds between attempts. Other failures stop immediately. These retries reuse the signed, notarized app without rebuilding or resubmitting it.
 
 Download both artifacts from that successful run. Verify checksums and production signatures, then add to that same PR `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. The release JSON identifies the exact preparation run and source SHA. Do not edit generated files, invent checksums, or bump plugin versions separately.
@@ -76,10 +78,7 @@ entitlement and provisioning profile only there. The bundle contains the CLI and
 The build signs the CLI before the outer helper bundle.
 
 On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
-approval/denial/cancellation flow. On Linux, verify `passlet --version`, then the
-Git/gh workflows and scope denials against disposable repositories. Test both
-architectures on actual hardware where possible; cross-compilation is not a
-runtime test. Confirm Mac-offline use after token delivery.
+approval/denial/cancellation flow. Confirm Mac-offline use after token delivery.
 
 Run production signing/Keychain validation before announcing the release.
 Preparation and publication have separate tag triggers and environment approvals; publication reuses the verified signed artifacts. Keep

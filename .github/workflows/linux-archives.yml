@@ -1,0 +1,100 @@
+name: Test Linux release archives
+on:
+  workflow_call:
+    inputs:
+      run-id:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: Release workflow run that prepared the archives
+        required: true
+      version:
+        description: Version without the leading v
+        required: true
+      ref:
+        description: Commit or branch whose integration test runs the archive
+        required: true
+        default: main
+permissions:
+  actions: read
+  contents: read
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  RUN_ID: ${{ inputs.run-id }}
+  PASSLET_VERSION: ${{ inputs.version }}
+jobs:
+  run:
+    name: Run ${{ matrix.arch }} archive
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: amd64
+          # The archive is statically linked; this is the newest hosted arm64 image.
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Download and verify the archive
+        working-directory: ${{ runner.temp }}
+        run: |
+          gh run download "$RUN_ID" --name passlet-release-assets --dir dist
+          archive="passlet_${PASSLET_VERSION}_linux_${ARCH}.tar.gz"
+          (cd dist && grep -E "  ${archive}\$" "passlet_${PASSLET_VERSION}_SHA256SUMS" | sha256sum --check --strict -)
+          tar -xzf "dist/$archive" passlet
+      - name: Run the Agent
+        working-directory: ${{ runner.temp }}
+        run: |
+          test "$(./passlet --version)" = "passlet $PASSLET_VERSION"
+          if ./passlet approver 2> approver.err; then
+            echo "passlet approver must refuse to run on Linux" >&2
+            exit 1
+          fi
+          grep -Fx 'error: approver_requires_the_macOS_build_of_Passlet' approver.err
+  integration:
+    name: NixOS SSH integration with the amd64 archive
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - name: Prepare user cache directory
+        run: mkdir -p "$HOME/.cache/nix"
+      - name: Restore shared Linux Nix cache
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        with:
+          primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
+          paths: ~/.cache/nix
+          save: false
+      - uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
+        with:
+          cache: devenv
+      - name: Enable KVM for the Nix build users
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Download and verify the archive
+        run: |
+          gh run download "$RUN_ID" --name passlet-release-assets --dir "$RUNNER_TEMP/dist"
+          archive="passlet_${PASSLET_VERSION}_linux_amd64.tar.gz"
+          (cd "$RUNNER_TEMP/dist" && grep -E "  ${archive}\$" "passlet_${PASSLET_VERSION}_SHA256SUMS" | sha256sum --check --strict -)
+          echo "AGENT_ARCHIVE=$RUNNER_TEMP/dist/$archive" >> "$GITHUB_ENV"
+      - run: nix-build nix/tests.nix --no-out-link --argstr agentArchive "$AGENT_ARCHIVE"

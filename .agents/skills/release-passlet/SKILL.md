@@ -95,7 +95,7 @@ Include generated `docs/` files from `passlet-package-updates` alongside the pac
 ## 5. Verify availability
 
 - [ ] Verify the final tag and main contain the intended package metadata and both plugin manifests at the release version.
-- [ ] Build the real published package with `nix build .#packages.aarch64-darwin.default --no-link` (or the corresponding supported system). Verify `passlet --version` and that the macOS bundle retains its signature. Verify Linux Agent behavior and applicable production service lifecycle checks, distinguishing tests not run.
+- [ ] Build the real published package with `nix build .#packages.aarch64-darwin.default --no-link` (or the corresponding supported system). Verify `passlet --version` and that the macOS bundle retains its signature. The preparation run's `linux-archives` jobs already ran both Linux archives and the amd64 archive end to end; link them as the Linux Agent evidence. Linux has no service lifecycle to check.
 - [ ] Confirm the final `github:ParetoSecurity/passlet/vX.Y.Z` input resolves to the same release version. Consumers may pin this tag and update their lock file. Do not activate user machines unless requested.
 - [ ] Wait for the documentation website rebuild to finish successfully and verify the published release labels.
 

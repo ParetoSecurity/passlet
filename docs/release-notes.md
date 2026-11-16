@@ -4,4 +4,4 @@ Homebrew and Nix/Home Manager own installation, updates and per-user login start
 
 Local agents use a private Unix socket. Remote agents connect through per-user SSH socket forwarding or explicitly enabled Tailscale HTTPS. Each person configures their own GitHub App and account.
 
-macOS requires version 14 or later and a logged-in graphical session. Linux agents are supported on amd64 and arm64. Follow docs/INSTALLATION.md after the release's package metadata has been published.
+macOS requires version 26 or later on Apple Silicon and a logged-in graphical session. Linux agents are supported on amd64 and arm64. Follow docs/INSTALLATION.md after the release's package metadata has been published.

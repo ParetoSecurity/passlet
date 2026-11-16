@@ -39,7 +39,9 @@ Commands:
   doctor        Check service health and credentials
   github        Manage GitHub credentials
   pair          Create a one-time pairing code
-  start         Run the Approver service
+  restart       Restart the installed Approver service
+  start         Run the Approver in the foreground
+  stop          Stop the installed Approver service
 
 Run ` + "`passlet approver <command> --help`" + ` for command options.
 `
@@ -59,6 +61,8 @@ func approverCommand(ctx context.Context, args []string, showOverview func(conte
 		return approverAgents(args[1:])
 	case "start":
 		return approver(ctx, args[1:])
+	case "stop", "restart":
+		return approverServiceCommand(ctx, args[0], args[1:])
 	case "doctor":
 		if err := localDiagnostics(ctx, args[1:]); err != nil {
 			return err
@@ -76,7 +80,7 @@ func approverCommand(ctx context.Context, args []string, showOverview func(conte
 func approver(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("approver start", flag.ContinueOnError)
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), "Run Passlet Approver service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.")
+		_, _ = fmt.Fprintln(fs.Output(), "Run Passlet Approver in the foreground. Stop the installed service first with `passlet approver stop`. Press Ctrl-C to exit, then restore it with `passlet approver restart`.")
 	}
 	socket := passlet.DefaultSocket()
 	helper := fs.String("helper", defaultHelper(), "absolute signed helper path")

@@ -39,7 +39,9 @@ Feature: Get started with Passlet
         doctor        Check service health and credentials
         github        Manage GitHub credentials
         pair          Create a one-time pairing code
-        start         Run the Approver service
+        restart       Restart the installed Approver service
+        start         Run the Approver in the foreground
+        stop          Stop the installed Approver service
 
       Run `passlet approver <command> --help` for command options.
       """

@@ -102,8 +102,22 @@ Feature: Show command help
       When I run `passlet approver start --help`
       Then the terminal shows:
         """
-        Run Passlet Approver service on your Mac to receive access requests and ask for your approval. Homebrew and Home Manager normally start it automatically.
+        Run Passlet Approver in the foreground. Stop the installed service first with `passlet approver stop`. Press Ctrl-C to exit, then restore it with `passlet approver restart`.
         """
+
+    Scenario Outline: Show installed service control help
+      When I run `passlet approver <command> --help`
+      Then the terminal shows:
+        """
+        <verb> the installed Passlet Approver service on this Mac.
+
+        Supports Homebrew and Home Manager installations. Activate Nix configuration changes before restarting. Stop is temporary until restart, package activation, or your next login. For checkout testing, stop the service and use `passlet approver start`.
+        """
+
+      Examples:
+        | command | verb    |
+        | stop    | Stop    |
+        | restart | Restart |
 
   Rule: Approver GitHub commands
 

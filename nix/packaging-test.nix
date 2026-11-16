@@ -133,7 +133,7 @@ assert !(client.home.activation ? passletAgent);
 assert builtins.elem fakePackage client.home.packages;
 assert !(builtins.tryEval invalidLinux.home.packages).success;
 assert flake.homeManagerModules.default == flake.homeManagerModules.passlet;
-assert builtins.attrNames flake.packages == [ "aarch64-darwin" "aarch64-linux" "x86_64-darwin" "x86_64-linux" ];
+assert builtins.attrNames flake.packages == [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ];
 assert builtins.all (system:
   let package = flake.packages.${system}.default.override {
     release = {
@@ -141,7 +141,7 @@ assert builtins.all (system:
       artifacts = builtins.listToAttrs (map (name: {
         inherit name;
         value = { url = "https://example.invalid/${name}"; sha256 = lib.fakeSha256; };
-      }) [ "macos_universal" "linux_arm64" "linux_amd64" ]);
+      }) [ "macos_arm64" "linux_arm64" "linux_amd64" ]);
     };
   };
   in package.version == "0.0.0-test" && package.meta.mainProgram == "passlet"

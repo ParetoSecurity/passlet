@@ -53,7 +53,7 @@ class ActivationTests(unittest.TestCase):
             args = plistlib.loads(installed.read_bytes())["ProgramArguments"]
             self.assertEqual(args[0], str(app / "Contents/MacOS/passlet"))
             self.assertFalse(app.is_symlink())
-            # macOS 15 cannot rename a directory with the Nix store's read-only mode.
+            # The copied Nix store directory is read-only.
             package.chmod(0o755)
             package.rename(root / "unmounted-store")
             subprocess.run([args[0], "--version"], check=True)
@@ -70,6 +70,7 @@ class ActivationTests(unittest.TestCase):
             shutil.rmtree(app)
             activate()
             self.assertEqual(log.read_text().count("bootstrap"), 3)
+            self.assertEqual([line for line in log.read_text().splitlines() if line.startswith("bootout")], [f"bootout --wait gui/{os.getuid()}/dev.passlet.agent"] * 3)
             self.assertEqual(retained.read_text(), "keep")
 
 

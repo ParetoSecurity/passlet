@@ -41,6 +41,6 @@ info = {
     'CFBundleName': 'Passlet', 'CFBundleDisplayName': 'Passlet',
     'CFBundleExecutable': 'PassletHelper', 'CFBundlePackageType': 'APPL',
     'CFBundleVersion': version, 'CFBundleShortVersionString': version,
-    'CFBundleIconFile': 'Passlet', 'LSMinimumSystemVersion': '14.0', 'LSUIElement': True,
+    'CFBundleIconFile': 'Passlet', 'LSMinimumSystemVersion': '26.0', 'LSUIElement': True,
 }
 (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))

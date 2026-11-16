@@ -20,7 +20,7 @@ class ReleaseTests(unittest.TestCase):
     def test_all_packages_pin_exact_artifacts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for platform, extension in [("macos_universal", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
+            for platform, extension in [("macos_arm64", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
                 (root / f"passlet_1.2.3_{platform}.{extension}").write_bytes(platform.encode())
             release.generate("1.2.3", root, root / "out")
             manifest = json.loads((root / "out/packaging/release.json").read_text())
@@ -30,13 +30,15 @@ class ReleaseTests(unittest.TestCase):
                 digest = hashlib.sha256(platform.encode()).hexdigest()
                 self.assertEqual(artifact["sha256"], digest)
                 self.assertIn("/releases/download/v1.2.3/", artifact["url"])
-                self.assertIn(digest, cask if platform == "macos_universal" else formula)
+                self.assertIn(digest, cask if platform == "macos_arm64" else formula)
             for name in ["plugin.json", ".claude-plugin/plugin.json"]:
                 plugin = json.loads((root / "out" / name).read_text())
                 original = json.loads((ROOT / name).read_text())
                 self.assertEqual(plugin.pop("version"), manifest["version"])
                 original.pop("version")
                 self.assertEqual(plugin, original)
+            self.assertIn("depends_on arch: :arm64", cask)
+            self.assertIn("depends_on macos: :tahoe", cask)
             self.assertNotIn("@VERSION@", cask + formula)
             self.assertNotIn(":no_check", cask + formula)
 
@@ -78,7 +80,7 @@ class HomebrewLifecycleTests(unittest.TestCase):
 printf '%s\\n' "$*" >> "$FIXTURE_LOG"
 case "$1" in
  print) case "$2" in */dev.passlet.agent) test -e "$FIXTURE_STATE";; *) exit 0;; esac ;;
- bootout) rm "$FIXTURE_STATE" ;;
+ bootout) test "$#" -eq 3 && test "$2" = --wait && test "$3" = "gui/$(id -u)/dev.passlet.agent" || exit 64; rm "$FIXTURE_STATE" ;;
  bootstrap) touch "$FIXTURE_STATE" ;;
  *) exit 1 ;;
 esac

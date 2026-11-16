@@ -20,10 +20,8 @@ unset SDKROOT
 export SDKROOT="${PASSLET_SDKROOT:-$(/usr/bin/xcrun --sdk macosx --show-sdk-path)}"
 if [ "$mode" != development ]; then
     APP="$PWD/build/$mode/Passlet.app"
-    architectures='arm64 x86_64'
 else
     APP="$PWD/build/Passlet.app"
-    architectures=arm64
 fi
 mkdir -p "$(dirname "$APP")" build/swift-cache
 rm -rf "$APP"
@@ -42,15 +40,11 @@ mkdir -p "$APP/Contents/Resources/docs"
 cp docs/*.md "$APP/Contents/Resources/docs/"
 mkdir -p "$APP/Contents/Resources/skills/passlet"
 cp skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
-for arch in $architectures; do
-    /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target "$arch-apple-macosx14.0" -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/Credentials.swift macos/main.swift -o "$(dirname "$APP")/helper-$arch" -framework AppKit -framework Security -framework LocalAuthentication
-done
+/usr/bin/xcrun swiftc -sdk "$SDKROOT" -target arm64-apple-macosx26.0 -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/Credentials.swift macos/main.swift -o "$APP/Contents/MacOS/PassletHelper" -framework AppKit -framework Security -framework LocalAuthentication
+ldflags="-X main.version=$version"
+if [ "$mode" != development ]; then ldflags="-s -w $ldflags"; fi
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "$ldflags" -o "$APP/Contents/MacOS/passlet" ./cmd/passlet
 if [ "$mode" != development ]; then
-    /usr/bin/lipo -create "$(dirname "$APP")"/helper-arm64 "$(dirname "$APP")"/helper-x86_64 -output "$APP/Contents/MacOS/PassletHelper"
-    for arch in arm64 amd64; do
-        GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-s -w -X main.version=$version" -o "$(dirname "$APP")/cli-$arch" ./cmd/passlet
-    done
-    /usr/bin/lipo -create "$(dirname "$APP")"/cli-arm64 "$(dirname "$APP")"/cli-amd64 -output "$APP/Contents/MacOS/passlet"
     if [ "$mode" = unsigned ]; then
         # Ad-hoc signatures allow local execution without a signing identity.
         /usr/bin/codesign --force --sign - "$APP/Contents/MacOS/passlet"
@@ -61,8 +55,6 @@ if [ "$mode" != development ]; then
         /usr/bin/codesign -dvv "$APP" 2>&1 | /usr/bin/grep -q 'Authority=Developer ID Application:' || { echo 'Release requires Developer ID Application signing' >&2; exit 1; }
     fi
 else
-    cp build/helper-arm64 "$APP/Contents/MacOS/PassletHelper"
-    GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-X main.version=$version" -o "$APP/Contents/MacOS/passlet" ./cmd/passlet
     /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" "$APP/Contents/MacOS/passlet"
     /usr/bin/codesign --force --sign "$PASSLET_SIGNING_IDENTITY" --entitlements build/entitlements.plist "$APP"
 fi

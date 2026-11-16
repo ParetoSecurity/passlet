@@ -3,6 +3,10 @@ set -eu
 cd "$(dirname "$0")/.."
 case "$(uname -s)" in
     Darwin)
+        for binary in passlet PassletHelper; do
+            test "$(/usr/bin/lipo -archs "build/unsigned/Passlet.app/Contents/MacOS/$binary")" = arm64
+        done
+        test "$(/usr/bin/plutil -extract LSMinimumSystemVersion raw -o - build/unsigned/Passlet.app/Contents/Info.plist)" = 26.0
         python3 scripts/test-nix-activation.py "$(nix-build nix/packaging-tests.nix --no-out-link)"
         archive="$PWD/build/package-fixture.zip"
         ditto -c -k --keepParent build/unsigned/Passlet.app "$archive"

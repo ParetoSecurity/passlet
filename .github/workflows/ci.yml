@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, macos-15]
+        os: [ubuntu-26.04, macos-26]
     runs-on: ${{ matrix.os }}
     # Retain headroom when a newly pinned dependency is not cached yet.
     timeout-minutes: 35
@@ -80,7 +80,7 @@ jobs:
         run: lint
       - name: Test Swift helper
         if: runner.os == 'macOS'
-        run: ./scripts/check-macos.sh --tests-only
+        run: ./scripts/check-macos.sh
       - name: Validate package-manager configuration
         if: runner.os == 'Linux'
         run: nix-build nix/packaging-tests.nix --no-out-link
@@ -100,7 +100,7 @@ jobs:
 
   macos-package:
     name: Test macOS Nix package
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

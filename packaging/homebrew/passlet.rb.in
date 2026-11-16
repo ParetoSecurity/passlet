@@ -2,12 +2,13 @@ cask "passlet" do
   version "@VERSION@"
   sha256 "@MAC_SHA256@"
 
-  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_universal.zip"
+  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_arm64.zip"
   name "Passlet"
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"
 
-  depends_on macos: :sonoma
+  depends_on arch: :arm64
+  depends_on macos: :tahoe
 
   # launchd registration requires an installer script outside the cask sandbox.
   installer script: {

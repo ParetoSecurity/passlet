@@ -9,6 +9,14 @@ Work from the Passlet repository. A release is installable only after the signed
 
 Creating or editing this skill does not authorize a release. For a readiness request, perform checks and report outstanding work. For a release request, establish the intended unused `vX.Y.Z` version and target commit. If publication is not already authorized, prepare the version, exact SHA, release notes, and check results before asking for approval. Do not publish, merge PRs, or activate someone's machine merely to test the workflow.
 
+## Visible release checklist
+
+At the start of every release, show the user a checklist covering every checkbox in the numbered phases below, in order. Shorten the wording for readability, but keep each action, approval, and wait as a separate item. Track each announcement network separately. This conversation checklist is the release's progress record, not an edit to this skill.
+
+Reprint the checklist as each item completes and whenever work starts waiting for CI, approval, or another blocker. Tick `[x]` only after verifying completion, with the relevant PR, workflow, release, or post URL as evidence. Keep running, awaiting approval, blocked, failed, and unperformed items unchecked and label their status. An existing authorization can satisfy an approval item without asking again, but starting a run never satisfies its completion item. If the candidate changes, reopen checks tied to the old SHA. Mark inapplicable items or explicit user skips with a reason instead of silently dropping them or claiming they passed.
+
+Keep the checklist and exact next action in handoffs and resume from verified progress. Publication alone does not finish the process: immediately draft announcements after availability verification and request approval. Until announcements are posted or explicitly skipped by the user, report “Release published; announcements pending” with the blocker. Finish with the full checklist and any remaining blockers, never a completion claim while required items remain unresolved.
+
 ## Sources and access
 
 Read these files from the release candidate, rather than relying on historical release results:
@@ -26,7 +34,7 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
-- [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Verify the candidate is its current head and its latest PR CI run passed. Confirm it includes the intended Approver, Agent, and package definitions.
+- [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Confirm it includes the intended Approver, Agent, and package definitions.
 - [ ] Write concise, user-facing release notes from changes since the previous published release. Explain what changed for users, including relevant migrations, instead of listing PR titles or internal workflow steps. Include a full changelog link. Commit the notes to `docs/releases/vX.Y.Z.md` in the release PR before pushing the preparation tag. Both workflow phases require this nonempty file, and source verification prevents changing it after preparation.
 - [ ] Update user-facing documentation for changes since the previous release, including installation, setup, examples, and migration instructions where applicable. Mark unreleased features with `AddedIn` as described in `docs/authoring.mdx`. Finish these edits before preparing signed artifacts.
 - [ ] Run Hakuto's `hakuto-review` skill on the candidate website source, configuration, and `public/_headers`. Review images, fonts, client-side code, accessibility, caching, and security headers. Fix actionable findings, rerun the review, and record the website revision and results.
@@ -34,14 +42,17 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 - [ ] Run Hakuto's `pagespeed-audit` skill against the publicly reachable website preview for that candidate, covering the homepage and affected documentation pages on mobile and desktop. Fix actionable regressions and rerun affected audits. Record the URLs and results. If the preview is inaccessible to PageSpeed, report the check as blocked rather than substituting the current production site or treating it as passed.
 - [ ] Run applicable checks in `nix-shell`: `make check-all`, `nix-build nix/packaging-tests.nix --no-out-link`, and the relevant macOS/integration checks. Existing successful CI for the exact candidate can supply platform checks that cannot run locally. Distinguish passed, failed, and unperformed checks.
 - [ ] Verify production signing and manual validation prerequisites in `docs/RELEASING.md` and `docs/VALIDATION.md`. Do not treat preview signatures, fixtures, or older releases as proof of production Keychain behavior.
+- [ ] Wait for the latest PR CI run for the final candidate SHA to finish successfully. Verify that SHA is still the release PR head before preparing signed artifacts.
 
 The Release workflow has two phases. `vX.Y.Z-prepare` builds and signs the CI-verified head of an open same-repository release PR without publishing. After its generated package metadata is added to that same PR, reviewed, and squash-merged, `vX.Y.Z` publishes those exact prepared artifacts. Preparation checks the exact PR head and passing PR CI; the final tag must be on main. Both phases retain the protected `release` environment. Review the exact preparation commit before approving signing, especially changes to workflows and build scripts. Never move tags, rebuild approved artifacts during publication, or publish an empty release.
 
 ## 2. Prepare signed artifacts
 
-- [ ] With release preparation authorized, push the unused `vX.Y.Z-prepare` tag at the reviewed full candidate SHA through the scoped grant.
-- [ ] Identify the Release workflow run for that exact tag and SHA. If the protected environment is waiting, provide the run link and explain the approval needed. Never weaken or bypass environment protection.
-- [ ] Monitor preparation through completion. It tests, signs, notarizes and staples the macOS app, builds Linux archives, and generates checksums and metadata. It does not create a GitHub release.
+- [ ] Confirm authorization to prepare the exact candidate SHA. Show the version, SHA, release PR, and passing CI before requesting any missing authorization.
+- [ ] Push the unused `vX.Y.Z-prepare` tag at the reviewed full candidate SHA through the scoped grant.
+- [ ] Identify the Release workflow run for that exact tag and SHA. Link the run and verify its tag and SHA.
+- [ ] Wait for the preparation run’s protected `release` environment approval, linking the run when user action is needed. Never weaken or bypass environment protection.
+- [ ] Wait for preparation CI to finish successfully. It tests, signs, notarizes and staples the macOS app, builds Linux archives, and generates checksums and metadata. It does not create a GitHub release.
 - [ ] Download `passlet-release-assets` and `passlet-package-updates` from that successful run into a private task directory. Retain the run ID and candidate SHA.
 - [ ] Verify the exact three archives and `passlet_X.Y.Z_SHA256SUMS`, all checksums, the macOS signature, and its stapled ticket. Perform applicable production validation before final publication. Report manual checks not performed; do not substitute previous releases or fixture tests for them.
 
@@ -60,7 +71,10 @@ For a failed run, report the failing stage and any draft or published assets. If
 - [ ] Inspect all five generated files: `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. Verify exact archive URLs, hashes, matching versions, and the preparation run ID and SHA.
 - [ ] Copy them onto the existing release PR branch. Do not open a second metadata PR. If regeneration is necessary, run `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>` in the development shell. Never invent provenance or hashes.
 - [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Before publication, the final archive URLs are not public, so use the downloaded signed archives for installation validation. Never replace the maintainer's working installation or credentials as an implicit test.
-- [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical. Have the code and generated metadata reviewed, then squash-merge only with authorization.
+- [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical.
+- [ ] Wait for the latest PR CI run for the updated metadata commit to finish successfully.
+- [ ] Obtain code and generated metadata review and confirm merge/publication authorization, requesting only approvals not already given.
+- [ ] Squash-merge the reviewed release PR immediately before final publication.
 - [ ] After merge, verify only these five generated metadata files and exact generated docs release-label replacements differ between the prepared source tree and intended final tag tree. The preparation SHA need not be an ancestor after a squash merge. Other source changes require a new preparation, never an unverified rebuild or moved tag.
 
 The metadata URLs refer to the pending release. Merge immediately before final publication; do not deploy this intermediate main revision while its URLs are unavailable.
@@ -70,17 +84,27 @@ Include generated `docs/` files from `passlet-package-updates` alongside the pac
 ## 4. Publish the final tag
 
 - [ ] With publication authorized and the reviewed release PR squash-merged, push the unused `vX.Y.Z` tag at that merged commit on main. Do not create the release manually or reuse the preparation tag as the final tag.
-- [ ] Identify the exact publication workflow run. Provide its link if environment approval is pending. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata and docs release-label replacements, checksums, and exact regenerated metadata before uploading anything.
-- [ ] Monitor draft creation, upload, and publication. This phase downloads the already signed artifacts and never rebuilds them. If preparation artifacts have expired, stop and prepare again with freshly reviewed metadata. If a draft or upload fails, inspect it before choosing recovery. Do not delete artifacts or blindly retry a partially uploaded release.
+- [ ] Identify and link the exact publication workflow run.
+- [ ] Wait for the publication run’s protected `release` environment approval, linking the run when user action is needed. The publication job checks the recorded successful preparation run, exact source-tree equality apart from generated metadata and docs release-label replacements, checksums, and exact regenerated metadata before uploading anything.
+- [ ] Wait for publication CI to finish successfully, including draft creation, upload, and publication. This phase downloads the already signed artifacts and never rebuilds them. If preparation artifacts have expired, stop and prepare again with freshly reviewed metadata. If a draft or upload fails, inspect it before choosing recovery. Do not delete artifacts or blindly retry a partially uploaded release.
 - [ ] Verify the published three archives and checksum file match the approved preparation artifacts. The workflow sets the reviewed notes from `docs/releases/vX.Y.Z.md` when creating the draft, before uploading assets and publishing the immutable release. Read back the published notes and compare them with that file.
 
-## 5. Verify availability and hand off
+## 5. Verify availability
 
 - [ ] Verify the final tag and main contain the intended package metadata and both plugin manifests at the release version.
 - [ ] Build the real published package with `nix build .#packages.aarch64-darwin.default --no-link` (or the corresponding supported system). Verify `passlet --version` and that the macOS bundle retains its signature. Verify Linux Agent behavior and applicable production service lifecycle checks, distinguishing tests not run.
 - [ ] Confirm the final `github:ParetoSecurity/passlet/vX.Y.Z` input resolves to the same release version. Consumers may pin this tag and update their lock file. Do not activate user machines unless requested.
-- [ ] Announce the verified release as described below. Show the user every post and wait for their approval before publishing any of them. Authorization to publish the release does not cover the announcement.
-- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, which announcements were posted, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
+- [ ] Wait for the documentation website rebuild to finish successfully and verify the published release labels.
+
+## 6. Announce and hand off
+
+- [ ] Draft the announcements as described below and show every post to the user.
+- [ ] Wait for announcement approval. Authorization to publish the release does not cover the announcement.
+- [ ] Post the approved Discord announcement and verify it, recording its URL.
+- [ ] Post the approved X announcement as ParetoSecurity and verify it, recording its URL.
+- [ ] Post the approved Bluesky announcement and verify it, recording its URL.
+- [ ] Post the approved LinkedIn announcement and verify it, recording its URL.
+- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, which announcements were posted, and any remaining blockers. Include the final checklist. Do not call the release complete before its package/plugin metadata and installation have been verified and announcements have been posted or explicitly skipped by the user.
 
 If work stops awaiting environment approval, metadata review, or manual validation, preserve those exact next steps.
 

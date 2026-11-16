@@ -40,7 +40,9 @@
     "id": "guides/faq",
     "title": "FAQ",
     "description": "Frequently asked questions about Passlet.",
-    "order": 2
+    "order": 2,
+    "seoTitle": "Why a gh token in macOS Keychain is not enough",
+    "seoDescription": "Any process can read a gh token from macOS Keychain once you click Always Allow. See how Passlet requires Touch ID and hands agents short-lived, scoped tokens."
   },
   {
     "source": "docs/SETUP.md",

@@ -36,6 +36,13 @@
     "seoDescription": "Install Passlet Approver on macOS and Agent on macOS or Linux using Homebrew or Nix. Configure startup, connect your Agents, and learn to update or uninstall."
   },
   {
+    "source": "docs/faq.md",
+    "id": "guides/faq",
+    "title": "FAQ",
+    "description": "Frequently asked questions about Passlet.",
+    "order": 2
+  },
+  {
     "source": "docs/SETUP.md",
     "id": "guides/setup",
     "title": "Setup and troubleshooting",

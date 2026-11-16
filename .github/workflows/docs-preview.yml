@@ -1,5 +1,11 @@
 name: Documentation preview
 on:
+  pull_request:
+    types: [opened, reopened]
+    paths:
+      - '.github/workflows/docs-preview.yml'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
   push:
     paths:
       - '.github/workflows/docs-preview.yml'
@@ -7,24 +13,30 @@ on:
       - 'docs/**'
   workflow_dispatch:
 permissions:
+  pull-requests: write
   statuses: write
+concurrency:
+  group: docs-preview-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
 defaults:
   run:
     shell: bash
 jobs:
   preview:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    env:
+      DOCS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Mark preview pending
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api --method POST repos/${{ github.repository }}/statuses/${{ github.sha }} -f state=pending -f context=docs/preview -f description='Building website preview'
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$DOCS_SHA" -f state=pending -f context=docs/preview -f description='Building website preview'
       - name: Build website preview
         id: preview
         env:
           GH_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}
-          DOCS_SHA: ${{ github.sha }}
         run: |
           test -n "$GH_TOKEN" || { echo 'Configure DOCS_PREVIEW_TOKEN with Actions read/write access to teamniteo/site-passlet.' >&2; exit 1; }
           run_id=$(gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' repos/teamniteo/site-passlet/actions/workflows/docs-preview.yml/dispatches -f ref=main -f "inputs[docs_ref]=$DOCS_SHA" -F return_run_details=true --jq .workflow_run_id)
@@ -50,4 +62,33 @@ jobs:
           state=failure
           url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           if [ "$PREVIEW_RESULT" = success ]; then state=success; url="$PREVIEW_URL"; fi
-          gh api --method POST repos/${{ github.repository }}/statuses/${{ github.sha }} -f "state=$state" -f context=docs/preview -f "target_url=$url" -f description='Documentation website preview'
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$DOCS_SHA" -f "state=$state" -f context=docs/preview -f "target_url=$url" -f description='Documentation website preview'
+      - name: Link preview on pull requests
+        if: steps.preview.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          import subprocess
+
+          def api(endpoint, *args):
+              return json.loads(subprocess.check_output(["gh", "api", endpoint, *args], text=True))
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          sha = os.environ["DOCS_SHA"]
+          marker = "<!-- passlet-docs-preview -->"
+          body = f"{marker}\n[Open documentation preview]({os.environ['PREVIEW_URL']})\n\nBuilt from `{sha}`."
+          for page in api(f"repos/{repository}/commits/{sha}/pulls", "--paginate", "--slurp"):
+              for pull in page:
+                  if pull["state"] != "open" or pull["head"]["sha"] != sha:
+                      continue
+                  endpoint = f"repos/{repository}/issues/{pull['number']}/comments"
+                  comments = api(endpoint, "--paginate", "--slurp")
+                  comment = next((c for page in comments for c in page if c["user"]["login"] == "github-actions[bot]" and marker in c["body"]), None)
+                  if comment:
+                      endpoint = f"repos/{repository}/issues/comments/{comment['id']}"
+                  subprocess.run(["gh", "api", endpoint, "--method", "PATCH" if comment else "POST", "--input", "-", "--silent"], input=json.dumps({"body": body}), text=True, check=True)
+          PYTHON

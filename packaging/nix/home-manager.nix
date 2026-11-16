@@ -135,8 +135,8 @@ in {
     home.activation.passletAgent = lib.mkIf cfg.service.enable (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       plist=${lib.escapeShellArg plist}
       app=${lib.escapeShellArg app}
+      run ${pkgs.coreutils}/bin/install -d -m 0700 "$(dirname "$app")"
       if ! cmp -s ${cfg.service.plist} "$plist" || [ ! -x "$app/Contents/MacOS/passlet" ]; then
-        run mkdir -p "$(dirname "$app")"
         if [ -d "$app.staging" ]; then run chmod -R u+w "$app.staging"; fi
         run /bin/rm -rf "$app.staging"
         run /usr/bin/ditto ${cfg.package}/Applications/Passlet.app "$app.staging"

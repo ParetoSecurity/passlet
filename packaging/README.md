@@ -35,6 +35,8 @@ The root flake exposes `packages.<system>.default` (also named `passlet`) for Ap
 
 `nix/home-manager.nix` installs the package and, on macOS, copies the signed app into the user’s local data directory and registers its per-user LaunchAgent. A package or configuration change causes activation to stop the old service, replace the app and plist, and start the new service. Removing the module's configuration removes the agent. The package never runs setup or creates credentials during a Nix build or activation.
 
+Every macOS service activation creates or repairs `~/.local/share/passlet` to mode `0700`, including when the installed app is unchanged. Existing credentials remain in place.
+
 ## Validation
 
 `make check` validates release digests and runs the macOS lifecycle script against an isolated launchctl fixture using native plutil. It covers install, repeated install, upgrade restart, uninstall, ownership conflicts and retained data. Run `python3 scripts/test-launchd-packaging.py` in a logged-in Mac session to test real launchd registration, crash recovery, upgrade restart and removal with a disposable sleep job. These tests do not prove Homebrew accepts an actual signed release. Before publishing the first package definitions, test a signed release in a disposable Mac user account through both package managers, including login, upgrade, crash recovery and removal. Never replace the working user's credentials for a packaging test.

@@ -42,13 +42,13 @@ class ActivationTests(unittest.TestCase):
             env = dict(os.environ, FIXTURE_LOG=str(log))
             app = home / ".local/share/passlet/Passlet.app"
             retained = home / ".local/share/passlet/retained-credentials"
-            retained.parent.mkdir(parents=True)
-            retained.write_text("keep")
 
             def activate():
                 subprocess.run(["/bin/bash", "-c", script], env=env, check=True)
 
             activate()
+            self.assertEqual(app.parent.stat().st_mode & 0o777, 0o700)
+            retained.write_text("keep")
             installed = home / "Library/LaunchAgents/dev.passlet.agent.plist"
             args = plistlib.loads(installed.read_bytes())["ProgramArguments"]
             self.assertEqual(args[0], str(app / "Contents/MacOS/passlet"))
@@ -60,7 +60,9 @@ class ActivationTests(unittest.TestCase):
             subprocess.run([args[-1], "--version"], check=True)
             (root / "unmounted-store").rename(package)
             first = log.read_text()
+            app.parent.chmod(0o755)
             activate()
+            self.assertEqual(app.parent.stat().st_mode & 0o777, 0o700)
             self.assertEqual(log.read_text(), first)
             data = plistlib.loads(plist.read_bytes())
             data["PassletPackage"] += "-upgraded"

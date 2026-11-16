@@ -14,8 +14,10 @@ func TestAgentOnlyBuildHasNoApprover(t *testing.T) {
 	}
 	args := os.Args
 	t.Cleanup(func() { os.Args = args })
-	os.Args = []string{"passlet", "approver", "start"}
-	if err := run(); err == nil || err.Error() != "approver_requires_the_macOS_build_of_Passlet" {
-		t.Fatalf("approver start: got %v", err)
+	for _, command := range []string{"start", "doctor"} {
+		os.Args = []string{"passlet", "approver", command}
+		if err := run(); err == nil || err.Error() != "approver_requires_the_macOS_build_of_Passlet" {
+			t.Fatalf("approver %s: got %v", command, err)
+		}
 	}
 }

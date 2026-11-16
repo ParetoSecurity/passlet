@@ -2,10 +2,7 @@
 
 package main
 
-import (
-	"context"
-	"errors"
-)
+import "context"
 
 const commandHelp = `Give your remote agents scoped access to services, approved on-the-fly from your Mac.
 
@@ -27,5 +24,5 @@ Run ` + "`passlet <command> --help`" + ` for command options.
 var overview func(context.Context) error
 
 func approverCommand(context.Context, []string, func(context.Context) error) error {
-	return errors.New("approver_requires_the_macOS_build_of_Passlet")
+	return errApproverRequiresMac
 }

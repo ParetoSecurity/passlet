@@ -1,6 +1,8 @@
 { pkgs, source }:
 let
   passlet = import ./test-package.nix { inherit pkgs source; };
+  # The Agent host runs the same build as the Linux release.
+  agent = passlet.overrideAttrs (_: { tags = [ "agentonly" ]; });
   fixture = "${passlet}/libexec/passlet-vm-fixture -test.run=^TestVMFixture$ -test.timeout=30m";
   keys = pkgs.runCommand "passlet-test-only-keys" { nativeBuildInputs = [ pkgs.openssh pkgs.openssl ]; } ''
     mkdir -p $out
@@ -11,17 +13,17 @@ let
       -keyout $out/server.key -out $out/server.crt -subj /CN=github.com \
       -addext 'subjectAltName=DNS:github.com,DNS:api.github.com'
   '';
-  common = { ... }: {
+  common = package: { ... }: {
     virtualisation.memorySize = 768;
     virtualisation.cores = 2;
     virtualisation.graphics = false;
     virtualisation.qemu.forceAccel = pkgs.lib.mkForce true;
-    environment.systemPackages = [ passlet pkgs.git pkgs.gh pkgs.openssh pkgs.curl pkgs.python3 pkgs.sqlite ];
+    environment.systemPackages = [ package pkgs.git pkgs.gh pkgs.openssh pkgs.curl pkgs.python3 pkgs.sqlite ];
     networking.hosts."192.168.1.3" = [ "github.com" "api.github.com" ];
     security.pki.certificateFiles = [ "${keys}/server.crt" ];
   };
   approver = user: { ... }: {
-    imports = [ common ];
+    imports = [ (common passlet) ];
     networking.firewall.allowedTCPPorts = [ 17400 ];
     users.users.${user} = { isNormalUser = true; };
     systemd.services.passlet-fixture = {
@@ -57,7 +59,7 @@ in pkgs.testers.runNixOSTest {
     alice = approver "alice";
     bob = approver "bob";
     hetzner = { ... }: {
-      imports = [ common ];
+      imports = [ (common agent) ];
       # The fixture GitHub service lives here only for this isolated test.
       virtualisation.vlans = [ 1 ];
       networking.firewall.allowedTCPPorts = [ 443 ];
@@ -84,7 +86,7 @@ in pkgs.testers.runNixOSTest {
       };
       systemd.services."ssh-agent-proxy@" = {
         environment.HOME = "/home/alice";
-        serviceConfig = { User = "alice"; ExecStart = "${passlet}/bin/passlet ssh-agent --stdio"; StandardInput = "socket"; StandardOutput = "journal"; };
+        serviceConfig = { User = "alice"; ExecStart = "${agent}/bin/passlet ssh-agent --stdio"; StandardInput = "socket"; StandardOutput = "journal"; };
       };
       systemd.tmpfiles.rules = [
         "d /home/alice/.local 0700 alice users -" "d /home/alice/.local/share 0700 alice users -" "d /home/alice/.local/share/passlet 0700 alice users -"

@@ -10,6 +10,7 @@ permissions:
   pull-requests: write
 jobs:
   review:
+    environment: claude
     if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude')
     runs-on: ubuntu-26.04
     timeout-minutes: 20

@@ -94,7 +94,7 @@ func (a *memoryAudit) Record(e Event) error {
 func testServer(a *testApprover, g *testMinter, audit Recorder) *Server {
 	s := NewServer(a, g, audit)
 	s.Identity = func(context.Context, string) (Caller, error) {
-		return Caller{NodeID: "trusted-transport-node", Name: "cruncher"}, nil
+		return Caller{NodeID: "trusted-transport-node", Name: "hetzner"}, nil
 	}
 	return s
 }

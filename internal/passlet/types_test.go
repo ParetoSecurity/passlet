@@ -104,11 +104,11 @@ func TestLargeRepositoryPromptPreservesOwnerPermissionsAndCount(t *testing.T) {
 
 func TestApprovalUsesTrustedLabelWithoutChangingAuditIdentity(t *testing.T) {
 	for _, tc := range []struct{ transport, name, want string }{
-		{"paired", "alice@cruncher", "alice@cruncher"},
-		{"tailscale", "cruncher", "cruncher"},
-		{"paired", "cruncher\n", "cruncher"},
+		{"paired", "alice@hetzner", "alice@hetzner"},
+		{"tailscale", "hetzner", "hetzner"},
+		{"paired", "hetzner\n", "hetzner"},
 		{"unix", "local/SSH socket client", "local"},
-		{"ssh", "cruncher", "cruncher"},
+		{"ssh", "hetzner", "hetzner"},
 	} {
 		caller := Caller{Transport: tc.transport, Name: tc.name, NodeID: "node"}
 		prompt := (Request{Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "read"}}).Prompt(caller)
@@ -138,7 +138,7 @@ func TestLabeledPromptPreservesOwnerWhenRepositoriesAreTruncated(t *testing.T) {
 	if err := r.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	prompt := r.Prompt(Caller{Transport: "ssh", Name: "cruncher"})
+	prompt := r.Prompt(Caller{Transport: "ssh", Name: "hetzner"})
 	if len(prompt) > 650 || !strings.Contains(prompt, "• alice/repository-") || strings.Contains(prompt, "Owner: alice") || !strings.Contains(prompt, "additional repositories") || !strings.Contains(prompt, "• contents: read") {
 		t.Fatalf("incomplete truncated prompt: %s", prompt)
 	}

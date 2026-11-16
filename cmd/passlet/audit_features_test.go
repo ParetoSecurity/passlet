@@ -49,7 +49,7 @@ func TestAuditFeatures(t *testing.T) {
 				for _, row := range table.Rows[1:] {
 					event := passlet.Event{
 						RequestID: row.Cells[1].Value, Outcome: row.Cells[2].Value, Approver: "human",
-						Caller:  passlet.Caller{Name: "cruncher", Transport: "ssh"},
+						Caller:  passlet.Caller{Name: "hetzner", Transport: "ssh"},
 						Request: passlet.Request{Agent: "Claude", Repositories: []string{"alice/repo"}, Permissions: map[string]string{"contents": "write", "metadata": "read"}},
 					}
 					data, err := json.Marshal(event)

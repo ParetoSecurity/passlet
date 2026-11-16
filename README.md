@@ -69,7 +69,7 @@ Successful `passlet approver github setup` automatically pairs your local Agent 
 
 ## Remote agents over SSH
 
-[Pair each Agent](docs/SETUP.md#pair-agents), then forward the Mac’s shared socket. Approval prompts identify the trusted key’s configured label, such as `alice@cruncher`. See [SSH configuration](docs/SETUP.md#ssh-forwarding).
+[Pair each Agent](docs/SETUP.md#pair-agents), then forward the Mac’s shared socket. Approval prompts identify the trusted key’s configured label, such as `alice@hetzner`. See [SSH configuration](docs/SETUP.md#ssh-forwarding).
 
 On the remote machine, install the Linux CLI archive and create a private directory under your Unix account:
 
@@ -84,7 +84,7 @@ From your Mac, keep this SSH connection open, substituting your actual remote us
 ssh -NT -o ExitOnForwardFailure=yes \
   -o StreamLocalBindUnlink=yes \
   -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" \
-  alice@cruncher
+  alice@hetzner
 ```
 
 On that remote account, before starting Claude:

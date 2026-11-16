@@ -19,13 +19,13 @@ Feature: Review a request in the Touch ID pane
       """
 
   Scenario: Review a request through an SSH tunnel
-    Given an Agent paired as "alice@cruncher" connecting through SSH
+    Given an Agent paired as "alice@hetzner" connecting through SSH
     And the request is made from Codex
     When I run `passlet request --repos alice/repo --permissions contents:read`
     Then the Touch ID pane shows:
       """
       Passlet is trying to grant access to GitHub for:
-      • Codex from alice@cruncher
+      • Codex from alice@hetzner
       • 8 hours
 
       Repositories:
@@ -36,12 +36,12 @@ Feature: Review a request in the Touch ID pane
       """
 
   Scenario: Review a request through Tailscale
-    Given an Agent paired as "alice@cruncher" connecting through Tailscale
+    Given an Agent paired as "alice@hetzner" connecting through Tailscale
     When I run `passlet request --repos alice/repo --permissions contents:read`
     Then the Touch ID pane shows:
       """
       Passlet is trying to grant access to GitHub for:
-      • Shell from alice@cruncher
+      • Shell from alice@hetzner
       • 8 hours
 
       Repositories:
@@ -138,5 +138,5 @@ Feature: Review a request in the Touch ID pane
     Examples:
       | label         | transport      |
       | alice@mac     | a local socket |
-      | alice@cruncher | SSH            |
+      | alice@hetzner | SSH            |
       | alice@lima     | Tailscale      |

@@ -54,7 +54,7 @@ Before pushing the preparation tag, update documentation for the release and com
 
 Open the release PR in this repository against main. Include concise, user-facing notes in `docs/releases/vX.Y.Z.md`, describing changes since the previous published release and linking to the full changelog. Both workflow phases require this nonempty file. Finalize the notes before preparation, because source verification rejects later changes to them. After its CI passes, push an unused preparation tag such as `v0.4.2-prepare` at its exact reviewed head commit. Preparation verifies the PR is still open, the tag points to its current head, and its latest PR CI run passed. Fork PRs are rejected. Review that commit, including workflow and build-script changes, before approving signing. Both preparation and final publication require approval under the existing `release` environment, restricted to `v*` tags. No signing credentials are available to PR workflows.
 
-Preparation runs the pinned tests, builds universal macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
+Preparation runs the pinned tests, builds Apple Silicon macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
 
 Stapling and ticket validation retry the observed Apple connection-loss error (`NSURLErrorDomain Code=-1005`, exit 68) up to four attempts, waiting 15, 30, and 45 seconds between attempts. Other failures stop immediately. These retries reuse the signed, notarized app without rebuilding or resubmitting it.
 
@@ -104,7 +104,7 @@ in the release workflow; local checks do not establish production Keychain behav
   credentials still exist and must never be added to Git.
 - The arm64 development helper builds, embeds the icon, and passes codesign
   verification with the existing development identity.
-- Linux arm64 CLI, macOS Intel CLI, and macOS Intel Swift helper cross-builds
+- Linux arm64 CLI cross-build
   passed. They have not been runtime-tested on those architectures.
 - Developer ID signing and notarization passed in the release run linked above.
   Production Keychain interaction is a separate manual check.

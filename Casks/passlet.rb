@@ -7,7 +7,8 @@ cask "passlet" do
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"
 
-  depends_on macos: :sonoma
+  depends_on arch: :arm64
+  depends_on macos: :tahoe
 
   # launchd registration requires an installer script outside the cask sandbox.
   installer script: {

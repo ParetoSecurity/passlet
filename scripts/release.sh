@@ -21,7 +21,7 @@ make check
 ./scripts/build-macos.sh
 mkdir -p dist
 app=build/release/Passlet.app
-archive="dist/passlet_${PASSLET_VERSION}_macos_universal.zip"
+archive="dist/passlet_${PASSLET_VERSION}_macos_arm64.zip"
 ditto -c -k --keepParent "$app" build/release/notarization.zip
 /usr/bin/xcrun notarytool submit build/release/notarization.zip --apple-id "$NOTARIZATION_USERNAME" --password "$NOTARIZATION_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
 PATH=/usr/bin:/bin:/usr/sbin:/sbin ./scripts/staple.sh "$app"
@@ -36,6 +36,6 @@ for arch in amd64 arm64; do
     cp docs/*.md "$stage/docs/"
     tar -czf "dist/passlet_${PASSLET_VERSION}_linux_${arch}.tar.gz" -C "$stage" passlet skills docs README.md LICENSE
 done
-(cd dist && shasum -a 256 "passlet_${PASSLET_VERSION}_macos_universal.zip" "passlet_${PASSLET_VERSION}_linux_amd64.tar.gz" "passlet_${PASSLET_VERSION}_linux_arm64.tar.gz" > "passlet_${PASSLET_VERSION}_SHA256SUMS")
+(cd dist && shasum -a 256 "passlet_${PASSLET_VERSION}_macos_arm64.zip" "passlet_${PASSLET_VERSION}_linux_amd64.tar.gz" "passlet_${PASSLET_VERSION}_linux_arm64.tar.gz" > "passlet_${PASSLET_VERSION}_SHA256SUMS")
 python3 scripts/package-release.py "$PASSLET_VERSION" dist build/package-updates
 echo 'Artifacts prepared in dist/. Nothing has been published.'

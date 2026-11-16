@@ -11,7 +11,7 @@ These instructions target the upcoming CLI-only release. Its signed archives and
 
 ## Install Approver on macOS
 
-Approver requires macOS 14 or later and a logged-in graphical session. Apple Silicon and Intel Macs are supported. Choose one package manager for Approver and use it for installation, updates, and removal.
+Approver requires macOS 26 or later on Apple Silicon and a logged-in graphical session. Choose one package manager for Approver and use it for installation, updates, and removal.
 
 ### Nix / Home Manager
 
@@ -47,7 +47,7 @@ outputs = { nixpkgs, home-manager, passlet, ... }: {
 };
 ```
 
-Replace `alice` with your configuration name and choose your machine's system: `aarch64-darwin` for Apple Silicon or `x86_64-darwin` for Intel Macs. Keep your existing Home Manager settings, including `home.username`, `home.homeDirectory`, and `home.stateVersion`.
+Replace `alice` with your configuration name and use `aarch64-darwin` for Apple Silicon. Keep your existing Home Manager settings, including `home.username`, `home.homeDirectory`, and `home.stateVersion`.
 
 If Home Manager is integrated with nix-darwin, add this to the system module where your flake's `passlet` input is in scope:
 

@@ -1,6 +1,6 @@
 { lib, stdenvNoCC, fetchurl, unzip, release ? (if builtins.pathExists ../release.json then builtins.fromJSON (builtins.readFile ../release.json) else throw "Passlet package metadata is not published yet; use a reviewed package release revision.") }:
 let
-  platform = if stdenvNoCC.hostPlatform.isDarwin then "macos_universal"
+  platform = if stdenvNoCC.hostPlatform.isDarwin then "macos_arm64"
     else if stdenvNoCC.hostPlatform.isAarch64 then "linux_arm64" else "linux_amd64";
   artifact = release.artifacts.${platform};
 in stdenvNoCC.mkDerivation {
@@ -28,6 +28,6 @@ in stdenvNoCC.mkDerivation {
     homepage = "https://passlet.dev";
     license = lib.licenses.mit;
     mainProgram = "passlet";
-    platforms = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+    platforms = [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ];
   };
 }

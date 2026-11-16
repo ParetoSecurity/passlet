@@ -29,6 +29,7 @@ class MetadataTests(unittest.TestCase):
                 info = plistlib.loads((root / 'Passlet.app/Contents/Info.plist').read_bytes())
                 self.assertEqual(info['CFBundleExecutable'], 'PassletHelper')
                 self.assertTrue(info['LSUIElement'])
+                self.assertEqual(info['LSMinimumSystemVersion'], '26.0')
             return result.returncode, metadata
 
     def test_preview_needs_no_profile_or_keychain_entitlements(self):

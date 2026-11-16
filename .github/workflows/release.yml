@@ -58,7 +58,7 @@ jobs:
   prepare:
     if: needs.verify.outputs.prepare == 'true'
     needs: verify
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     environment: release
     permissions:

@@ -21,7 +21,18 @@ App/account identity and tokens are stored together in one protected Keychain it
 
 Run `passlet doctor` to check availability. For launchd details use `launchctl print gui/$(id -u)/dev.passlet.agent`. If startup fails, verify you are in the logged-in Mac's graphical session and check this output for its last exit status. Reinstall the Homebrew cask or reactivate Home Manager after correcting the problem.
 
-To troubleshoot in the foreground, stop the managed service with `launchctl bootout gui/$(id -u)/dev.passlet.agent`, then run `passlet approver start`. This is a temporary diagnostic command, not an installation method. Reinstall/reactivate the package when finished. A private lock prevents two approvers from replacing each other's active socket. Never delete a live socket or its lock to work around an error.
+Use `passlet approver stop` and `passlet approver restart` to manage the installed Homebrew or Home Manager service. Stop unloads the job so launchd does not immediately respawn it, then waits for the old process to exit. If stopping fails or times out, restart aborts without registering another service. It stays stopped until you restart it, reactivate/reinstall the package, or log in again. Restart reads the installed service definition and configuration without rewriting package-managed files. For Nix changes, activate your Home Manager or nix-darwin configuration first; restart does not evaluate or apply Nix configuration. These commands run as your logged-in Mac user, without sudo.
+
+To test a checkout, build it first, then temporarily stop the installed service and run the checkout in the foreground:
+
+```sh
+passlet approver stop
+./build/Passlet.app/Contents/MacOS/passlet approver start
+# After stopping the foreground process with Ctrl-C:
+passlet approver restart
+```
+
+Use a signed development build for Touch ID and Keychain access. The checkout uses your existing configuration, pairings, and credentials. If you build only the Go CLI, pass `--helper /absolute/path/to/PassletHelper` to `approver start` to use a compatible signed helper. `start` runs the current binary in the foreground. `restart` always restores the installed package, even when invoked from a checkout. `reload` is not implemented; use restart to apply configuration changes. A private lock prevents two approvers from replacing each other's active socket. Never delete a live socket or its lock to work around an error.
 
 Uninstalling through the package manager removes startup while retaining credentials and audit history. Sleep temporarily makes the Mac unavailable; delivered tokens remain usable.
 

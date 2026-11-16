@@ -58,7 +58,7 @@ def main():
             cask = (ROOT / "packaging/homebrew/passlet.rb.in").read_text()
             cask = cask.replace('cask "passlet"', 'cask "passlet-fixture"').replace("@VERSION@", version)
             cask = cask.replace("@MAC_SHA256@", hashlib.sha256(archive.read_bytes()).hexdigest())
-            cask = cask.replace("https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_universal.zip", archive.as_uri())
+            cask = cask.replace("https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_arm64.zip", archive.as_uri())
             (tap / "Casks/passlet-fixture.rb").write_text(cask)
 
         publish_fixture("0.0.0")

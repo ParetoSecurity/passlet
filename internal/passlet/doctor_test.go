@@ -86,7 +86,7 @@ func TestDoctorUsesApprovalGateAndAuditWithoutMinting(t *testing.T) {
 	audit := &memoryAudit{}
 	server := testServer(approval, provider, audit)
 	server.Identity = func(context.Context, string) (Caller, error) {
-		return Caller{Transport: "tailscale", Name: "cruncher.tailnet.ts.net.", NodeID: "node"}, nil
+		return Caller{Transport: "tailscale", Name: "hetzner.tailnet.ts.net.", NodeID: "node"}, nil
 	}
 	request := func(body string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -108,7 +108,7 @@ func TestDoctorUsesApprovalGateAndAuditWithoutMinting(t *testing.T) {
 	if provider.calls != 0 || session.stores != 1 || !session.closed || len(approval.prompts) != 1 {
 		t.Fatal("doctor did not use the approved rotation flow")
 	}
-	if approval.prompts[0] != "verify stored credentials for cruncher.tailnet.ts.net." {
+	if approval.prompts[0] != "verify stored credentials for hetzner.tailnet.ts.net." {
 		t.Fatal("unexpected diagnostic approval prompt")
 	}
 	verified := false

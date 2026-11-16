@@ -145,7 +145,7 @@ func TestUnixEndpointIgnoresProxy(t *testing.T) {
 func TestPairedConnections(t *testing.T) {
 	for _, network := range []string{"unix", "tcp4"} {
 		t.Run(network, func(t *testing.T) {
-			p, err := NewPairing(testkeys.Private("approver"), map[string]string{"zupo@cruncher": testkeys.Public("agent")})
+			p, err := NewPairing(testkeys.Private("approver"), map[string]string{"zupo@hetzner": testkeys.Public("agent")})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,7 +160,7 @@ func TestPairedConnections(t *testing.T) {
 			var calls atomic.Int32
 			server := &http.Server{Handler: p.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				caller, err := connectionIdentity(r.Context(), r.RemoteAddr)
-				if err != nil || caller.Name != "zupo@cruncher" || caller.KeyID != keyID(testkeys.Private("agent").Public().(ed25519.PublicKey)) {
+				if err != nil || caller.Name != "zupo@hetzner" || caller.KeyID != keyID(testkeys.Private("agent").Public().(ed25519.PublicKey)) {
 					t.Errorf("wrong paired identity: %+v %v", caller, err)
 				}
 				calls.Add(1)

@@ -14,6 +14,10 @@ Ideas for future features, in no particular order. Inclusion here is not a commi
 - Detect ambient credentials with `passlet doctor`. Check the machine running doctor for tokens in environment variables, dotfiles, and credential configuration used by `gh`, Git, and similar tools. Report variable names and file locations without printing token values, explain how these credentials could bypass Passlet’s scoped grants, and suggest removal or revocation without changing credentials automatically.
 - Harden and document the release process, including signing approvals, Nix cache configuration, artifact validation, package metadata publication, and recovery from failed or partial releases.
 
+- Simple Home Manager options for installing the Claude Code and Codex plugins, such as `programs.passlet.plugins.codex.enable = true`. Handle marketplace registration and the versioned Codex plugin cache inside the module so users do not need to copy that wiring into their configuration.
+
+- Add `passlet approver restart` to restart the installed Approver service and apply configuration changes without requiring users to know the launchd service label or `launchctl` command. Support Homebrew and Home Manager installations, and explain when Nix configuration must be activated first. Reserve `reload` for a future operation that applies configuration without restarting the process.
+
 ## Codebase improvements with the feature set frozen
 
 Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, removes, or changes a user-visible capability. Items that touch observable behavior (exit codes, usage text) are marked as judgment calls. Each round covers tooling, code quality and tests, security, and dead or stale code and docs. Later rounds assume the earlier ones are done and do not repeat them. File references point at the code as it is today.
@@ -63,7 +67,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `docs/release-notes.md` is referenced by nothing: `release.yml` uses `--generate-notes` and the release skill writes its own notes file. Wire it in or delete it.
 - `runSetupBrowser` (`internal/passlet/setup.go:487`) is only called from tests. Move it to a `_test.go` file.
 - Stale version defaults: `scripts/build-macos.sh:5` defaults to `0.2.0` (development builds report it), `nix/test-package.nix:4` says `0.2.0-test`.
-- `.gitignore` lists eight paths that do not exist (`prototypes/`, `RESULTS.md`, `scripts/import-test-credentials.py`, `scripts/live-remote.py`, `scripts/test-cruncher.sh`, `internal/passlet/live_test.go`, `packaging/cruncher.nix`, `passlet-zupo-test-client-secret`). Ignoring a `_test.go` path can hide a real test from Git. Move personal ignores to `.git/info/exclude`.
+- `.gitignore` lists eight paths that do not exist (`prototypes/`, `RESULTS.md`, `scripts/import-test-credentials.py`, `scripts/live-remote.py`, the local remote-host test script, `internal/passlet/live_test.go`, the local remote-host Nix configuration, `passlet-zupo-test-client-secret`). Ignoring a `_test.go` path can hide a real test from Git. Move personal ignores to `.git/info/exclude`.
 - Seven remote branches from the menu-bar era are unmerged and stale (`feat/menu-logo`, `fix/updater-recovery`, `feat/install-command-line-tool`, `feat/doctor-ambient-tokens`, `feat/doctor-bdd`, `chore/readme-logo-alignment`, `dependabot/go_modules/go-dependencies-087a0af233`). Close or delete them.
 - `Makefile`: `.PHONY` is declared in three places, `lint-go` and `test` duplicate `scripts/check.sh`, and `check-all` calls the devenv-only `lint` script and fails obscurely outside the shell.
 - Small dead code: the first `lines` assignment in `Request.Prompt` (`internal/passlet/types.go:140`) is overwritten by every branch reachable after `Validate`. `strictJSON` checks for trailing data twice (`d.More()` then a `Decode` expecting EOF). `installationStarted: nil` in the `NewSetupFlow` literal and the one-line `writeSetupIntroduction` wrapper add nothing.
@@ -109,7 +113,7 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 - `docs/REVIEW-POLICY.md` still carries the "replace `Test (ubuntu-24.04)` with `Test (ubuntu-26.04)`" migration note although `ci.yml` and `rulesets/main.json` already use 26.04. Confirm the live ruleset and delete the note. `docs/VALIDATION.md` mixes dated log entries ("2026-10-31: live browser testing ...") into a checklist. Move logs into issues or a dated validation log.
 - README "Development and validation" is one 400-word paragraph covering the ops updater, caches, Cachix, and `vendorHash`. Move it to `CONTRIBUTING.md` or `docs/DEVELOPMENT.md` and keep README for usage.
 - Shell duplication: `DEVELOPER_DIR`/`SDKROOT` resolution appears in `build-macos.sh`, `check-macos.sh`, and `release.sh` (and `build-macos.sh` unsets `SDKROOT` twice), so extract `scripts/apple-env.sh`. The `vX.Y.Z` regex appears four times (`release.yml` twice, `release.sh`, `package-release.py`). The golangci path list `./assets/... ./cmd/... ./internal/...` appears in `check.sh`, `Makefile`, and `docs/VALIDATION.md`. Exclude `build/` in `.golangci.yml` and use `./...`.
-- `nix/integration.nix` hard-codes `192.168.1.3` for cruncher, which only holds because cruncher is the third declared node. Derive it from `nodes.cruncher.networking.primaryIPAddress` or comment the coupling.
+- `nix/integration.nix` hard-codes `192.168.1.3` for hetzner, which only holds because hetzner is the third declared node. Derive it from `nodes.hetzner.networking.primaryIPAddress` or comment the coupling.
 
 ### Round 3
 

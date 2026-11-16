@@ -12,14 +12,14 @@ Feature: Review local audit history
       2026-11-03T12:01:00Z  approved
         Request: request-1
         Agent: Claude
-        Caller: cruncher (ssh)
+        Caller: hetzner (ssh)
         Repositories: alice/repo
         Requested permissions: contents: write, metadata: read
 
       2026-11-03T12:00:00Z  requested
         Request: request-1
         Agent: Claude
-        Caller: cruncher (ssh)
+        Caller: hetzner (ssh)
         Repositories: alice/repo
         Requested permissions: contents: write, metadata: read
       """
@@ -35,7 +35,7 @@ Feature: Review local audit history
       2026-11-03T12:01:00Z  approved
         Request: request-1
         Agent: Claude
-        Caller: cruncher (ssh)
+        Caller: hetzner (ssh)
         Repositories: alice/repo
         Requested permissions: contents: write, metadata: read
       """
@@ -55,7 +55,7 @@ Feature: Review local audit history
     When I run `passlet approver audit --json`
     Then the terminal shows:
       """
-      [{"at":"2026-11-03T12:00:00Z","event":{"request_id":"request-1","caller":{"transport":"ssh","node_id":"","name":"cruncher"},"requested":{"agent":"Claude","repositories":["alice/repo"],"permissions":{"contents":"write","metadata":"read"}},"outcome":"requested","approver":"human"}}]
+      [{"at":"2026-11-03T12:00:00Z","event":{"request_id":"request-1","caller":{"transport":"ssh","node_id":"","name":"hetzner"},"requested":{"agent":"Claude","repositories":["alice/repo"],"permissions":{"contents":"write","metadata":"read"}},"outcome":"requested","approver":"human"}}]
       """
 
   Scenario: Export an empty audit log as JSON
@@ -88,7 +88,7 @@ Feature: Review local audit history
       2026-11-03T12:00:00Z  requested
         Request: request-1
         Agent: Claude
-        Caller: cruncher (ssh)
+        Caller: hetzner (ssh)
         Repositories: alice/repo
         Requested permissions: contents: write, metadata: read
       """
@@ -103,7 +103,7 @@ Feature: Review local audit history
     Then the terminal shows:
       """
       Warning: audit log contains corrupted entries (1 skipped).
-      [{"at":"2026-11-03T12:00:00Z","event":{"request_id":"request-1","caller":{"transport":"ssh","node_id":"","name":"cruncher"},"requested":{"agent":"Claude","repositories":["alice/repo"],"permissions":{"contents":"write","metadata":"read"}},"outcome":"requested","approver":"human"}}]
+      [{"at":"2026-11-03T12:00:00Z","event":{"request_id":"request-1","caller":{"transport":"ssh","node_id":"","name":"hetzner"},"requested":{"agent":"Claude","repositories":["alice/repo"],"permissions":{"contents":"write","metadata":"read"}},"outcome":"requested","approver":"human"}}]
       """
     And the warning is written to standard error
     And standard output is valid JSON

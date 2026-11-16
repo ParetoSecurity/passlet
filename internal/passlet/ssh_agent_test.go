@@ -81,7 +81,7 @@ func forwardingFixture(t *testing.T) (*SSHAgentForwarder, string, []byte) {
 	sshAgentTestHome(t)
 	f := NewSSHAgentForwarder()
 	f.agents = func() (map[string]string, error) {
-		return map[string]string{"one": "alice@cruncher", "two": "bob@cruncher"}, nil
+		return map[string]string{"one": "alice@hetzner", "two": "bob@hetzner"}, nil
 	}
 	key := testAgentKey()
 	socket := agentTestSocket(t, func(data []byte) []byte {
@@ -156,7 +156,7 @@ func TestSSHAgentRemoteHTTP(t *testing.T) {
 func TestSSHAgentProxyEndToEnd(t *testing.T) {
 	f, _, key := forwardingFixture(t)
 	id := keyID(testkeys.Private("agent").Public().(ed25519.PublicKey))
-	f.agents = func() (map[string]string, error) { return map[string]string{id: "alice@cruncher"}, nil }
+	f.agents = func() (map[string]string, error) { return map[string]string{id: "alice@hetzner"}, nil }
 	var connections atomic.Int32
 	server := &http.Server{Handler: f, ConnState: func(_ net.Conn, s http.ConnState) {
 		if s == http.StateNew {
@@ -368,7 +368,7 @@ func TestSSHAgentConnectionLimit(t *testing.T) {
 func TestSSHAgentRejectsImpersonation(t *testing.T) {
 	f, _, _ := forwardingFixture(t)
 	id := keyID(testkeys.Private("agent").Public().(ed25519.PublicKey))
-	f.agents = func() (map[string]string, error) { return map[string]string{id: "alice@cruncher"}, nil }
+	f.agents = func() (map[string]string, error) { return map[string]string{id: "alice@hetzner"}, nil }
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

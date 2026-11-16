@@ -59,7 +59,7 @@ Manage paired Agents on the Mac:
 
 ```sh
 passlet approver agents list
-passlet approver agents revoke alice@cruncher
+passlet approver agents revoke alice@hetzner
 ```
 
 Revocation takes effect on subsequent requests without restarting the service, including requests on an existing connection. It does not revoke GitHub tokens already issued to that Agent. Revoke an existing name before pairing a different key under the same name.
@@ -75,13 +75,13 @@ Local and SSH Agents use the same `~/.local/share/passlet/passlet.sock` on the M
 For an account named `alice`, add this to `~/.ssh/config` on the Approver Mac:
 
 ```sshconfig
-Host cruncher
+Host hetzner
     User alice
     RemoteForward /home/alice/.local/share/passlet/passlet.sock /Users/alice/.local/share/passlet/passlet.sock
     ExitOnForwardFailure yes
 ```
 
-SSH creates the first socket on Cruncher, whose parent directory must exist with mode `0700`. Keep `ssh cruncher` open for a shell and tunnel, or use `ssh -NT cruncher` for just the tunnel. Other servers can forward to the same Mac socket and authenticate using their own keys.
+SSH creates the first socket on Hetzner, whose parent directory must exist with mode `0700`. Keep `ssh hetzner` open for a shell and tunnel, or use `ssh -NT hetzner` for just the tunnel. Other servers can forward to the same Mac socket and authenticate using their own keys.
 
 To share the tunnel across SSH sessions, add `ControlMaster auto`, `ControlPersist 10m`, and `ControlPath ~/.ssh/master-%C` to that host block. The master connection owns the forward and remains open for ten minutes after the last session exits. Start a new master connection when changing forwarding settings, since an existing master retains its previous configuration.
 
@@ -106,10 +106,10 @@ After pairing her Agent, Alice runs this from her Mac:
 
 ```sh
 ssh -NT -o ExitOnForwardFailure=yes \
-  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" alice@cruncher
+  -R /home/alice/.local/share/passlet/passlet.sock:"$HOME/.local/share/passlet/passlet.sock" alice@hetzner
 ```
 
-Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@cruncher` from his Mac. Each remote account pairs with `passlet pair --endpoint unix:///home/alice/.local/share/passlet/passlet.sock --code <code>`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
+Bob uses `/home/bob/.local/share/passlet/passlet.sock` and `bob@hetzner` from his Mac. Each remote account pairs with `passlet pair --endpoint unix:///home/alice/.local/share/passlet/passlet.sock --code <code>`, using Bob’s path for Bob. The paths are absolute, not `~`; Unix socket paths must be short enough for the platform (Passlet limits its local listener to 103 bytes). No new TCP listener is opened by this transport.
 
 Unix permissions isolate Alice from Bob, but not either from remote root or other processes sharing their account. Never describe this as attesting the agent executable. Root can request approval through either socket and read delivered tokens. A compromised same-user process can also request approval; examine the scopes in the native prompt.
 

@@ -43,6 +43,8 @@ uploads, or automatic dependency merging into this CLI project.
 `nix-shell`; all CI and release commands use the same `nix/flake.lock`. Apple
 SDK, signing, and notarization tools come from the macOS runner.
 
+Linux archives are built with the `agentonly` Go build tag, which leaves Approver out of the binary. `make check` also vets and tests that build, and `make build` cross-compiles it.
+
 On macOS, `make macos` builds the development helper using
 `PASSLET_PROVISIONING_PROFILE` and `PASSLET_SIGNING_IDENTITY`. The default keeps
 the existing prototype identity. The icon source is `assets/passlet.png`;

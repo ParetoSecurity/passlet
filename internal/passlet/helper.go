@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package passlet
 
 import (
@@ -204,6 +206,65 @@ func (h NativeHelper) Confirm(ctx context.Context, prompt string) error {
 	var reply helperReply
 	if json.Unmarshal(scan.Bytes(), &reply) != nil || !reply.OK {
 		return errors.New("pairing approval denied or cancelled")
+	}
+	return nil
+}
+
+// AccountInfo is stored with credentials in the protected Keychain item.
+type AccountInfo struct {
+	InstallationOwner string    `json:"installation_owner,omitempty"`
+	Login             string    `json:"login"`
+	AppID             int64     `json:"app_id"`
+	AppURL            string    `json:"app_url"`
+	VerifiedAt        time.Time `json:"verified_at"`
+}
+
+func (a AccountInfo) Validate() error {
+	if !component.MatchString(a.Login) || a.AppID <= 0 || a.VerifiedAt.IsZero() || GitHubAppSettingsURL(a.AppURL) == "https://github.com/settings/apps" {
+		return errors.New("invalid_protected_account_identity")
+	}
+	return nil
+}
+
+func KeychainStatus(ctx context.Context, helper string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, ConnectDeadline)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, helper, "--status")
+	pipe, err := cmd.StdoutPipe()
+	if err != nil { // coverage-ignore: Fresh command; only process-wide file-descriptor exhaustion can fail pipe creation.
+		return "", errors.New("helper_unavailable")
+	}
+	if err := cmd.Start(); err != nil {
+		return "", errors.New("helper_unavailable")
+	}
+	var result struct {
+		Status string `json:"status"`
+	}
+	err = json.NewDecoder(io.LimitReader(pipe, 1024)).Decode(&result)
+	waitErr := cmd.Wait()
+	if err != nil || waitErr != nil {
+		return "", errors.New("helper_status_unavailable")
+	}
+	switch result.Status {
+	case "configured", "missing", "protected_or_unavailable":
+		return result.Status, nil
+	default:
+		return "", errors.New("helper_status_invalid")
+	}
+}
+
+type Credentials struct {
+	Account      AccountInfo `json:"account"`
+	ClientID     string      `json:"client_id"`
+	ClientSecret string      `json:"client_secret"`
+	AccessToken  string      `json:"access_token"`
+	RefreshToken string      `json:"refresh_token"`
+	ExpiresAt    time.Time   `json:"expires_at"`
+}
+
+func (c Credentials) Validate() error {
+	if c.ClientID == "" || c.ClientSecret == "" || c.AccessToken == "" || c.RefreshToken == "" || c.ExpiresAt.IsZero() {
+		return errors.New("incomplete_credentials")
 	}
 	return nil
 }

@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,22 +35,6 @@ func diagnosticsForOS(ctx context.Context, args []string, hostOS string) error {
 		return errors.New("invalid_endpoint_use_unix_absolute_socket_or_Tailscale_HTTPS_origin")
 	}
 	return diagnoseEndpoint(ctx, *endpoint, hostOS)
-}
-
-func localDiagnostics(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("approver doctor", flag.ContinueOnError)
-	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), `Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
-
-Requires Touch ID approval to verify saved credentials.`)
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 0 {
-		return errors.New("unexpected_arguments")
-	}
-	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), "darwin")
 }
 
 func diagnoseEndpoint(ctx context.Context, endpoint, hostOS string) error {
@@ -151,28 +133,4 @@ func doctorConnectionHint(endpoint, hostOS string, err error) string {
 	default:
 		return "The socket did not return a healthy Approver response. Check that Passlet Approver is running on your Mac and that the SSH tunnel forwards to its socket."
 	}
-}
-
-func auditCommand(args []string) error {
-	fs := commandFlags("approver audit", "Show recent access events from the local audit log.")
-	jsonOutput := fs.Bool("json", false, "print structured records as JSON")
-	limit := fs.Int("limit", 20, "recent events, 1–1000")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 0 {
-		return errors.New("unexpected_arguments")
-	}
-	entries, skipped, err := passlet.ReadAudit(filepath.Join(passlet.StateDir(), "audit.sqlite"), *limit)
-	if err != nil {
-		return err
-	}
-	if skipped > 0 {
-		fmt.Fprintf(os.Stderr, "Warning: audit log contains corrupted entries (%d skipped).\n", skipped)
-	}
-	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(entries)
-	}
-	_, err = fmt.Fprint(os.Stdout, formatAudit(entries))
-	return err
 }

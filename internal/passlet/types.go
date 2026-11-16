@@ -40,23 +40,9 @@ type Grant struct {
 	Permissions  map[string]string `json:"permissions"`
 	User         string            `json:"user"`
 }
-type Credentials struct {
-	Account      AccountInfo `json:"account"`
-	ClientID     string      `json:"client_id"`
-	ClientSecret string      `json:"client_secret"`
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	ExpiresAt    time.Time   `json:"expires_at"`
-}
-
-func (c Credentials) Validate() error {
-	if c.ClientID == "" || c.ClientSecret == "" || c.AccessToken == "" || c.RefreshToken == "" || c.ExpiresAt.IsZero() {
-		return errors.New("incomplete_credentials")
-	}
-	return nil
-}
 
 var component = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
+var githubHandle = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 func (r *Request) Validate() error {
 	if len(r.Agent) > 40 || r.Agent != strings.TrimSpace(r.Agent) || r.Agent != safeLabel(r.Agent) {

@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -129,34 +130,23 @@ func localAgentName() (string, error) {
 	return safeLabel(current.Username + "@" + host), nil
 }
 
-func PairLocalAgent() error {
-	name, err := localAgentName()
-	if err != nil { // coverage-ignore: Requires OS account or hostname lookup failure.
-		return err
+func decodeInvitation(code string) (ed25519.PublicKey, []byte, error) {
+	parts := strings.Split(code, ".")
+	if len(parts) != 2 {
+		return nil, nil, errors.New("invalid pairing code")
 	}
-	agent, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "agent.pem"), filepath.Join(StateDir(), "agent.pub"))
-	if err != nil {
-		return err
+	public, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || len(public) != 32 {
+		return nil, nil, errors.New("invalid pairing code")
 	}
-	approver, err := LoadOrCreatePairingKey(filepath.Join(StateDir(), "approver.pem"), filepath.Join(StateDir(), "approver.pub"))
-	if err != nil {
-		return err
+	secret, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil || len(secret) != 32 {
+		return nil, nil, errors.New("invalid pairing code")
 	}
-	key := agent.Public().(ed25519.PublicKey)
-	if err := withPairingState(true, func(s *pairingState) error {
-		if s.Revoked[keyID(key)] {
-			return errors.New("local Agent was revoked; pair it explicitly with `passlet approver pair` and `passlet pair`")
-		}
-		for id, a := range s.Agents {
-			if a.Name == name && id != keyID(key) {
-				return errors.New("local Agent name already paired; revoke it before replacing it")
-			}
-		}
-		s.Agents[keyID(key)] = pairedAgent{Name: name, PublicKey: base64.RawURLEncoding.EncodeToString(key)}
-		return nil
-	}); err != nil {
-		return err
-	}
-	data, _ := json.Marshal(savedConnection{Endpoint: "unix://" + DefaultSocket(), Approver: base64.RawURLEncoding.EncodeToString(approver.Public().(ed25519.PublicKey))})
-	return writePairingKey(connectionPath(), append(data, '\n'), true)
+	return ed25519.PublicKey(public), secret, nil
+}
+
+type enrollmentRequest struct {
+	Secret string `json:"secret"`
+	Name   string `json:"name"`
 }

@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package main
 
 import (
@@ -170,4 +172,20 @@ func githubOverview(ctx context.Context, args []string) error {
 		return nil
 	}
 	return githubCommand(ctx, args)
+}
+
+func localDiagnostics(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("approver doctor", flag.ContinueOnError)
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(fs.Output(), `Check service health and credentials on this Mac. Inspects the shared local/SSH socket and Tailscale connection.
+
+Requires Touch ID approval to verify saved credentials.`)
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected_arguments")
+	}
+	return diagnoseEndpoint(ctx, "unix://"+passlet.DefaultSocket(), "darwin")
 }

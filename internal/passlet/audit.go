@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package passlet
 
 import (
@@ -5,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	_ "modernc.org/sqlite"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -64,3 +67,37 @@ func (a *Audit) Record(e Event) error {
 	return err
 }
 func (a *Audit) Close() error { return a.db.Close() }
+
+type AuditEntry struct {
+	At    string `json:"at"`
+	Event Event  `json:"event"`
+}
+
+func ReadAudit(path string, limit int) ([]AuditEntry, int, error) {
+	if limit < 1 || limit > 1000 || !filepath.IsAbs(path) {
+		return nil, 0, errors.New("audit_requires_absolute_path_and_limit_1_to_1000")
+	}
+	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
+	db, err := sql.Open("sqlite", u.String())
+	if err != nil { // coverage-ignore: Registered SQLite driver opens lazily; unavailable databases fail the tested query path.
+		return nil, 0, errors.New("audit_unavailable")
+	}
+	defer func() { _ = db.Close() }()
+	rows, err := db.Query("SELECT at,data FROM events ORDER BY id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, 0, errors.New("audit_unavailable")
+	}
+	defer func() { _ = rows.Close() }()
+	entries := []AuditEntry{}
+	skipped := 0
+	for rows.Next() {
+		var e AuditEntry
+		var data string
+		if rows.Scan(&e.At, &data) != nil || json.Unmarshal([]byte(data), &e.Event) != nil {
+			skipped++
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, skipped, rows.Err()
+}

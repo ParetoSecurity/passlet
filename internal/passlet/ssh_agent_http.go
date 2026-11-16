@@ -3,38 +3,44 @@ package passlet
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
-func (f *SSHAgentForwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != "POST" || r.Header.Get("Origin") != "" {
-		apiError(w, 403, "invalid SSH-agent request")
-		return
+const agentPacketLimit = 256 * 1024
+const agentFailure = 5
+
+func SSHAgentSocket() string { return filepath.Join(StateDir(), "ssh-agent.sock") }
+
+func appendAgentString(data, value []byte) []byte {
+	data = binary.BigEndian.AppendUint32(data, uint32(len(value)))
+	return append(data, value...)
+}
+
+func readAgentPacket(r io.Reader) ([]byte, error) {
+	var header [4]byte
+	if _, err := io.ReadFull(r, header[:]); err != nil {
+		return nil, err
 	}
-	caller, err := connectionIdentity(r.Context(), r.RemoteAddr)
-	if err != nil {
-		apiError(w, 403, "agent_authentication_required")
-		return
+	size := binary.BigEndian.Uint32(header[:])
+	if size == 0 || size > agentPacketLimit {
+		return nil, errors.New("invalid SSH-agent packet size")
 	}
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, agentPacketLimit))
-	if err != nil {
-		apiError(w, 400, "SSH-agent request too large")
-		return
-	}
-	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
-	response, err := f.forward(r.Context(), caller.KeyID, data)
-	if err != nil {
-		apiError(w, 403, err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	_, _ = w.Write(response)
+	data := make([]byte, size)
+	_, err := io.ReadFull(r, data)
+	return data, err
+}
+
+func writeAgentPacket(w io.Writer, data []byte) error {
+	packet := appendAgentString(nil, data)
+	_, err := io.Copy(w, bytes.NewReader(packet))
+	return err
 }
 
 func remoteAgentPacket(ctx context.Context, endpoint string, data []byte) ([]byte, error) {

@@ -134,7 +134,7 @@ Setup opens GitHub in your browser to create and authorize your personal GitHub 
 
 ## Install Approver on Linux
 
-Coming soon. Approver currently requires macOS. You can already run Agent on Linux and connect it to Approver on your Mac.
+Coming soon. Approver currently requires macOS. You can already run Agent on Linux and connect it to Approver on your Mac. Linux releases contain Agent only, so `passlet approver` commands there report that they require the macOS build.
 
 ## Use Agent locally
 

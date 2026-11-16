@@ -1,7 +1,13 @@
+//go:build !agentonly
+
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
@@ -48,4 +54,28 @@ func auditText(value string) string {
 		}
 		return r
 	}, value)
+}
+
+func auditCommand(args []string) error {
+	fs := commandFlags("approver audit", "Show recent access events from the local audit log.")
+	jsonOutput := fs.Bool("json", false, "print structured records as JSON")
+	limit := fs.Int("limit", 20, "recent events, 1–1000")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected_arguments")
+	}
+	entries, skipped, err := passlet.ReadAudit(filepath.Join(passlet.StateDir(), "audit.sqlite"), *limit)
+	if err != nil {
+		return err
+	}
+	if skipped > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: audit log contains corrupted entries (%d skipped).\n", skipped)
+	}
+	if *jsonOutput {
+		return json.NewEncoder(os.Stdout).Encode(entries)
+	}
+	_, err = fmt.Fprint(os.Stdout, formatAudit(entries))
+	return err
 }

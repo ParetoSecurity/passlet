@@ -2,7 +2,7 @@ cask "passlet" do
   version "@VERSION@"
   sha256 "@MAC_SHA256@"
 
-  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_arm64.zip"
+  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos.zip"
   name "Passlet"
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"

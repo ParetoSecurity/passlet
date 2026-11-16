@@ -141,7 +141,7 @@ assert builtins.all (system:
       artifacts = builtins.listToAttrs (map (name: {
         inherit name;
         value = { url = "https://example.invalid/${name}"; sha256 = lib.fakeSha256; };
-      }) [ "macos_arm64" "linux_arm64" "linux_amd64" ]);
+      }) [ "macos" "linux_arm64" "linux_amd64" ]);
     };
   };
   in package.version == "0.0.0-test" && package.meta.mainProgram == "passlet"

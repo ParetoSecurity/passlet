@@ -23,7 +23,7 @@ def generate(version, artifacts, output, run_id=None, source_sha=None, source=RO
         release["preparation"] = {"run_id": run_id, "source_sha": source_sha}
     replacements = {"@VERSION@": version}
     for platform, suffix, placeholder in [
-        ("macos_arm64", "zip", "@MAC_SHA256@"),
+        ("macos", "zip", "@MAC_SHA256@"),
         ("linux_amd64", "tar.gz", "@LINUX_AMD64_SHA256@"),
         ("linux_arm64", "tar.gz", "@LINUX_ARM64_SHA256@"),
     ]:

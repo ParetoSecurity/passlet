@@ -20,7 +20,7 @@ class ReleaseTests(unittest.TestCase):
     def test_all_packages_pin_exact_artifacts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for platform, extension in [("macos_arm64", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
+            for platform, extension in [("macos", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz")]:
                 (root / f"passlet_1.2.3_{platform}.{extension}").write_bytes(platform.encode())
             release.generate("1.2.3", root, root / "out")
             manifest = json.loads((root / "out/packaging/release.json").read_text())
@@ -30,7 +30,7 @@ class ReleaseTests(unittest.TestCase):
                 digest = hashlib.sha256(platform.encode()).hexdigest()
                 self.assertEqual(artifact["sha256"], digest)
                 self.assertIn("/releases/download/v1.2.3/", artifact["url"])
-                self.assertIn(digest, cask if platform == "macos_arm64" else formula)
+                self.assertIn(digest, cask if platform == "macos" else formula)
             for name in ["plugin.json", ".claude-plugin/plugin.json"]:
                 plugin = json.loads((root / "out" / name).read_text())
                 original = json.loads((ROOT / name).read_text())

@@ -1,6 +1,6 @@
 # Setup and troubleshooting
 
-Use the signed v0.2 bundle on each approving Mac and the matching CLI on the agent. No machine-wide daemon or root service is needed on the Mac. Setup, approval, and login startup run as the logged-in person.
+Install Approver on each approving Mac and Agent on each machine that requests access. No machine-wide daemon or root service is needed on the Mac. Setup, approval, and login startup run as the logged-in person.
 
 ## GitHub onboarding
 

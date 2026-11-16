@@ -1,8 +1,8 @@
 cask "passlet" do
-  version "0.9.0"
-  sha256 "3d8a9f6489f1aa5da9d4b0472267ffedffd271085c8da4931bc3f2832664f6c2"
+  version "0.10.0"
+  sha256 "0f7bf618ecba95ba40f072b0d18a7c439365c10ac16154737cc88ef8e82bc37e"
 
-  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos_universal.zip"
+  url "https://github.com/ParetoSecurity/passlet/releases/download/v#{version}/passlet_#{version}_macos.zip"
   name "Passlet"
   desc "Short-lived credentials for your agents"
   homepage "https://passlet.dev"

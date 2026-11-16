@@ -65,7 +65,7 @@ def verify(version, artifacts, run, root=ROOT):
             raise ValueError(f"Tagged metadata changes the prepared plugin beyond its version: {name}")
 
     names = [f"passlet_{version}_{platform}.{suffix}" for platform, suffix in [
-        ("macos_arm64", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz"),
+        ("macos", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz"),
     ]]
     sums = f"passlet_{version}_SHA256SUMS"
     if {p.name for p in artifacts.iterdir()} != set(names + [sums]):

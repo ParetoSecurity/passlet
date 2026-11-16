@@ -145,7 +145,7 @@ Passlet keeps its shared local/SSH socket and opens a paired TLS listener at `12
 Home Manager users can enable `programs.passlet.plugins.claude-code.enable` and `programs.passlet.plugins.codex.enable`. See [declarative plugin installation](docs/INSTALLATION.md#install-agent-plugins).
 
 Install the native plugin on each agent account. Both plugins use the same
-[Passlet skill](skills/passlet/SKILL.md).
+[Passlet skill](skills/passlet/SKILL.md). GitHub CLI (`gh`) is optional: when it is unavailable, the skill uses the GitHub REST API through `curl` with the same scoped Passlet grant.
 
 Claude Code:
 

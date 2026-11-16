@@ -1,6 +1,6 @@
 ---
 name: passlet
-description: Obtain scoped GitHub access through Passlet before using git or gh against private repositories, reading PRs or issues, or pushing changes. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
+description: Obtain scoped GitHub access through Passlet before using Git, gh, or the GitHub API against private repositories, reading PRs or issues, or pushing changes. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
 ---
 
 # GitHub access through Passlet
@@ -53,9 +53,30 @@ passlet exec --grant /concrete/private/path/grant.json -- \
   git ls-remote https://github.com/acme/project.git HEAD
 ```
 
-Reuse the same grant for operations within its approved scope until expiry. `exec --grant` does not contact the Mac. It supplies the scoped credentials to Git and gh and disables global/system Git configuration and ambient credential helpers for that child. Use HTTPS remotes. If needed, configure commit author identity locally in the checkout.
+Reuse the same grant for operations within its approved scope until expiry. `exec --grant` does not contact the Mac. It supplies the scoped credentials through `GH_TOKEN` and `GITHUB_TOKEN`, configures Git authentication, and disables global/system Git configuration and ambient credential helpers for that child. Use HTTPS remotes. If needed, configure commit author identity locally in the checkout.
 
 Retain the grant file and its private directory after each command, task, and prompt for later reuse. Do not actively delete grants, including expired ones, unless the user asks. Keep the directory mode 0700 and grant mode 0600. Retention does not extend a grant's expiry or scope: use it only while valid and for authorized operations within its approved scope. Deleting a grant file does not revoke its token.
+
+## When gh is not installed
+
+Check for `gh` with `command -v gh`. If it is absent, use the GitHub REST API with `curl` inside `passlet exec`; do not require the user to install `gh` or run `gh auth login`. Reuse the same approved grant and permissions. The fallback changes the HTTP client, not the access scope.
+
+For example, read a repository’s README using a grant with `contents:read`:
+
+```sh
+passlet exec --grant /concrete/private/path/grant.json -- sh -c '
+  set +x
+  printf "Authorization: Bearer %s\n" "$GH_TOKEN" |
+    curl --disable --fail --silent --show-error \
+      --header @- \
+      --header "Accept: application/vnd.github.raw+json" \
+      https://api.github.com/repos/acme/project/readme
+'
+```
+
+Replace `acme/project` with the approved repository. The single-quoted shell body expands `GH_TOKEN` only inside the child process. The shell builtin `printf` pipes the authorization header to curl’s standard input, keeping the token out of curl’s arguments and temporary files. Keep tracing disabled, do not add verbose or trace flags, and never print the token. Send it only to `https://api.github.com`; do not automatically follow redirects with an authorization header.
+
+For JSON endpoints, use `Accept: application/vnd.github+json` and parse the response with an available JSON tool. Handle pagination when listing repositories, issues, or pull requests. Respect HTTP errors: an API permission failure still follows the grant rules below, not a retry with ambient credentials. For writes, choose the endpoint and HTTP method matching the authorized action and send the JSON payload from a file with `--data-binary @file.json`.
 
 ## Failures and new access
 

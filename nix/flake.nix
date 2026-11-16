@@ -19,7 +19,7 @@
       inherit home-manager source;
     };
     lib.sources = { inherit nixpkgs devenv niteo-agents; };
-    lib.integrationTest = { source, system }:
-      import ./integration.nix { pkgs = import ./packages.nix { inherit nixpkgs nixpkgs-unstable system; }; inherit source; };
+    lib.integrationTest = { source, system, agentArchive ? null }:
+      import ./integration.nix { pkgs = import ./packages.nix { inherit nixpkgs nixpkgs-unstable system; }; inherit source agentArchive; };
   };
 }

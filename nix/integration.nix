@@ -1,8 +1,13 @@
-{ pkgs, source }:
+{ pkgs, source, agentArchive ? null }:
 let
   passlet = import ./test-package.nix { inherit pkgs source; };
-  # The Agent host runs the same build as the Linux release.
-  agent = passlet.overrideAttrs (_: { tags = [ "agentonly" ]; });
+  # The Agent host runs the same build as the Linux release, or the
+  # release archive itself when the Release workflow passes one in.
+  agent = if agentArchive == null then passlet.overrideAttrs (_: { tags = [ "agentonly" ]; })
+    else pkgs.runCommand "passlet-release-agent" { } ''
+      mkdir -p $out/bin
+      tar -xzf ${builtins.path { path = /. + agentArchive; name = "passlet-linux.tar.gz"; }} -C $out/bin passlet
+    '';
   fixture = "${passlet}/libexec/passlet-vm-fixture -test.run=^TestVMFixture$ -test.timeout=30m";
   keys = pkgs.runCommand "passlet-test-only-keys" { nativeBuildInputs = [ pkgs.openssh pkgs.openssl ]; } ''
     mkdir -p $out

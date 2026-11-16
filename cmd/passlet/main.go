@@ -20,6 +20,7 @@ import (
 var version = "dev"
 var errSetupRequiresMac = errors.New("github_setup_requires_Mac")
 var errGitHubAppNameTaken = errors.New("github_app_name_taken")
+var errApproverRequiresMac = errors.New("approver_requires_the_macOS_build_of_Passlet")
 
 func main() { // coverage-ignore: Process exit adapter; command behavior is tested through run and subprocess integration tests.
 	if err := run(); err != nil {
@@ -46,7 +47,7 @@ func runWithOverview(showOverview func(context.Context) error) (result error) {
 		if errors.Is(result, flag.ErrHelp) {
 			result = nil
 		}
-		if result != nil && (len(os.Args) > 1 && os.Args[1] == "doctor" ||
+		if result != nil && !errors.Is(result, errApproverRequiresMac) && (len(os.Args) > 1 && os.Args[1] == "doctor" ||
 			len(os.Args) > 2 && os.Args[1] == "approver" && os.Args[2] == "doctor") {
 			result = fmt.Errorf("%w\n\nReport issues at https://github.com/ParetoSecurity/passlet/issues/", result)
 		}

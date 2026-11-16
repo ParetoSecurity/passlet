@@ -9,6 +9,8 @@ Work from the Passlet repository. A release is installable only after the signed
 
 Creating or editing this skill does not authorize a release. For a readiness request, perform checks and report outstanding work. For a release request, establish the intended unused `vX.Y.Z` version and target commit. If publication is not already authorized, prepare the version, exact SHA, release notes, and check results before asking for approval. Do not publish, merge PRs, or activate someone's machine merely to test the workflow.
 
+Release execution requires Claude with working Claude-in-Chrome browser access so the same session can complete the announcements. Other agents may inspect release readiness or edit this skill, but must hand off release execution to Claude before preparing or publishing a release. Do not substitute another browser integration.
+
 ## Visible release checklist
 
 At the start of every release, show the user a checklist covering every checkbox in the numbered phases below, in order. Shorten the wording for readability, but keep each action, approval, and wait as a separate item. Track each announcement network separately. This conversation checklist is the release's progress record, not an edit to this skill.
@@ -32,6 +34,7 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 
 ## 1. Prepare the candidate
 
+- [ ] Confirm this is Claude with working `mcp__claude-in-chrome__*` tools. Call `tabs_context_mcp` with `createIfEmpty: true` to verify the browser connection before any release preparation. If Claude or the browser connection is unavailable, stop release execution and hand off the checklist to a Claude session with browser access.
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
 - [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Confirm it includes the intended Approver, Agent, and package definitions.

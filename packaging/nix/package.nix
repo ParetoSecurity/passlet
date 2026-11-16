@@ -9,10 +9,6 @@ in stdenvNoCC.mkDerivation {
   src = fetchurl { inherit (artifact) url sha256; };
   nativeBuildInputs = lib.optional stdenvNoCC.hostPlatform.isDarwin unzip;
   sourceRoot = ".";
-  # ditto archives contain AppleDouble metadata; it must not become app resources.
-  unpackPhase = lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
-    unzip -q "$src" -x '__MACOSX/*' '*/._*'
-  '';
   dontConfigure = true;
   dontBuild = true;
   dontFixup = true; # Rewriting Mach-O files invalidates the Developer ID signature.

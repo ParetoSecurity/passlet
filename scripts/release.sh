@@ -30,7 +30,7 @@ ditto -c -k --keepParent "$app" "$archive"
 for arch in amd64 arm64; do
     stage="build/release/linux-$arch"
     mkdir -p "$stage/skills/passlet" "$stage/docs"
-    GOOS=linux GOARCH="$arch" CGO_ENABLED=0 ./scripts/go.sh build -trimpath -ldflags "-s -w -X main.version=$PASSLET_VERSION" -o "$stage/passlet" ./cmd/passlet
+    GOOS=linux GOARCH="$arch" CGO_ENABLED=0 ./scripts/go.sh build -tags agentonly -trimpath -ldflags "-s -w -X main.version=$PASSLET_VERSION" -o "$stage/passlet" ./cmd/passlet
     cp skills/passlet/SKILL.md "$stage/skills/passlet/SKILL.md"
     cp README.md LICENSE "$stage/"
     cp docs/*.md "$stage/docs/"

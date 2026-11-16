@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package main
 
 import (

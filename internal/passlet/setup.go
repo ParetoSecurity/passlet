@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package passlet
 
 import (
@@ -13,7 +15,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -229,8 +230,6 @@ func randomURLToken() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
-
-var githubHandle = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 // GitHub limits app names to 34 characters, including our prefix.
 func GitHubAppName(handle string) (string, error) {

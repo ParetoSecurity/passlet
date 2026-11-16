@@ -16,7 +16,6 @@ import (
 	"io"
 	"math/big"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,40 +162,6 @@ func (p *Pairing) ServerConfig() *tls.Config {
 			return nil
 		},
 	}
-}
-
-func (p *Pairing) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS == nil {
-			apiError(w, 403, "agent_authentication_required")
-			return
-		}
-		key, err := peerKey(*r.TLS)
-		if err != nil {
-			apiError(w, 403, "agent_authentication_failed")
-			return
-		}
-		if p.confirm != nil && r.URL.Path == "/v1/pair" {
-			p.enroll(w, r)
-			return
-		}
-		agents := p.agents
-		if p.confirm != nil {
-			agents, err = PairingAgents()
-			if err != nil {
-				apiError(w, 503, "pairing state unavailable")
-				return
-			}
-		}
-		agent, ok := agents[keyID(key)]
-		if !ok {
-			apiError(w, 403, "agent_not_trusted")
-			return
-		}
-		caller := Caller{Transport: "paired", Name: agent, KeyID: keyID(key)}
-		ctx := context.WithValue(r.Context(), callerKey{}, caller)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }
 
 func pairedTLS(private ed25519.PrivateKey, approver ed25519.PublicKey) (*tls.Config, error) {

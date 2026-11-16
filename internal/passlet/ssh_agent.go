@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package passlet
 
 import (
@@ -7,18 +9,15 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"time"
 )
 
-const agentPacketLimit = 256 * 1024
-const agentFailure = 5
 const agentIdentities = 11
 const agentIdentitiesAnswer = 12
 const agentSign = 13
 const agentSignAnswer = 14
-
-func SSHAgentSocket() string { return filepath.Join(StateDir(), "ssh-agent.sock") }
 
 type agentIdentity struct{ blob, comment []byte }
 
@@ -43,31 +42,6 @@ func agentString(data *[]byte) ([]byte, error) {
 	value := (*data)[:size]
 	*data = (*data)[size:]
 	return value, nil
-}
-
-func appendAgentString(data, value []byte) []byte {
-	data = binary.BigEndian.AppendUint32(data, uint32(len(value)))
-	return append(data, value...)
-}
-
-func readAgentPacket(r io.Reader) ([]byte, error) {
-	var header [4]byte
-	if _, err := io.ReadFull(r, header[:]); err != nil {
-		return nil, err
-	}
-	size := binary.BigEndian.Uint32(header[:])
-	if size == 0 || size > agentPacketLimit {
-		return nil, errors.New("invalid SSH-agent packet size")
-	}
-	data := make([]byte, size)
-	_, err := io.ReadFull(r, data)
-	return data, err
-}
-
-func writeAgentPacket(w io.Writer, data []byte) error {
-	packet := appendAgentString(nil, data)
-	_, err := io.Copy(w, bytes.NewReader(packet))
-	return err
 }
 
 func agentRoundTrip(ctx context.Context, socket string, request []byte) ([]byte, error) {
@@ -175,4 +149,30 @@ func (f *SSHAgentForwarder) forward(ctx context.Context, id string, request []by
 		return nil, errors.New("invalid SSH agent signature")
 	}
 	return response, nil
+}
+
+func (f *SSHAgentForwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != "POST" || r.Header.Get("Origin") != "" {
+		apiError(w, 403, "invalid SSH-agent request")
+		return
+	}
+	caller, err := connectionIdentity(r.Context(), r.RemoteAddr)
+	if err != nil {
+		apiError(w, 403, "agent_authentication_required")
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, agentPacketLimit))
+	if err != nil {
+		apiError(w, 400, "SSH-agent request too large")
+		return
+	}
+	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
+	response, err := f.forward(r.Context(), caller.KeyID, data)
+	if err != nil {
+		apiError(w, 403, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	_, _ = w.Write(response)
 }

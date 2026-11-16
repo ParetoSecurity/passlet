@@ -1,3 +1,5 @@
+//go:build !agentonly
+
 package passlet
 
 // This entire fixture is compiled only by `go test -c` for NixOS VM tests.

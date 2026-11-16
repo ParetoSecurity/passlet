@@ -51,7 +51,6 @@ Three review rounds over `main` at d993394 (2026-11-01). Nothing below adds, rem
 
 - Release assets: the Linux tarballs and `*_SHA256SUMS` are unsigned and unattested (only the macOS zip is notarized). Add `actions/attest-build-provenance` for every asset, sign the checksum file (cosign keyless or minisign), and attach an SBOM (syft). The release job needs `id-token: write`.
 - Add CodeQL (Go, Swift, Python, Actions), OpenSSF Scorecard, and `dependency-review-action` on pull requests. Dependabot version PRs are disabled by `open-pull-requests-limit: 0`. Confirm Dependabot alerts and security updates remain enabled in repository settings.
-- Add `SECURITY.md` (reporting channel, supported versions) and enable private vulnerability reporting.
 - `NewGitHub()` builds an `http.Client` without a Transport, so the Mac-side GitHub client follows `HTTPS_PROXY`/`NO_PROXY` from the environment, while the agent client in `EndpointClient` explicitly sets `Proxy: nil`. Make the policy explicit on both and set `tls.Config{MinVersion: tls.VersionTLS13}` on both.
 - `OpenAudit` creates its directory with `MkdirAll(0700)` but skips the owner and mode check that `PrivateDir` applies to the socket directory. Reuse `PrivateDir`.
 - `release.yml` passes secrets on command lines (`security import -P`, `notarytool --password`), which are visible in the runner's process list. Use `notarytool store-credentials` with `--keychain-profile`. Document the remaining `security import` exposure if there is no alternative.

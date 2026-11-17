@@ -9,15 +9,13 @@ Work from the Passlet repository. A release is installable only after the signed
 
 Creating or editing this skill does not authorize a release. For a readiness request, perform checks and report outstanding work. For a release request, establish the intended unused `vX.Y.Z` version and target commit. If publication is not already authorized, prepare the version, exact SHA, release notes, and check results before asking for approval. Do not publish, merge PRs, or activate someone's machine merely to test the workflow.
 
-Release execution requires Claude with working Claude-in-Chrome browser access so the same session can complete the announcements. Other agents may inspect release readiness or edit this skill, but must hand off release execution to Claude before preparing or publishing a release. Do not substitute another browser integration.
-
 ## Visible release checklist
 
-At the start of every release, show the user a checklist covering every checkbox in the numbered phases below, in order. Shorten the wording for readability, but keep each action, approval, and wait as a separate item. Track each announcement network separately. This conversation checklist is the release's progress record, not an edit to this skill.
+At the start of every release, show the user a checklist covering every checkbox in the numbered phases below, in order. Shorten the wording for readability, but keep each action, approval, and wait as a separate item. This conversation checklist is the release's progress record, not an edit to this skill.
 
 Reprint the checklist as each item completes and whenever work starts waiting for CI, approval, or another blocker. Tick `[x]` only after verifying completion, with the relevant PR, workflow, release, or post URL as evidence. Keep running, awaiting approval, blocked, failed, and unperformed items unchecked and label their status. An existing authorization can satisfy an approval item without asking again, but starting a run never satisfies its completion item. If the candidate changes, reopen checks tied to the old SHA. Mark inapplicable items or explicit user skips with a reason instead of silently dropping them or claiming they passed.
 
-Keep the checklist and exact next action in handoffs and resume from verified progress. Publication alone does not finish the process: immediately draft announcements after availability verification and request approval. Until announcements are posted or explicitly skipped by the user, report “Release published; announcements pending” with the blocker. Finish with the full checklist and any remaining blockers, never a completion claim while required items remain unresolved.
+Keep the checklist and exact next action in handoffs and resume from verified progress. Finish with the full checklist and any remaining blockers, never a completion claim while required items remain unresolved.
 
 ## Sources and access
 
@@ -34,7 +32,6 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 
 ## 1. Prepare the candidate
 
-- [ ] Confirm this is Claude with working `mcp__claude-in-chrome__*` tools. Call `tabs_context_mcp` with `createIfEmpty: true` to verify the browser connection before any release preparation. If Claude or the browser connection is unavailable, stop release execution and hand off the checklist to a Claude session with browser access.
 - [ ] Inspect repository status, current releases, and `origin/main`. Preserve unrelated local work. Use an isolated checkout when needed.
 - [ ] Select an unused `vX.Y.Z` tag and record the full candidate SHA. Do not reuse a published version, move a release tag, or overwrite release assets.
 - [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Confirm it includes the intended Approver, Agent, and package definitions.
@@ -99,25 +96,8 @@ Include generated `docs/` files from `passlet-package-updates` alongside the pac
 - [ ] Confirm the final `github:ParetoSecurity/passlet/vX.Y.Z` input resolves to the same release version. Consumers may pin this tag and update their lock file. Do not activate user machines unless requested.
 - [ ] Wait for the documentation website rebuild to finish successfully and verify the published release labels.
 
-## 6. Announce and hand off
+## 6. Hand off
 
-- [ ] Draft the announcements as described below and show every post to the user.
-- [ ] Wait for announcement approval. Authorization to publish the release does not cover the announcement.
-- [ ] Post the approved Discord announcement and verify it, recording its URL.
-- [ ] Post the approved X announcement as ParetoSecurity and verify it, recording its URL.
-- [ ] Post the approved Bluesky announcement and verify it, recording its URL.
-- [ ] Post the approved LinkedIn announcement and verify it, recording its URL.
-- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, which announcements were posted, and any remaining blockers. Include the final checklist. Do not call the release complete before its package/plugin metadata and installation have been verified and announcements have been posted or explicitly skipped by the user.
+- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, and any remaining blockers. Include the final checklist. Do not call the release complete before its package/plugin metadata and installation have been verified.
 
 If work stops awaiting environment approval, metadata review, or manual validation, preserve those exact next steps.
-
-## Announce the release
-
-Drafting, approval, and posting follow the `socials-post` skill in the maintainer's socials checkout. Read `~/work/socials/.claude/skills/socials-post/SKILL.md` and follow it with this scope:
-
-- Brand: personal, posted from the maintainer's own accounts.
-- Networks: X (post as ParetoSecurity), Bluesky, LinkedIn, and Discord in https://discord.com/channels/1401988469252948108/1401988469835960474.
-- X: if another account is signed in, click the account `…` menu at the bottom left and select Pareto Security. This switch is authorized. Confirm @ParetoSecurity in the composer before typing.
-- Material: `docs/releases/vX.Y.Z.md` and https://github.com/ParetoSecurity/passlet/releases/tag/vX.Y.Z. The Discord post is `Passlet vX.Y.Z is out:` followed by that URL, a blank line, then the notes verbatim. Every other variant links to the release.
-
-If that file is missing, give the user the Discord text to post by hand and report the announcement as not posted. Do not look for another way to post.

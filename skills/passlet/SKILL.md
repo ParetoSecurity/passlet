@@ -1,9 +1,11 @@
 ---
 name: passlet
-description: Obtain scoped GitHub access through Passlet before using Git, gh, or the GitHub API against private repositories, reading PRs or issues, or pushing changes. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
+description: Obtain scoped credentials for private GitHub reads and authenticated operations, including all writes. Public read-only access needs no grant when performed anonymously. Request only the repositories and permissions needed, reuse approved grants, and never fall back to ambient credentials.
 ---
 
 # GitHub access through Passlet
+
+Read public repositories, files, issues and PRs anonymously without requesting a Passlet grant or GitHub App installation. Use a web tool or `curl --disable` over HTTPS without authorization headers or credentials. Anonymous Git reads must also disable credential helpers, authentication headers and configuration that could select ambient credentials or SSH. Do not use an already-authenticated `gh` session for anonymous reads. If a public read requires authentication, for example because of rate limits, use Passlet rather than ambient credentials. Private reads and all writes still require authenticated access through Passlet.
 
 Run Claude normally. Request GitHub access yourself when the task needs it. `passlet` must be on PATH. Local Mac agents use the default private Unix socket when `PASSLET_ENDPOINT` is unset. Remote agents use their own SSH-forwarded socket (for example `unix:///home/alice/.local/share/passlet/mac.sock`) or an explicitly configured Tailscale HTTPS origin. Never guess a teammate’s endpoint. Use `passlet doctor` to check the selected connection when troubleshooting is requested. On the Approver Mac, use `passlet approver doctor` to check the local service regardless of saved or environment-selected endpoints. It prompts for native approval on the Approver’s Mac, unlocks credentials, refreshes authorization when needed, and verifies GitHub identity without issuing an agent token. Tell the user to expect the prompt, and do not run it as an unattended preflight or retry loop. Every transport requires paired keys. The user pairs each Agent with the one-time command from `passlet approver pair` and approves with Touch ID. Do not initiate pairing or change trust as an automatic recovery step. Passlet generates missing private keys at runtime and exports public keys under `~/.local/share/passlet/`; see [pairing setup](../../docs/SETUP.md#pair-agents). Pairing identifies the trusted key, not the Claude or Codex executable. Other processes that can read the private key, including remote root, remain trusted. The user authenticates on the Mac, and only a scoped GitHub user token reaches this agent. Actions retain the user's GitHub attribution.
 
@@ -11,7 +13,7 @@ Use Passlet for authenticated GitHub operations. Do not use inherited PAT variab
 
 ## Request and reuse a grant
 
-Choose explicit `owner/repository` names and the minimum permissions needed:
+For operations that require authentication, choose explicit `owner/repository` names and the minimum permissions needed:
 
 | Operation | Permissions |
 | --- | --- |
@@ -87,6 +89,6 @@ For JSON endpoints, use `Accept: application/vnd.github+json` and parse the resp
 - `approver_busy`: do other work; do not poll or repeatedly request approval.
 - Expired grant: explain that a new approval is needed and make a fresh explicit request for the still-needed scope. Never reuse or expose the expired token, and never implement a background renewal loop.
 - GitHub denies an operation: do not assume it needs write access. Check the requested operation, granted scope recorded in your session, and repository installation. Name the specifically missing permission, request a grant for exactly that, and finish the operation yourself. Never ask the user to check GitHub by hand because the current grant cannot. Do not broaden access automatically to make an error disappear.
-- Repository not installed: ask the user to add that repository to the GitHub App installation. If they cannot, for example a third-party repository they do not administer, tell them that Git over SSH works through the SSH agent Passlet forwards from their Mac, and use an SSH remote for that repository only when they choose it. Do not request access to a different repository as a workaround.
+- Repository not installed: public read-only work can proceed anonymously without installation. For work that requires authentication, ask the user to add that repository to the GitHub App installation. If they cannot, for example a third-party repository they do not administer, tell them that Git over SSH works through the SSH agent Passlet forwards from their Mac, and use an SSH remote for that repository only when they choose it. Do not request access to a different repository as a workaround.
 
 Repository-listing endpoints can expose metadata beyond the scoped repositories. A listing is not proof of content access. Validate access through the intended operation rather than probing unrelated repositories.

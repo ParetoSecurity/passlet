@@ -262,3 +262,11 @@ Every request uses the Agent's paired identity, which is checked again before re
 The Linux server must already allow the corresponding SSH public key for sudo. On NixOS, enable `security.pam.sshAgentAuth.enable = true;` and manage the user's authorized keys through the system configuration. Keep the trusted public-key files under administrator control. Set `SSH_AUTH_SOCK` to the proxy socket in the Rex shell, then use ordinary `sudo` commands. PAM sends a fresh challenge through Passlet and verifies the SSH agent's signature, rather than trusting a boolean approval response from the socket.
 
 SSH-agent forwarding permits general SSH signing, not a particular sudo command. Processes running as your Unix user, and root, may access the proxy. Your SSH agent's approval/caching policy still applies. Disabling forwarding does not invalidate sudo's authentication cache, established SSH sessions, or already delivered signatures. Set sudo's `timestamp_timeout` to zero if every invocation must authenticate anew. This does not protect a server from an attacker who already controls root.
+
+## Approval status in Superlogical Rex
+
+Passlet integrates with Superlogical Rex to show when a request is waiting for access approval. Run `passlet request` in a Rex terminal as usual. While it waits, Rex receives a permission status containing the repository, organization, or account and requested permissions. For multiple repositories, the status summarizes the first repository and remaining count. Review the full scope in Passlet's native approval prompt on your Mac.
+
+The status clears on success, denial, cancellation, timeout, or connection failure. Each request uses its own status record, leaving the coding agent's status intact. Reusing a saved grant with `passlet exec --grant` does not show an approval status.
+
+Passlet writes [OSC 7501 program status](https://www.superlogical.com/rex/docs/build/program-status) to `/dev/tty` when `REX_SESSION` is set, keeping stdout JSON and captured stderr free of escape sequences. If no controlling terminal is available, the request works without status. The bundled agent skill runs requests in a Rex split pane to provide a terminal when an agent captures its subprocess output. This does not require a background service or change approval or credential handling.

@@ -26,6 +26,7 @@ Passlet delivers a short-lived token the agent can use with Git and `gh`, even a
 | Local and remote agents | Connect through a local socket, SSH forwarding, or opt-in Tailscale HTTPS. |
 | macOS and Linux agents | Run your agents on macOS or Linux. |
 | Claude Code and Codex plugins | Let your agent request access and reuse approved grants through the bundled skill. |
+| Superlogical Rex integration | See which terminal is waiting for access approval, with the requested scope. |
 | SSH-agent forwarding | Let paired Agents use your Mac’s SSH agent with its normal signing approval, without a persistent tunnel. |
 | Work after approval | Use delivered tokens until expiry, even while your Mac is offline. |
 | Audit history | Inspect requests, decisions, scopes, and delivery outcomes without recording credentials. |

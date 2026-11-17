@@ -137,7 +137,7 @@ Example:
 			if err != nil {
 				return err
 			}
-			grant, err = passlet.RequestGrant(ctx, endpoint, requested)
+			grant, err = requestGrantWithStatus(ctx, endpoint, requested, rexTerminal())
 			if err != nil {
 				return err
 			}

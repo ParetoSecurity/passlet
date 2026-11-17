@@ -41,6 +41,19 @@ printf 'Grant path: %s\n' "$passlet_dir/grant.json"
 
 Replace the example repository and permissions with the task's actual scope. Check that the request succeeded before using the file. `--out` creates a new mode-0600 file and refuses overwrites. Never omit `--out`: otherwise the token JSON goes to stdout and into your transcript.
 
+### Requests inside Superlogical Rex
+
+When running inside Rex, run the request in a split pane so its approval status reaches Rex even when the coding agent captures command output. Use the Rex skill (`rex skill show` if unavailable) to verify the current session and pane, then use their IDs explicitly. Inherited `REX_SESSION` and `REX_BLOCK` can be stale after resuming an agent, so do not select an unrelated session when they cannot be resolved.
+
+Create the private grant directory first, then run the request with the same explicit scope and concrete `--out` path:
+
+```sh
+rex split -s "$REX_SESSION" -b "$REX_BLOCK" --focus=false --keep-open --label 'Passlet approval' --json -- \
+  passlet request --repos acme/project --permissions contents:read --out /concrete/private/path/grant.json
+```
+
+Use the returned new pane ID to check its process and capture the receipt. Allow at least 130 seconds for the request, without retrying it. Rex marks the request as waiting for permission and clears that status when it finishes. Check successful exit and the saved grant before using it. Keep approval in Passlet's existing native prompt. If an explicit endpoint override is needed, pass `--endpoint` to the request because the new pane may not inherit the agent's environment. After recording the receipt and grant path, close only the pane you created. If Rex is unavailable, use the ordinary request command, which still works without terminal status.
+
 Keep the concrete grant path, approved scope, and expiry in your session context and handoff summaries so later prompts can reuse it. Check for a suitable retained grant before requesting another. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
 
 Run each authenticated command through the grant:

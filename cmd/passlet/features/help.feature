@@ -37,33 +37,42 @@ Feature: Show command help
       When I run `passlet exec --help`
       Then the terminal shows:
         """
-        Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+        Run a command with scoped GitHub access. Reuse a matching cached grant or request approval on a cache miss. Use --grant with a saved file or Bash/Zsh process substitution to run without requesting approval. Put the command after --.
 
         Example:
-          passlet request --repos alice/repo --permissions contents:read --out grant.json
-          passlet exec --grant grant.json -- gh repo view alice/repo
+          passlet exec --repos alice/repo --permissions contents:read -- gh repo view alice/repo
 
         Usage of exec:
+          --account string
+                account-wide permission target (exclusive with --repos/--org)
           --grant string
-                grant JSON file or process-substitution path (required)
+                grant JSON file or process-substitution path (exclusive with scope options)
+          --org string
+                organization-wide permission target (exclusive with --repos/--account)
+          --permissions string
+                comma-separated permission:read|write|admin list
+          --repos string
+                comma-separated owner/repository list
         """
 
     Scenario: Show request help
       When I run `passlet request --help`
       Then the terminal shows:
         """
-        Request scoped access from your Approver. After approval, print the grant as JSON or save it with --out for later use with `passlet exec`.
+        Reuse scoped access from this Agent's private file cache, or request approval from your Approver. Print only a receipt by default. Use --stdout for grant JSON or --out for a private file for use with `passlet exec`.
 
-        Save and use a grant:
-          passlet request --repos alice/repo --permissions contents:read --out grant.json
-          passlet exec --grant grant.json -- gh repo view alice/repo
+        Request and use cached access:
+          passlet request --repos alice/repo --permissions contents:read
+          passlet exec --repos alice/repo --permissions contents:read -- gh repo view alice/repo
 
-        One-time grant use directly with exec (Bash/Zsh):
-          passlet exec --grant <(passlet request --repos alice/repo --permissions contents:read) -- gh repo view alice/repo
+        Fresh approval without cache lookup or storage (Bash/Zsh):
+          passlet exec --grant <(passlet request --no-cache --stdout --repos alice/repo --permissions contents:read) -- gh repo view alice/repo
 
         Usage of request:
           --account string
                 account-wide permission target (exclusive with --repos/--org)
+          --no-cache
+                bypass cache lookup and storage, requiring fresh approval on every call
           --org string
                 organization-wide permission target (exclusive with --repos/--account)
           --out string
@@ -72,6 +81,8 @@ Feature: Show command help
                 comma-separated permission:read|write|admin list
           --repos string
                 comma-separated owner/repository list
+          --stdout
+                write grant JSON to stdout
         """
 
   Rule: Approver commands

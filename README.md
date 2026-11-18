@@ -102,35 +102,34 @@ Run `passlet approver pair` on your Mac, then copy its `passlet pair` command to
 
 ## Request and use access
 
-Ask for the minimum scope needed. Keep grant contents out of terminal transcripts:
+Run commands with the minimum scope needed. Passlet reuses cached access or requests approval:
 
 ```sh
-passlet_dir=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/passlet.XXXXXX")
-chmod 700 "$passlet_dir"
-passlet request \
-  --repos acme/project \
-  --permissions contents:write,pull_requests:write \
-  --out "$passlet_dir/grant.json"
-
-passlet exec --grant "$passlet_dir/grant.json" -- \
-  git clone https://github.com/acme/project.git
-passlet exec --grant "$passlet_dir/grant.json" -- \
-  gh pr list --repo acme/project
-```
-
-The receipt reports user and actual expiry without printing the token. Use `--out` when saving a grant for reuse. Without it, JSON containing the token goes to stdout and should be passed directly to `exec` rather than printed to the terminal. The new grant file is mode 0600 and cannot overwrite another file. Remove it when finished; deleting it does not revoke the token.
-
-For one-off commands in Bash or Zsh, use process substitution to pass the grant without saving a file:
-
-```sh
-passlet exec \
-  --grant <(passlet request --repos acme/project --permissions contents:read) \
+passlet exec --repos acme/project --permissions contents:read \
   -- gh repo view acme/project
 ```
 
-The grant travels through a separate pipe, leaving the child command's standard input available for interactive use or piped data. `request` owns the scope and endpoint options. `exec` requires `--grant` and never requests approval itself.
+Scoped `exec` and `request` automatically save approved grants in a private file cache on this Agent machine. Later sessions reuse the narrowest matching grant with at least one minute remaining, including while the Approver is offline. Grants are separated by Agent key, Approver key, and endpoint. Repository requests can reuse organization or account grants for the same owner when the granted permissions cover the request. Matching repository grants are preferred. A broader matching grant keeps its original scope and expiry, it is not narrowed or renewed. Requests without a matching grant require approval.
 
-Use HTTPS Git remotes. `exec --grant` uses the delivered token without contacting the Mac, overrides ambient Git/gh credentials for the child, and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
+The cache lives at `~/.local/share/passlet/grants`, with mode 0700 on the directory and mode 0600 on its files. Passlet checks ownership and rejects shared files, symlinks, and hard links. Atomic writes prevent partial reads, and locking prevents duplicate approvals from simultaneous sessions. Each paired identity and endpoint retains at most 128 grants. Expired grants are ignored and removed when the cache is updated. Grants survive command exits, upgrades, and machine restarts, but retain their original expiry.
+
+Cache files contain plaintext tokens. Other ordinary OS users cannot read them, but processes under your user and root remain trusted. Backups and snapshots may retain copies. To discard cached access, finish active requests and remove the `.json` files from the cache directory. Leave its `.lock` files in place so concurrent requests continue using the same locks. Deleting files does not revoke issued tokens. Clear cached grants after changing GitHub accounts on the Approver.
+
+For fresh approval without cache lookup or storage, use `--no-cache --stdout` with Bash or Zsh process substitution:
+
+```sh
+passlet exec \
+  --grant <(passlet request --no-cache --stdout --repos acme/project --permissions contents:read) \
+  -- gh repo view acme/project
+```
+
+`--no-cache` never reads, writes, or creates the cache, even if a matching grant exists. It does not remove grants already cached. The grant travels through a separate pipe, leaving the child command's standard input available. It still exists transiently in process memory and in the launched command's environment. This avoids Passlet retaining the grant, but does not make it single-use or isolate processes under the same user. One invocation can run a script containing multiple commands. OS swap or crash dumps may persist process memory.
+
+`request` prints only a receipt on stderr by default, reporting the user and original expiry without the token. Use `--stdout` to explicitly emit grant JSON for piping, or `--out /private/path/grant.json` to create a mode-0600 file without overwriting an existing file. These output options are mutually exclusive. `--no-cache` requires one of them and leaves existing cached grants untouched.
+
+After a scoped command fails, Passlet checks its token with GitHub. A 401 response removes that token from the cache, so the next scoped invocation can obtain and cache fresh approval. Other responses and network failures leave the cache unchanged. Passlet does not replay failed commands, and successful commands need no extra token check. Saved and piped grants bypass this cache recovery.
+
+`exec` accepts the same scope and endpoint options to reuse a cached grant or request approval and cache the result. Denied approval or an unavailable Approver prevents the command from starting. Alternatively, use `exec --grant /private/path/grant.json -- COMMAND` with a saved or piped grant without requesting approval. `--grant` cannot be combined with scope options. Use HTTPS Git remotes. `exec` overrides ambient Git/gh credentials for the child and does not save the token in Git configuration. Tokens typically expire in eight hours, as set by GitHub. Parent tokens, refresh tokens, and client secrets never go to the agent.
 
 ## Tailscale, explicitly opt-in
 
@@ -199,7 +198,7 @@ passlet approver audit --limit 20
 - Requests infer the app label from `CLAUDECODE=1` (Claude) or a nonempty `CODEX_THREAD_ID` (Codex). Missing or conflicting markers display “Shell”. Inference happens on the Agent machine for both `request` and `exec` when requesting access. This label is unverified and does not authenticate the requesting app. The Approver determines the device or socket route separately.
 - A socket connection proves access to the socket, not that Claude initiated it. SSH labels identify the configured socket route, not an authenticated remote host or process. A process running as your Mac user or root can access every route socket. Other processes in the same account can request approval and read that account's delivered grants. Remote root is trusted and can access Alice or Bob's sockets. Prompts describe socket callers honestly.
 - Tailscale identifies a node, not a process or remote Unix account. On a shared host, use separate SSH-forwarded sockets for each user's Mac. The private Tailscale socket trusts Tailscale and processes with access to the same Unix account.
-- Every request requires native user presence. There are no queues, automatic request retries, client pairing, session keys, unattended approvals, or early revocation.
+- Issuing a new grant requires native user presence. Cache hits reuse an existing approval, without contacting the Approver. Concurrent cache misses wait for the current request to finish so they can reuse its grant. Cache hits remain available during approval. There are no automatic approval retries or unattended renewals.
 - If the Mac is offline, continue work requiring no new credential. Bring it online and make a new explicit request when ready. The connection timeout is 5 seconds, server deadline 120 seconds, and client timeout 130 seconds. Timeout or disconnect cancels pending authentication.
 - Tokens are bearer credentials. Anyone who obtains one can use its granted access until expiry. Effective access is constrained by the requested scope, app permissions/installation, and the author's GitHub access. Some GitHub listing endpoints expose metadata beyond the scoped content repositories.
 - Requests accept one repository owner, at most three repositories and eight permissions, with bounded prompt text. No caller-provided description or requested TTL is accepted.

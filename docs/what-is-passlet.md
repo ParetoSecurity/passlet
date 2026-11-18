@@ -13,7 +13,7 @@ Agent and Approver authenticate each other using paired keys. They can connect l
 
 The agent receives an expiring GitHub token scoped to the requested repositories and permissions. GitHub operations retain your user attribution. Once delivered, the token can be used until it expires, even if your Mac goes offline.
 
-Each new credential request needs your approval. Passlet does not provide unattended approval or grant GitHub access you do not already have.
+Issuing a new credential needs your approval. Sessions under the same OS user can reuse an unexpired grant from the Agent’s private file cache, including while the Approver is offline. Use `request --no-cache` to bypass cache lookup and storage. Passlet does not provide unattended approval or grant GitHub access you do not already have.
 
 ## Get started
 

@@ -64,10 +64,12 @@ func TestCommandValidation(t *testing.T) {
 		{"old audit command", []string{"audit"}, "unknown command"},
 		{"unknown approver command", []string{"approver", "unknown"}, "unknown approver command"},
 		{"unknown github action", []string{"approver", "github", "unknown"}, "usage:"},
+		{"conflicting outputs", []string{"request", "--out", "unused", "--stdout"}, "mutually exclusive"},
+		{"no cache without output", []string{"request", "--no-cache"}, "requires --stdout or --out"},
 		{"malformed permission", []string{"request", "--permissions", "contents"}, "permissions must be"},
 		{"duplicate permission", []string{"request", "--permissions", "contents:read,contents:write"}, "duplicate_permission"},
 		{"request cannot use grant", []string{"request", "--grant", "/unused"}, "flag provided but not defined"},
-		{"grant excludes scope", []string{"exec", "--grant", "/unused", "--repos", "alice/repo"}, "flag provided but not defined"},
+		{"grant excludes scope", []string{"exec", "--grant", "/unused", "--repos", "alice/repo"}, "mutually exclusive"},
 		{"grant required", []string{"exec", "--", "/bin/true"}, "exec requires --grant"},
 		{"missing grant", []string{"exec", "--grant", filepath.Join(t.TempDir(), "missing")}, "no such file"},
 		{"invalid request endpoint", []string{"request", "--endpoint", "http://invalid", "--repos", "alice/repo", "--permissions", "contents:read"}, "endpoint"},
@@ -175,7 +177,7 @@ func TestRequestWritesPrivateGrantWithoutOverwriting(t *testing.T) {
 	if string(after) != string(original) {
 		t.Fatal("existing grant overwritten")
 	}
-	output, err := invokeCLI(t, "", args[:len(args)-2]...)
+	output, err := invokeCLI(t, "", append(args[:len(args)-2:len(args)-2], "--stdout")...)
 	if err != nil || json.Unmarshal([]byte(output), &grant) != nil || grant.Token != "fixture-child" {
 		t.Fatalf("grant stdout: %q %v", output, err)
 	}

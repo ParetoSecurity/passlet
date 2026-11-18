@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -131,7 +132,7 @@ func TestExecProcessSubstitutionPreservesStdin(t *testing.T) {
 		t.Run(permissions, func(t *testing.T) {
 			cli := fixture(t)
 			cmd := exec.Command("bash", "--noprofile", "--norc", "-c", `
-"$1" exec --grant <("$1" request --repos alice/repo --permissions "$2") -- /bin/sh -c '
+"$1" exec --grant <("$1" request --stdout --repos alice/repo --permissions "$2") -- /bin/sh -c '
   test "$GH_TOKEN" = fixture-token || exit 9
   printf "child started\n"
   cat
@@ -194,6 +195,127 @@ func TestExecPreservesProxyAuthenticationWithoutCredentials(t *testing.T) {
 			output, err := cmd.Output()
 			if err != nil || !strings.HasPrefix(string(output), tc.want+"\n") || !strings.Contains(string(output), "password=scoped-test-child") || strings.Contains(string(output), "unrelated-parent") || strings.Contains(string(output), "fixture-secret") {
 				t.Fatalf("proxy/credential isolation: %q %v", output, err)
+			}
+		})
+	}
+}
+
+func TestRequestNoCacheSkipsReadingAndUpdatingCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PASSLET_ENDPOINT", endpointTestServer(t))
+	args := []string{"request", "--repos", "alice/repo", "--permissions", "contents:read"}
+	if output, err := invokeCLI(t, "", args...); err != nil || output != "" {
+		t.Fatal("default request must not print grant JSON", err)
+	}
+	files, err := filepath.Glob(filepath.Join(passlet.GrantCacheDir(), "*.json"))
+	if err != nil || len(files) != 1 {
+		t.Fatal("expected one cache file", err)
+	}
+	before, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(files[0], 0000)
+	defer os.Chmod(files[0], 0600)
+	output, err := invokeCLI(t, "", append(args, "--no-cache", "--stdout")...)
+	if err != nil {
+		t.Fatal("bypass tried to read an inaccessible cache", err)
+	}
+	var grant passlet.Grant
+	if json.Unmarshal([]byte(output), &grant) != nil || grant.Token != "fixture-token" {
+		t.Fatal("invalid uncached grant")
+	}
+	info, err := os.Stat(files[0])
+	if err != nil || info.Mode().Perm() != 0 {
+		t.Fatal("bypass replaced the cache", err)
+	}
+	os.Chmod(files[0], 0600)
+	after, err := os.ReadFile(files[0])
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("bypass changed the cache", err)
+	}
+}
+
+func TestExecRequestsAndReusesScope(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PASSLET_ENDPOINT", endpointTestServer(t))
+	execute := []string{"exec", "--repos", "alice/repo", "--permissions", "contents:read", "--", "true"}
+	if _, err := invokeCLI(t, "", execute[:len(execute)-2]...); err == nil || !strings.Contains(err.Error(), "exec requires") {
+		t.Fatal("missing command accepted", err)
+	}
+	for range 2 {
+		if output, err := invokeCLI(t, "", execute...); err != nil || output != "" {
+			t.Fatal("scoped execution", err)
+		}
+	}
+}
+
+type grantCheckTransport func(*http.Request) (*http.Response, error)
+
+func (f grantCheckTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestFailedScopedExecDiscardsRejectedGrant(t *testing.T) {
+	for _, mode := range []string{"rejected", "valid", "cache failure"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("PASSLET_ENDPOINT", endpointTestServer(t))
+			previous := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = previous })
+			checks := 0
+			http.DefaultTransport = grantCheckTransport(func(r *http.Request) (*http.Response, error) {
+				checks++
+				status := 401
+				if mode == "valid" {
+					status = 200
+				}
+				if mode == "cache failure" {
+					os.Chmod(passlet.GrantCacheDir(), 0755)
+				}
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})
+			args := []string{"exec", "--repos", "alice/repo", "--permissions", "contents:read", "--", "/bin/sh", "-c", "printf attempted; exit 7"}
+			output, err := invokeCLI(t, "", args...)
+			if err == nil || !strings.Contains(err.Error(), "command_failed") || output != "attempted" || checks != 1 {
+				t.Fatal("failed command was retried or not checked", err, checks)
+			}
+			if mode == "cache failure" {
+				if !strings.Contains(err.Error(), "grant_cache_update_failed") {
+					t.Fatal("cache error hidden", err)
+				}
+				return
+			}
+			files, err := filepath.Glob(filepath.Join(passlet.GrantCacheDir(), "*.json"))
+			if err != nil || len(files) != 1 {
+				t.Fatal("cache file missing", err)
+			}
+			data, err := os.ReadFile(files[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			var grants []passlet.Grant
+			if err := json.Unmarshal(data, &grants); err != nil {
+				t.Fatal(err)
+			}
+			want := 0
+			if mode == "valid" {
+				want = 1
+			}
+			if len(grants) != want {
+				t.Fatal("incorrect cached grants")
+			}
+			args[len(args)-1] = "true"
+			if _, err := invokeCLI(t, "", args...); err != nil {
+				t.Fatal("ordinary retry failed", err)
+			}
+			if checks != 1 {
+				t.Fatal("successful command checked token")
+			}
+			data, err = os.ReadFile(files[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if json.Unmarshal(data, &grants) != nil || len(grants) != 1 {
+				t.Fatal("retry did not cache approval")
 			}
 		})
 	}

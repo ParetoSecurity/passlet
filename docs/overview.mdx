@@ -61,7 +61,9 @@ The connection between Agent and Approver uses paired keys. It can run over a lo
 
 ### Access after disconnection
 
-Delivered tokens continue working until they expire. New requests require Approver to be online and your approval. Passlet does not queue requests or approve them unattended.
+<AddedIn version="unreleased" />
+
+Delivered tokens continue working until they expire. Sessions under the same OS user can reuse matching grants from the Agent’s private file cache while Approver is offline. Issuing a new token requires Approver to be online and your approval. Use `request --no-cache` to bypass cache lookup and storage. Passlet does not approve new tokens unattended.
 
 </details>
 

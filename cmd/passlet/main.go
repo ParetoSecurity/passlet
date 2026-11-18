@@ -74,41 +74,52 @@ func runWithOverview(showOverview func(context.Context) error) (result error) {
 	case "approver":
 		return approverCommand(ctx, os.Args[2:], showOverview)
 	case "request", "exec":
-		description := `Request scoped access from your Approver. After approval, print the grant as JSON or save it with --out for later use with ` + "`passlet exec`" + `.
+		description := `Reuse scoped access from this Agent's private file cache, or request approval from your Approver. Print only a receipt by default. Use --stdout for grant JSON or --out for a private file for use with ` + "`passlet exec`" + `.
 
-Save and use a grant:
-  passlet request --repos alice/repo --permissions contents:read --out grant.json
-  passlet exec --grant grant.json -- gh repo view alice/repo
+Request and use cached access:
+  passlet request --repos alice/repo --permissions contents:read
+  passlet exec --repos alice/repo --permissions contents:read -- gh repo view alice/repo
 
-One-time grant use directly with exec (Bash/Zsh):
-  passlet exec --grant <(passlet request --repos alice/repo --permissions contents:read) -- gh repo view alice/repo`
+Fresh approval without cache lookup or storage (Bash/Zsh):
+  passlet exec --grant <(passlet request --no-cache --stdout --repos alice/repo --permissions contents:read) -- gh repo view alice/repo`
 		if os.Args[1] == "exec" {
-			description = `Run a command with an approved GitHub grant. Use --grant with a saved file or Bash/Zsh process substitution. Put the command after --.
+			description = `Run a command with scoped GitHub access. Reuse a matching cached grant or request approval on a cache miss. Use --grant with a saved file or Bash/Zsh process substitution to run without requesting approval. Put the command after --.
 
 Example:
-  passlet request --repos alice/repo --permissions contents:read --out grant.json
-  passlet exec --grant grant.json -- gh repo view alice/repo`
+  passlet exec --repos alice/repo --permissions contents:read -- gh repo view alice/repo`
 		}
 		fs := commandFlags(os.Args[1], description, "endpoint")
 		var endpoint, repos, org, account, perms, out, grantFile string
+		var noCache, stdout bool
+		fs.StringVar(&endpoint, "endpoint", "", "override the environment, saved endpoint, or default local socket")
+		fs.StringVar(&repos, "repos", "", "comma-separated owner/repository list")
+		fs.StringVar(&org, "org", "", "organization-wide permission target (exclusive with --repos/--account)")
+		fs.StringVar(&account, "account", "", "account-wide permission target (exclusive with --repos/--org)")
+		fs.StringVar(&perms, "permissions", "", "comma-separated permission:read|write|admin list")
 		if os.Args[1] == "request" {
-			fs.StringVar(&endpoint, "endpoint", "", "override the environment, saved endpoint, or default local socket")
-			fs.StringVar(&repos, "repos", "", "comma-separated owner/repository list")
-			fs.StringVar(&org, "org", "", "organization-wide permission target (exclusive with --repos/--account)")
-			fs.StringVar(&account, "account", "", "account-wide permission target (exclusive with --repos/--org)")
-			fs.StringVar(&perms, "permissions", "", "comma-separated permission:read|write|admin list")
+			fs.BoolVar(&noCache, "no-cache", false, "bypass cache lookup and storage, requiring fresh approval on every call")
+			fs.BoolVar(&stdout, "stdout", false, "write grant JSON to stdout")
 			fs.StringVar(&out, "out", "", "write grant JSON to a new mode-0600 file")
 		} else {
-			fs.StringVar(&grantFile, "grant", "", "grant JSON file or process-substitution path (required)")
+			fs.StringVar(&grantFile, "grant", "", "grant JSON file or process-substitution path (exclusive with scope options)")
 		}
 		if err := fs.Parse(os.Args[2:]); err != nil {
 			return err
 		}
+		if stdout && out != "" {
+			return errors.New("--stdout and --out are mutually exclusive")
+		}
+		if noCache && !stdout && out == "" {
+			return errors.New("--no-cache requires --stdout or --out")
+		}
+		if grantFile != "" && (repos != "" || org != "" || account != "" || perms != "" || endpoint != "") {
+			return errors.New("--grant and scope options are mutually exclusive")
+		}
+		if os.Args[1] == "exec" && grantFile == "" && repos == "" && org == "" && account == "" {
+			return errors.New("exec requires --grant or scope options")
+		}
 		var grant passlet.Grant
-		if os.Args[1] == "exec" {
-			if grantFile == "" {
-				return errors.New("exec requires --grant")
-			}
+		if grantFile != "" {
 			f, err := os.Open(grantFile)
 			if err != nil {
 				return err
@@ -137,7 +148,14 @@ Example:
 			if err != nil {
 				return err
 			}
-			grant, err = passlet.RequestGrant(ctx, endpoint, requested)
+			if os.Args[1] == "exec" && len(fs.Args()) == 0 {
+				return errors.New("exec requires -- COMMAND [ARGS]")
+			}
+			if noCache {
+				grant, err = passlet.RequestGrant(ctx, endpoint, requested)
+			} else {
+				grant, err = passlet.RequestCachedGrant(ctx, endpoint, requested)
+			}
 			if err != nil {
 				return err
 			}
@@ -152,7 +170,10 @@ Example:
 				defer func() { _ = f.Close() }()
 				return json.NewEncoder(f).Encode(grant)
 			}
-			return json.NewEncoder(os.Stdout).Encode(grant)
+			if stdout {
+				return json.NewEncoder(os.Stdout).Encode(grant)
+			}
+			return nil
 		}
 		args := fs.Args()
 		if len(args) == 0 {
@@ -199,6 +220,12 @@ Example:
 		}
 		cmd.Env = env
 		if err = cmd.Run(); err != nil {
+			var exited *exec.ExitError
+			if grantFile == "" && errors.As(err, &exited) && ctx.Err() == nil {
+				if cacheErr := passlet.DiscardRejectedGrant(ctx, endpoint, grant); cacheErr != nil {
+					return fmt.Errorf("command_failed: grant_cache_update_failed: %w", cacheErr)
+				}
+			}
 			return errors.New("command_failed")
 		}
 		return nil

@@ -243,7 +243,7 @@ in pkgs.testers.runNixOSTest {
         doctor(hetzner, "alice")
 
     def request(user, repo, name, permission="write"):
-        return as_user(user, f"passlet request --endpoint unix:///home/{user}/.local/share/passlet/mac.sock --repos acme/{repo} --permissions contents:{permission} --out /home/{user}/.local/share/passlet/{name}.json")
+        return as_user(user, f"passlet request --no-cache --endpoint unix:///home/{user}/.local/share/passlet/mac.sock --repos acme/{repo} --permissions contents:{permission} --out /home/{user}/.local/share/passlet/{name}.json")
 
     def execute(user, grant, command):
         return as_user(user, f"passlet exec --grant /home/{user}/.local/share/passlet/{grant}.json -- {command}")

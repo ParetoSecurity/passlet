@@ -60,7 +60,7 @@ Ask your coding agent to use Passlet to read a repository you can access, naming
 
 > Use Passlet to request contents:read access to your-account/your-repository, then show me its README.
 
-Review the repository and requested permissions in the prompt on your Mac, then approve with Touch ID. The agent can use the resulting token to complete the task.
+Review the repository and requested permissions in the prompt on your Mac, then approve with Touch ID. The agent can use the resulting token to complete the task. Later sessions under the same OS user reuse matching unexpired grants from the Agent’s private file cache. See the [FAQ](faq.md) for piping with `--no-cache` when you want fresh approval without retaining the grant.
 
 ## Use a remote Agent
 

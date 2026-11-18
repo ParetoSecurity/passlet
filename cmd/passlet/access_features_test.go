@@ -212,6 +212,7 @@ cat
 				}
 				return os.WriteFile(grantPath, data, 0600)
 			})
+			s.Step(`^the command succeeds$`, func() error { return commandErr })
 			s.Step(`^the command fails without starting check-access$`, func() error {
 				expectedFailure = true
 				if commandErr == nil || output != "" {
@@ -219,6 +220,12 @@ cat
 				}
 				if _, err := os.Stat(filepath.Join(dir, "child-started")); !os.IsNotExist(err) {
 					return fmt.Errorf("command started or marker could not be checked: %v", err)
+				}
+				return nil
+			})
+			s.Step(`^no grant cache is created$`, func() error {
+				if _, err := os.Stat(passlet.GrantCacheDir()); !os.IsNotExist(err) {
+					return fmt.Errorf("unexpected grant cache: %v", err)
 				}
 				return nil
 			})

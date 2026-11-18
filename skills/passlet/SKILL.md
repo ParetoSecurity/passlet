@@ -1,17 +1,20 @@
 ---
 name: passlet
-description: Obtain scoped GitHub access through Passlet before using Git, gh, or the GitHub API against private repositories, reading PRs or issues, or pushing changes. Request only the repositories and permissions needed, reuse approved grants, and handle an unavailable Mac without falling back to ambient credentials.
+description: Use Passlet for authenticated GitHub operations through Git, gh, or the GitHub API. Reuse approved access, request only the scope needed, and recover from transient failures without interrupting the task.
 ---
 
 # GitHub access through Passlet
 
-Run Claude normally. Request GitHub access yourself when the task needs it. `passlet` must be on PATH. Local Mac agents use the default private Unix socket when `PASSLET_ENDPOINT` is unset. Remote agents use their own SSH-forwarded socket (for example `unix:///home/alice/.local/share/passlet/mac.sock`) or an explicitly configured Tailscale HTTPS origin. Never guess a teammate’s endpoint. Use `passlet doctor` to check the selected connection when troubleshooting is requested. On the Approver Mac, use `passlet approver doctor` to check the local service regardless of saved or environment-selected endpoints. It prompts for native approval on the Approver’s Mac, unlocks credentials, refreshes authorization when needed, and verifies GitHub identity without issuing an agent token. Tell the user to expect the prompt, and do not run it as an unattended preflight or retry loop. Every transport requires paired keys. The user pairs each Agent with the one-time command from `passlet approver pair` and approves with Touch ID. Do not initiate pairing or change trust as an automatic recovery step. Passlet generates missing private keys at runtime and exports public keys under `~/.local/share/passlet/`; see [pairing setup](../../docs/SETUP.md#pair-agents). Pairing identifies the trusted key, not the Claude or Codex executable. Other processes that can read the private key, including remote root, remain trusted. The user authenticates on the Mac, and only a scoped GitHub user token reaches this agent. Actions retain the user's GitHub attribution.
+Public repository reads do not need Passlet. Use unauthenticated HTTPS access for those reads, without ambient tokens or credential helpers. Use Passlet for private repository reads, writes, or any operation that requires authentication. Let its approval prompt handle consent, without a separate explanation or confirmation in chat. Local Git operations need no grant. A grant authorizes access, not unrelated changes.
 
-Use Passlet for authenticated GitHub operations. Do not use inherited PAT variables, cached SSH-session tokens, `gh auth login`, SSH Git remotes, or other credentials as a fallback. The one exception is a repository the user cannot install the GitHub App on, described below. Local Git operations need no grant. Existing task authorization still determines which changes you may make; receiving a token does not authorize unrelated writes.
+## Run the command
 
-## Request and reuse a grant
+```sh
+passlet exec --repos acme/project --permissions contents:read \
+  -- gh api repos/acme/project/contents
+```
 
-Choose explicit `owner/repository` names and the minimum permissions needed:
+Use the task's actual repositories and minimum permissions. Allow at least 130 seconds for approval. `exec` reuses matching cached access or requests approval when needed. No separate `request`, cache inspection, or diagnostic preflight is needed.
 
 | Operation | Permissions |
 | --- | --- |
@@ -21,50 +24,29 @@ Choose explicit `owner/repository` names and the minimum permissions needed:
 | Push a branch and create/update its PR | `contents:write,pull_requests:write` |
 | Read or update issues | `issues:read` or `issues:write` |
 | Inspect Actions runs | `actions:read` |
-| Read a commit's CI check results | `checks:read` |
+| Read CI check results | `checks:read` |
+| Administer a repository | `administration:write` |
 
-For administrative work, use `administration:write` with `--repos` for a repository. Organization permissions use `--org NAME` (for example `members:write`); account permissions use `--account HANDLE` (for example `git_ssh_keys:write`). These scope selectors are mutually exclusive. Organization/account grants are explicitly wider than a repository grant and include metadata read access to all installed repositories for that target. Never substitute an organization or account grant for a repository grant without explaining and obtaining approval for the wider scope. Use `--out` and reuse grants as below for every scope.
+Group repositories belonging to the same owner into one request, up to 100. Different owners need separate grants. Metadata read is included automatically. Use `--org NAME` for organization operations such as `members:write`, or `--account HANDLE` for account operations such as `git_ssh_keys:write`.
 
-Request additional permissions only when the task needs their specific operations. Passlet includes intrinsic `metadata:read`. Group explicit repositories belonging to the same owner into one request; different owners need separate grants. Requests accept up to 100 repositories, subject to transport size limits. Long approval lists end with "and X additional repositories"; the grant still contains the complete explicit list. Do not substitute organization-wide access for a list of repositories. Passlet accepts no caller description or requested TTL.
+Use HTTPS Git remotes. Passlet supplies `GH_TOKEN`, `GITHUB_TOKEN`, and Git authentication to the child. Never fall back to ambient tokens, `gh auth login`, or SSH credentials. Keep tokens out of logs, arguments, URLs, and tool output. Let Passlet manage its cache, and leave existing grants alone unless the user asks to remove them.
 
-Tell the user which repositories and permissions you are requesting, then make one request. Allow the command at least 130 seconds so the user has time to approve. Never put this request in a retry loop.
+## Recover quietly
 
-```sh
-passlet_dir=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/passlet.XXXXXX")
-chmod 700 "$passlet_dir"
-passlet request \
-  --repos acme/project \
-  --permissions contents:read \
-  --out "$passlet_dir/grant.json"
-printf 'Grant path: %s\n' "$passlet_dir/grant.json"
-```
+Handle recoverable failures without narrating them or asking the user to retry. Limit automatic recovery to one retry per failed operation, then continue independent work and report only what remains blocked.
 
-Replace the example repository and permissions with the task's actual scope. Check that the request succeeded before using the file. `--out` creates a new mode-0600 file and refuses overwrites. Never omit `--out`: otherwise the token JSON goes to stdout and into your transcript.
+- Connection failure, `approver_busy`, or approval timeout: wait briefly or do independent work, then retry once with the same scope. An explicit denial or cancellation ends the attempt, do not prompt again.
+- Expired or rejected credentials: retry the ordinary scoped `exec` once when safe. Passlet ignores expired grants and removes cached tokens that GitHub rejects after a command failure, so the retry can obtain and cache fresh approval. Do not explain token expiry or revocation unless asked.
+- Missing permissions: use the failed operation and GitHub's response to identify the specific permission needed for the authorized task, then retry with that permission through Passlet. Do not treat every 403 or 404 as a permission problem or try progressively broader scopes.
+- Before retrying a write, establish that it did not succeed or that repeating it is safe. If its outcome is uncertain, inspect the result before proceeding. Do not replay an entire script after a partial failure.
+- Pairing, installation, or sandbox problems: preserve the selected endpoint and trust configuration. Do not re-pair, switch credentials, or weaken the sandbox automatically. If user action is required, state the necessary action briefly.
 
-Keep the concrete grant path, approved scope, and expiry in your session context and handoff summaries so later prompts can reuse it. Check for a suitable retained grant before requesting another. Shell variables may not survive between tool calls, so use that concrete path in later commands. Never read the grant file into your context, print it, source it, extract its token, or put the token in an argument or Git URL. The request receipt already reports the actual expiry without revealing the token.
+## When gh is unavailable
 
-Run each authenticated command through the grant:
+Use the GitHub REST API with `curl` inside `passlet exec`, without asking the user to install or authenticate another client:
 
 ```sh
-passlet exec --grant /concrete/private/path/grant.json -- \
-  gh api repos/acme/project/contents
-
-passlet exec --grant /concrete/private/path/grant.json -- \
-  git ls-remote https://github.com/acme/project.git HEAD
-```
-
-Reuse the same grant for operations within its approved scope until expiry. `exec --grant` does not contact the Mac. It supplies the scoped credentials through `GH_TOKEN` and `GITHUB_TOKEN`, configures Git authentication, and disables global/system Git configuration and ambient credential helpers for that child. Use HTTPS remotes. If needed, configure commit author identity locally in the checkout.
-
-Retain the grant file and its private directory after each command, task, and prompt for later reuse. Do not actively delete grants, including expired ones, unless the user asks. Keep the directory mode 0700 and grant mode 0600. Retention does not extend a grant's expiry or scope: use it only while valid and for authorized operations within its approved scope. Deleting a grant file does not revoke its token.
-
-## When gh is not installed
-
-Check for `gh` with `command -v gh`. If it is absent, use the GitHub REST API with `curl` inside `passlet exec`; do not require the user to install `gh` or run `gh auth login`. Reuse the same approved grant and permissions. The fallback changes the HTTP client, not the access scope.
-
-For example, read a repository’s README using a grant with `contents:read`:
-
-```sh
-passlet exec --grant /concrete/private/path/grant.json -- sh -c '
+passlet exec --repos acme/project --permissions contents:read -- sh -c '
   set +x
   printf "Authorization: Bearer %s\n" "$GH_TOKEN" |
     curl --disable --fail --silent --show-error \
@@ -74,19 +56,8 @@ passlet exec --grant /concrete/private/path/grant.json -- sh -c '
 '
 ```
 
-Replace `acme/project` with the approved repository. The single-quoted shell body expands `GH_TOKEN` only inside the child process. The shell builtin `printf` pipes the authorization header to curl’s standard input, keeping the token out of curl’s arguments and temporary files. Keep tracing disabled, do not add verbose or trace flags, and never print the token. Send it only to `https://api.github.com`; do not automatically follow redirects with an authorization header.
+Keep shell tracing disabled and send the authorization header only to `https://api.github.com`, without following redirects. For JSON endpoints, use `Accept: application/vnd.github+json`. Send write payloads from a file with `--data-binary @file.json`, and handle pagination for listings.
 
-For JSON endpoints, use `Accept: application/vnd.github+json` and parse the response with an available JSON tool. Handle pagination when listing repositories, issues, or pull requests. Respect HTTP errors: an API permission failure still follows the grant rules below, not a retry with ambient credentials. For writes, choose the endpoint and HTTP method matching the authorized action and send the JSON payload from a file with `--data-binary @file.json`.
+## Connection setup
 
-## Failures and new access
-
-- Sandbox denies the connection: check the socket allowlist or HTTPS proxy configuration. If the sandbox cannot permit the required connection, ask for approval to run that Passlet command outside it. Do not enable sandbox-wide network access automatically. A missing socket, refused connection, or timeout alone does not prove a sandbox denial.
-
-- Mac unavailable, connection lost, or approval timeout: stop requesting. Continue useful local work that needs no token. Tell the user to bring the Mac online and confirm when ready; only then make a new explicit request. There is no queue or automatic retry.
-- Approval denied or cancelled: do not immediately prompt again or try another credential. Explain which work needs access and wait for the user to direct the next step.
-- `approver_busy`: do other work; do not poll or repeatedly request approval.
-- Expired grant: explain that a new approval is needed and make a fresh explicit request for the still-needed scope. Never reuse or expose the expired token, and never implement a background renewal loop.
-- GitHub denies an operation: do not assume it needs write access. Check the requested operation, granted scope recorded in your session, and repository installation. Name the specifically missing permission, request a grant for exactly that, and finish the operation yourself. Never ask the user to check GitHub by hand because the current grant cannot. Do not broaden access automatically to make an error disappear.
-- Repository not installed: ask the user to add that repository to the GitHub App installation. If they cannot, for example a third-party repository they do not administer, tell them that Git over SSH works through the SSH agent Passlet forwards from their Mac, and use an SSH remote for that repository only when they choose it. Do not request access to a different repository as a workaround.
-
-Repository-listing endpoints can expose metadata beyond the scoped repositories. A listing is not proof of content access. Validate access through the intended operation rather than probing unrelated repositories.
+Use the configured endpoint. Local agents default to the private Unix socket; remote agents use their configured SSH-forwarded socket or Tailscale HTTPS origin. Do not guess another agent's endpoint. Run `passlet doctor` only when diagnosing the connection, it requires approval. Use `passlet approver doctor` to diagnose the Mac's local service. For pairing requested by the user, follow [pairing setup](https://passlet.dev/docs/guides/setup.md#pair-agents).

@@ -17,7 +17,6 @@ fi
 /usr/bin/xcrun --find notarytool >/dev/null
 /usr/bin/xcrun --find stapler >/dev/null
 export PASSLET_BUILD_MODE=release
-make check
 ./scripts/build-macos.sh
 mkdir -p dist
 app=build/release/Passlet.app

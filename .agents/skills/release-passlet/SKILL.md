@@ -9,20 +9,15 @@ Work from the Passlet repository. A release is installable only after the signed
 
 Creating or editing this skill does not authorize a release. For a readiness request, perform checks and report outstanding work. For a release request, establish the intended unused `vX.Y.Z` version and target commit. If publication is not already authorized, prepare the version, exact SHA, release notes, and check results before asking for approval. Do not publish, merge PRs, or activate someone's machine merely to test the workflow.
 
-## Visible release checklist
+## Progress reports
 
-At the start of every release, show the user a checklist covering every checkbox in the numbered phases below, in order. Shorten the wording for readability, but keep each action, approval, and wait as a separate item. This conversation checklist is the release's progress record, not an edit to this skill.
-
-Reprint the checklist as each item completes and whenever work starts waiting for CI, approval, or another blocker. Tick `[x]` only after verifying completion, with the relevant PR, workflow, release, or post URL as evidence. Keep running, awaiting approval, blocked, failed, and unperformed items unchecked and label their status. An existing authorization can satisfy an approval item without asking again, but starting a run never satisfies its completion item. If the candidate changes, reopen checks tied to the old SHA. Mark inapplicable items or explicit user skips with a reason instead of silently dropping them or claiming they passed.
-
-Keep the checklist and exact next action in handoffs and resume from verified progress. Finish with the full checklist and any remaining blockers, never a completion claim while required items remain unresolved.
+Report milestones: candidate checked, artifacts prepared, metadata ready for review, published, and availability verified. Include the relevant link and any action needed from the user. Keep the candidate SHA and outstanding steps in handoffs. Do not repeat the full checklist on every update.
 
 ## Sources and access
 
 Read these files from the release candidate, rather than relying on historical release results:
 
-- `docs/RELEASING.md`: signing credentials, environment protection, and production validation.
-- `docs/VALIDATION.md`: manual checks for protected Keychain and native approval.
+- `docs/RELEASING.md`: signing credentials and environment protection.
 - `.github/workflows/release.yml` and `scripts/release.sh`: actual trigger, signing, asset creation, and upload behavior.
 - `packaging/README.md` and `scripts/package-release.py`: package metadata generation and validation.
 
@@ -37,11 +32,9 @@ Pass all authenticated `gh` and Git operations through `passlet exec --grant <gr
 - [ ] Open a draft release PR in this repository against main, or reuse the existing implementation PR. Confirm it includes the intended Approver, Agent, and package definitions.
 - [ ] Write concise, user-facing release notes from changes since the previous published release. Explain what changed for users, including relevant migrations, instead of listing PR titles or internal workflow steps. Include a full changelog link. Commit the notes to `docs/releases/vX.Y.Z.md` in the release PR before pushing the preparation tag. Both workflow phases require this nonempty file, and source verification prevents changing it after preparation.
 - [ ] Update user-facing documentation for changes since the previous release, including installation, setup, examples, and migration instructions where applicable. Mark unreleased features with `AddedIn` as described in `docs/authoring.mdx`. Finish these edits before preparing signed artifacts.
-- [ ] Run Hakuto's `hakuto-review` skill on the candidate website source, configuration, and `public/_headers`. Review images, fonts, client-side code, accessibility, caching, and security headers. Fix actionable findings, rerun the review, and record the website revision and results.
-- [ ] In `teamniteo/site-passlet`, import the exact candidate with `PASSLET_DOCS_REF=<full-candidate-sha>`, build the site, and run Hakuto's `seo-audit` skill against that build, including its opt-in external-link liveness checks. Verify broken-link reports before changing destinations, and record any links that could not be checked. Fix findings, rebuild, and rerun the audit. Record the candidate SHA, website revision, and results.
-- [ ] Run Hakuto's `pagespeed-audit` skill against the publicly reachable website preview for that candidate, covering the homepage and affected documentation pages on mobile and desktop. Fix actionable regressions and rerun affected audits. Record the URLs and results. If the preview is inaccessible to PageSpeed, report the check as blocked rather than substituting the current production site or treating it as passed.
-- [ ] Run applicable checks in `nix-shell`: `make check-all`, `nix-build nix/packaging-tests.nix --no-out-link`, and the relevant macOS/integration checks. Existing successful CI for the exact candidate can supply platform checks that cannot run locally. Distinguish passed, failed, and unperformed checks.
-- [ ] Verify production signing and manual validation prerequisites in `docs/RELEASING.md` and `docs/VALIDATION.md`. Do not treat preview signatures, fixtures, or older releases as proof of production Keychain behavior.
+- [ ] Confirm the documentation preview build and link checks pass for the candidate. Website design, SEO and PageSpeed audits are outside the release gate. Production PageSpeed checks run weekly through [the ops updater](https://github.com/teamniteo/ops/tree/main/.agents/skills-local/updater).
+- [ ] Use the successful CI run for the exact candidate as product-test evidence. Run local checks when developing fixes, not again merely to release the same SHA. Source changes require fresh CI.
+- [ ] Verify production signing prerequisites in `docs/RELEASING.md`.
 - [ ] Wait for the latest PR CI run for the final candidate SHA to finish successfully. Verify that SHA is still the release PR head before preparing signed artifacts.
 
 The Release workflow has two phases. `vX.Y.Z-prepare` builds and signs the CI-verified head of an open same-repository release PR without publishing. After its generated package metadata is added to that same PR, reviewed, and squash-merged, `vX.Y.Z` publishes those exact prepared artifacts. Preparation checks the exact PR head and passing PR CI; the final tag must be on main. Both phases retain the protected `release` environment. Review the exact preparation commit before approving signing, especially changes to workflows and build scripts. Never move tags, rebuild approved artifacts during publication, or publish an empty release.
@@ -52,9 +45,9 @@ The Release workflow has two phases. `vX.Y.Z-prepare` builds and signs the CI-ve
 - [ ] Push the unused `vX.Y.Z-prepare` tag at the reviewed full candidate SHA through the scoped grant.
 - [ ] Identify the Release workflow run for that exact tag and SHA. Link the run and verify its tag and SHA.
 - [ ] Wait for the preparation run’s protected `release` environment approval, linking the run when user action is needed. Never weaken or bypass environment protection.
-- [ ] Wait for preparation CI to finish successfully. It tests, signs, notarizes and staples the macOS app, builds Linux archives, and generates checksums and metadata. It does not create a GitHub release.
+- [ ] Wait for preparation CI to finish successfully. It signs, notarizes and staples the macOS app, builds Linux archives, and generates checksums and metadata. It does not create a GitHub release.
 - [ ] Download `passlet-release-assets` and `passlet-package-updates` from that successful run into a private task directory. Retain the run ID and candidate SHA.
-- [ ] Verify the exact three archives and `passlet_X.Y.Z_SHA256SUMS`, all checksums, the macOS signature, and its stapled ticket. Perform applicable production validation before final publication. Report manual checks not performed; do not substitute previous releases or fixture tests for them.
+- [ ] Verify the exact three archives and `passlet_X.Y.Z_SHA256SUMS`, all checksums, the macOS signature, and its stapled ticket.
 
 Apple's `stapler` attaches and validates notarization tickets so Gatekeeper can verify notarization offline. A Nix shell can set `DEVELOPER_DIR` to an SDK that lacks this tool, making `xcrun stapler` report it missing even when Apple Command Line Tools are installed. Check `/Library/Developer/CommandLineTools/usr/bin/stapler` before installing anything. If present, validate the downloaded bundle directly:
 
@@ -69,8 +62,8 @@ For a failed run, report the failing stage and any draft or published assets. If
 ## 3. Add metadata to the release PR
 
 - [ ] Inspect all five generated files: `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. Verify exact archive URLs, hashes, matching versions, and the preparation run ID and SHA.
-- [ ] Copy them onto the existing release PR branch. Do not open a second metadata PR. If regeneration is necessary, run `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>` in the development shell. Never invent provenance or hashes.
-- [ ] Run `make check` and `nix-build nix/packaging-tests.nix --no-out-link`. Before publication, the final archive URLs are not public, so use the downloaded signed archives for installation validation. Never replace the maintainer's working installation or credentials as an implicit test.
+- [ ] Wait for the Release metadata workflow to add the generated files and docs labels to the same PR and dispatch CI. If the PR head moved, prepare the new candidate rather than overwriting changes. For recovery, regenerate with `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>`, inspect and commit the result to the same PR.
+- [ ] Confirm metadata CI verifies preparation provenance, unchanged source, archive checksums and exact generated metadata. It reuses the preparation's product-test evidence, without running the platform matrix again. Any source change takes the full CI path.
 - [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical.
 - [ ] Wait for the latest PR CI run for the updated metadata commit to finish successfully.
 - [ ] Obtain code and generated metadata review and confirm merge/publication authorization, requesting only approvals not already given.
@@ -98,6 +91,6 @@ Include generated `docs/` files from `passlet-package-updates` alongside the pac
 
 ## 6. Hand off
 
-- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, and any remaining blockers. Include the final checklist. Do not call the release complete before its package/plugin metadata and installation have been verified.
+- [ ] Report preparation and final SHAs, release URL, workflow results, release PR state, checks performed, and any remaining blockers. Do not call the release complete before its package/plugin metadata and installation have been verified.
 
-If work stops awaiting environment approval, metadata review, or manual validation, preserve those exact next steps.
+If work stops awaiting environment approval or metadata review, preserve those exact next steps.

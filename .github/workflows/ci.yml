@@ -14,8 +14,57 @@ defaults:
   run:
     shell: bash -eo pipefail {0}
 jobs:
+  metadata:
+    name: Verify release metadata
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.metadata }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-release-metadata.py >> "$GITHUB_OUTPUT"
+
+  required:
+    name: ${{ matrix.check }}
+    needs: [integration, macos-package, metadata, test]
+    if: always()
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        check:
+          - NixOS SSH integration
+          - Test (macos-26)
+          - Test (ubuntu-26.04)
+          - Test macOS Nix package
+    steps:
+      - env:
+          METADATA_RESULT: ${{ needs.metadata.result }}
+          VERIFIED: ${{ needs.metadata.outputs.verified }}
+          TEST_RESULT: ${{ needs.test.result }}
+          PACKAGE_RESULT: ${{ needs.macos-package.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          test "$METADATA_RESULT" = success
+          if [ "$VERIFIED" != true ]; then
+            test "$VERIFIED" = false
+            test "$TEST_RESULT" = success
+            test "$PACKAGE_RESULT" = success
+            test "$INTEGRATION_RESULT" = success
+          fi
+
   test:
-    name: Test (${{ matrix.os }})
+    needs: metadata
+    if: needs.metadata.outputs.verified != 'true'
+    name: Full tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -99,7 +148,9 @@ jobs:
           retention-days: 14
 
   macos-package:
-    name: Test macOS Nix package
+    needs: metadata
+    if: needs.metadata.outputs.verified != 'true'
+    name: Full macOS Nix package
     runs-on: macos-26
     timeout-minutes: 20
     steps:
@@ -118,7 +169,9 @@ jobs:
         run: ./scripts/check-package-artifact.sh
 
   integration:
-    name: NixOS SSH integration
+    needs: metadata
+    if: needs.metadata.outputs.verified != 'true'
+    name: Full NixOS SSH integration
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:

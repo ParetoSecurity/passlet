@@ -19,6 +19,13 @@ spec = importlib.util.spec_from_file_location("verify_preparation", ROOT / "scri
 preparation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preparation)
 
+spec = importlib.util.spec_from_file_location("metadata", ROOT / "scripts/check-release-metadata.py")
+metadata = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(metadata)
+spec = importlib.util.spec_from_file_location("update_pr", ROOT / "scripts/update-release-pr.py")
+update_pr = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(update_pr)
+
 
 class StaplerTests(unittest.TestCase):
     def run_stapler(self, failures):
@@ -130,6 +137,27 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn("--draft=false", events[-1]["args"])
 
 
+class RequiredChecksTests(unittest.TestCase):
+    def test_required_checks_fail_when_verification_or_full_tests_fail(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("  required:\n", 1)[1].split("\n  test:", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        env = dict(os.environ, METADATA_RESULT="success", VERIFIED="false", TEST_RESULT="success", PACKAGE_RESULT="success", INTEGRATION_RESULT="success")
+        for verified in ["true", "false"]:
+            result = subprocess.run(["bash", "-euc", script], env=dict(env, VERIFIED=verified))
+            self.assertEqual(result.returncode, 0)
+        for field in ["METADATA_RESULT", "TEST_RESULT", "PACKAGE_RESULT", "INTEGRATION_RESULT"]:
+            for value in ["failure", "cancelled", "skipped", ""]:
+                with self.subTest(field=field, value=value):
+                    result = subprocess.run(["bash", "-euc", script], env=dict(env, **{field: value}))
+                    self.assertNotEqual(result.returncode, 0)
+        for value in ["failure", "cancelled", "skipped", ""]:
+            result = subprocess.run(["bash", "-euc", script], env=dict(env, VERIFIED="true", METADATA_RESULT=value))
+            self.assertNotEqual(result.returncode, 0)
+        result = subprocess.run(["bash", "-euc", script], env=dict(env, VERIFIED=""))
+        self.assertNotEqual(result.returncode, 0)
+
+
 class PreparationTests(unittest.TestCase):
     def setUp(self):
         self.sha = "a" * 40
@@ -162,6 +190,19 @@ class PreparationTests(unittest.TestCase):
                     preparation.verify(self.sha, [pr], {"workflow_runs": [self.run]})
         with self.assertRaisesRegex(ValueError, "open PR"):
             preparation.verify(self.sha, [], {"workflow_runs": [self.run]})
+
+    def test_metadata_update_rejects_moved_heads_and_foreign_runs(self):
+        run = {"head_sha": self.sha, "head_branch": "v1.2.3-prepare", "event": "push", "path": ".github/workflows/release.yml", "repository": {"full_name": preparation.REPOSITORY}, "status": "completed", "conclusion": "success"}
+        self.pr["head"]["ref"] = "chore/release"
+        self.assertEqual(update_pr.select_pr(run, [self.pr]), ("1.2.3", "chore/release"))
+        with self.assertRaises(ValueError):
+            update_pr.select_pr(run, [self.pr, self.pr])
+        for key, value in [("event", "pull_request"), ("conclusion", "failure"), ("head_branch", "main"), ("repository", {"full_name": "other/repo"})]:
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                update_pr.select_pr(dict(run, **{key: value}), [self.pr])
+        for key, value in [("sha", "b" * 40), ("ref", "main"), ("repo", {"full_name": "other/repo"})]:
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                update_pr.select_pr(run, [dict(self.pr, head=dict(self.pr["head"], **{key: value}))])
 
     def test_rejects_missing_failed_pending_or_unrelated_ci(self):
         for field, value in [("head_sha", "b" * 40), ("path", ".github/workflows/other.yml"), ("event", "push"), ("status", "in_progress"), ("conclusion", "failure")]:
@@ -252,6 +293,17 @@ class PublicationTests(unittest.TestCase):
         self.commit()
         with self.assertRaisesRegex(ValueError, "documentation differs"):
             self.verify()
+
+    def test_metadata_fast_path_requires_unchanged_source(self):
+        self.assertEqual(metadata.candidate(self.root), ("1.2.3", 123))
+        (self.root / "app.go").write_text("changed product code\n")
+        self.commit()
+        self.assertIsNone(metadata.candidate(self.root))
+
+    def test_metadata_fast_path_does_not_accept_arbitrary_doc_changes(self):
+        (self.root / "docs/feature.mdx").write_text("changed documentation\n")
+        self.commit()
+        self.assertIsNone(metadata.candidate(self.root))
 
     def test_final_tag_matches_prepared_assets_and_both_plugins(self):
         self.verify()

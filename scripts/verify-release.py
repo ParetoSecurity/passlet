@@ -23,26 +23,7 @@ METADATA = {
 }
 
 
-def verify(version, artifacts, run, root=ROOT):
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise ValueError("Expected X.Y.Z release version")
-    release = json.loads((root / "packaging/release.json").read_text())
-    preparation = release.get("preparation", {})
-    source = preparation.get("source_sha", "")
-    run_id = preparation.get("run_id")
-    if not isinstance(run_id, int) or run_id <= 0 or not re.fullmatch(r"[0-9a-f]{40}", source):
-        raise ValueError("Release metadata must identify its preparation run and source SHA")
-    if not (
-        run.get("id") == run_id
-        and run.get("head_sha") == source
-        and run.get("head_branch") == f"v{version}-prepare"
-        and run.get("event") == "push"
-        and run.get("path") == ".github/workflows/release.yml"
-        and run.get("repository", {}).get("full_name") == "ParetoSecurity/passlet"
-        and run.get("status") == "completed"
-        and run.get("conclusion") == "success"
-    ):
-        raise ValueError("Artifacts must come from the successful preparation workflow for this release")
+def verify_source(version, source, root=ROOT):
     changed = subprocess.check_output(["git", "diff", "--name-only", source, "HEAD"], cwd=root, text=True)
     docs = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", source, "--", "docs"], cwd=root, text=True).splitlines()
     expected_docs = {}
@@ -63,6 +44,30 @@ def verify(version, artifacts, run, root=ROOT):
         original["version"] = version
         if json.loads((root / name).read_text()) != original:
             raise ValueError(f"Tagged metadata changes the prepared plugin beyond its version: {name}")
+
+
+
+def verify(version, artifacts, run, root=ROOT):
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise ValueError("Expected X.Y.Z release version")
+    release = json.loads((root / "packaging/release.json").read_text())
+    preparation = release.get("preparation", {})
+    source = preparation.get("source_sha", "")
+    run_id = preparation.get("run_id")
+    if not isinstance(run_id, int) or run_id <= 0 or not re.fullmatch(r"[0-9a-f]{40}", source):
+        raise ValueError("Release metadata must identify its preparation run and source SHA")
+    if not (
+        run.get("id") == run_id
+        and run.get("head_sha") == source
+        and run.get("head_branch") == f"v{version}-prepare"
+        and run.get("event") == "push"
+        and run.get("path") == ".github/workflows/release.yml"
+        and run.get("repository", {}).get("full_name") == "ParetoSecurity/passlet"
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+    ):
+        raise ValueError("Artifacts must come from the successful preparation workflow for this release")
+    verify_source(version, source, root)
 
     names = [f"passlet_{version}_{platform}.{suffix}" for platform, suffix in [
         ("macos", "zip"), ("linux_amd64", "tar.gz"), ("linux_arm64", "tar.gz"),

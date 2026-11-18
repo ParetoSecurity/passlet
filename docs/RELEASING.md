@@ -33,8 +33,7 @@ uploads, or automatic dependency merging into this CLI project.
 5. The production bundle ID has a separate Keychain access group. Import user
    credentials through the production signed helper; do not silently broaden the
    prototype's Keychain ACL or copy stale bootstrap tokens. Fresh GitHub user
-   authorization may be needed. Confirm approval, denial, cancellation, and refresh
-   storage using the production identity before release.
+   authorization may be needed.
 
 ## Local checks
 
@@ -52,17 +51,19 @@ the existing prototype identity. The icon source is `assets/passlet.png`;
 
 ## Prepare and validate a release
 
-Before pushing the preparation tag, update documentation for the release and complete the website checks in the [release checklist](../.agents/skills/release-passlet/SKILL.md). Build `teamniteo/site-passlet` with `PASSLET_DOCS_REF` set to the full candidate SHA, run Hakuto's `hakuto-review` on the website source and configuration, run `seo-audit` on that build including external-link liveness checks, and run `pagespeed-audit` against its public preview on mobile and desktop. Cover the homepage and affected documentation pages, fix findings, and record the audited revisions, URLs, and results. An unavailable audit is outstanding work, not a passing check. Finalize documentation changes before signing, since publication only permits the generated release-label replacements afterward.
+Before pushing the preparation tag, update documentation and confirm the candidate's documentation preview build and link checks pass. Finalize documentation before signing, since publication only permits generated release-label replacements afterward. Website design and SEO audits are outside the release gate. Production PageSpeed audits run weekly through [the ops updater](https://github.com/teamniteo/ops/tree/main/.agents/skills-local/updater).
 
 Open the release PR in this repository against main. Include concise, user-facing notes in `docs/releases/vX.Y.Z.md`, describing changes since the previous published release and linking to the full changelog. Both workflow phases require this nonempty file. Finalize the notes before preparation, because source verification rejects later changes to them. After its CI passes, push an unused preparation tag such as `v0.4.2-prepare` at its exact reviewed head commit. Preparation verifies the PR is still open, the tag points to its current head, and its latest PR CI run passed. Fork PRs are rejected. Review that commit, including workflow and build-script changes, before approving signing. Both preparation and final publication require approval under the existing `release` environment, restricted to `v*` tags. No signing credentials are available to PR workflows.
 
-Preparation runs the pinned tests, builds Apple Silicon macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
+Preparation reuses the exact candidate’s passing product CI, builds Apple Silicon macOS binaries, verifies Developer ID signing, notarizes, staples, assesses Gatekeeper, and builds Linux archives and SHA-256 sums. It saves `passlet-release-assets` and `passlet-package-updates` as workflow artifacts. It does not create a GitHub release or the final version tag.
 
 Preparation then tests the Linux archives themselves. Each archive runs natively on an amd64 and an arm64 runner, which checks its version and that `passlet approver` refuses to run. The amd64 archive also replaces the source build as the Agent in the NixOS integration test, so the binary we publish pairs, requests grants and uses Git end to end. Publication only accepts a preparation run where all of these passed. To rerun them against an earlier preparation, start the `Test Linux release archives` workflow with that run ID and version.
 
 Stapling and ticket validation retry the observed Apple connection-loss error (`NSURLErrorDomain Code=-1005`, exit 68) up to four attempts, waiting 15, 30, and 45 seconds between attempts. Other failures stop immediately. These retries reuse the signed, notarized app without rebuilding or resubmitting it.
 
-Download both artifacts from that successful run. Verify checksums and production signatures, then add to that same PR `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. The release JSON identifies the exact preparation run and source SHA. Do not edit generated files, invent checksums, or bump plugin versions separately.
+After successful preparation, the Release metadata workflow regenerates and verifies package metadata and docs version labels, commits them to the same PR, and dispatches CI. It refuses to update a PR whose head moved since preparation. The release JSON identifies the exact preparation run and source SHA. Do not edit generated files, invent checksums, or bump plugin versions separately.
+
+CI verifies the successful preparation, unchanged source, archive checksums and exact regenerated metadata before reusing the preparation's product-test evidence. Generated metadata updates use this lightweight path. Source changes run the full platform tests. Required check names remain the same, and verification failures block them.
 
 Review the generated metadata and squash-merge the release PR, then push the final `vX.Y.Z` tag at that commit on main. Only those five generated metadata files and the generated `AddedIn` version replacements may differ from the prepared source. Verification compares file contents rather than requiring the pre-squash commit to be an ancestor, so code and metadata can land as one commit. If a rebase or merge resolution changes other files, prepare a new release rather than publishing binaries for different code. Merge immediately before final publication: consumers following main can see the new package URLs before the assets are public, so do not leave this intermediate state deployed.
 
@@ -77,10 +78,6 @@ Keep the CLI and helper together inside the signed bundle.
 entitlement and provisioning profile only there. The bundle contains the CLI and approval helper only.
 The build signs the CLI before the outer helper bundle.
 
-On a clean Mac, verify Gatekeeper acceptance and the real protected-Keychain
-approval/denial/cancellation flow. Confirm Mac-offline use after token delivery.
-
-Run production signing/Keychain validation before announcing the release.
 Preparation and publication have separate tag triggers and environment approvals; publication reuses the verified signed artifacts. Keep
 GitHub parent credentials, refresh tokens, and app client secrets out of all CI
 secrets, artifacts, logs, and screenshots.
@@ -116,7 +113,7 @@ skills are not modified by editing the release source.
 
 ## v0.2 controls
 
-See [REVIEW-POLICY.md](REVIEW-POLICY.md) for built-in PR/release approval settings, protected paths, and remaining administrator limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its protected environment. Do not publish v0.2 until the manual [validation checklist](VALIDATION.md) and administrative settings review are complete. The historical v0.1 results above do not establish v0.2 validation.
+See [REVIEW-POLICY.md](REVIEW-POLICY.md) for built-in PR/release approval settings, protected paths, and remaining administrator limitations. A matching CODEOWNERS list or roadmap statement is not enforcement. PR CI receives no signing credentials or cache-write secret. Release signing remains behind its protected environment. The historical v0.1 results above do not establish v0.2 validation.
 
 ## Documentation release labels
 

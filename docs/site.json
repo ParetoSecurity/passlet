@@ -41,8 +41,8 @@
     "title": "FAQ",
     "description": "Frequently asked questions about Passlet.",
     "order": 2,
-    "seoTitle": "FAQ: Keychain and scheduled tasks",
-    "seoDescription": "Learn how Passlet protects GitHub credentials and how to configure narrowly scoped access for unattended scheduled tasks."
+    "seoTitle": "FAQ: grant caching, Keychain and scheduled tasks",
+    "seoDescription": "Learn how Passlet protects GitHub credentials, reuses grants across sessions, avoids caching when needed, and handles access for unattended scheduled tasks."
   },
   {
     "source": "docs/SETUP.md",

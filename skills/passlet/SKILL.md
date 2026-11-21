@@ -29,7 +29,18 @@ Use the task's actual repositories and minimum permissions. Allow at least 130 s
 
 Group repositories belonging to the same owner into one request, up to 100. Different owners need separate grants. Metadata read is included automatically. Use `--org NAME` for organization operations such as `members:write`, or `--account HANDLE` for account operations such as `git_ssh_keys:write`.
 
-Use HTTPS Git remotes. Passlet supplies `GH_TOKEN`, `GITHUB_TOKEN`, and Git authentication to the child. Never fall back to ambient tokens, `gh auth login`, or SSH credentials. Keep tokens out of logs, arguments, URLs, and tool output. Let Passlet manage its cache, and leave existing grants alone unless the user asks to remove them.
+Push to the named remote, never to a URL, so the branch keeps `origin` as its upstream. Rewrite the remote address for that push only, leaving `origin` unchanged. When `origin` or its push URL is SSH, in either form, this push goes over HTTPS through Passlet. When it is HTTPS, the rewrite does nothing:
+
+```sh
+passlet exec --repos acme/project --permissions contents:write -- \
+  git -c url."https://github.com/".insteadOf=git@github.com: \
+  -c url."https://github.com/".insteadOf=ssh://git@github.com/ \
+  push -u origin my-branch
+```
+
+Use the same `-c` options for fetch and pull.
+
+Passlet supplies `GH_TOKEN`, `GITHUB_TOKEN`, and Git authentication to the child. Never fall back to ambient tokens, `gh auth login`, or SSH credentials. Keep tokens out of logs, arguments, URLs, and tool output. Let Passlet manage its cache, and leave existing grants alone unless the user asks to remove them.
 
 ## Recover quietly
 

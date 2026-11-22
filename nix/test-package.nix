@@ -10,7 +10,7 @@
       (source + "/assets") (source + "/testutil")
     ];
   };
-  vendorHash = "sha256-gQi/bK7ioj4isjiPLke1LdUssDqfvUv8ws/xKvP1HP4=";
+  vendorHash = "sha256-98Rusj+NzaOG0JMx9LDsO0JeWIYgAFVW2iX2KnTLt94=";
   subPackages = [ "cmd/passlet" ];
   doCheck = false; # Tests run separately; the VM driver runs the fixture binary.
   postBuild = ''

@@ -75,7 +75,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ inputs.ref }}
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - name: Prepare user cache directory
         run: mkdir -p "$HOME/.cache/nix"
       - name: Restore shared Linux Nix cache
@@ -84,7 +84,7 @@ jobs:
           primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
           save: false
-      - uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
+      - uses: teamniteo/gha-actions/nix@28298d3ce74966c134deea7d56ae4af6b89d042e # v46
         with:
           cache: devenv
       - name: Enable KVM for the Nix build users

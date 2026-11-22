@@ -59,6 +59,7 @@ let
   activation = mac.home.activation.passletAgent.data;
   result = { inherit plist; } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
     inherit activation;
+    tailscalePlist = tailscale.programs.passlet.service.plist.text;
     package = fakePackage;
     plistFile = mac.programs.passlet.service.plist;
   };

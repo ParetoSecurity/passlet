@@ -78,7 +78,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - if: runner.os == 'Linux'
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - name: Prepare user cache directory
         if: runner.os == 'Linux'
         run: mkdir -p "$HOME/.cache/nix"
@@ -89,7 +89,7 @@ jobs:
           primary-key: nix-v1-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
       - if: runner.os == 'Linux'
-        uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
+        uses: teamniteo/gha-actions/nix@28298d3ce74966c134deea7d56ae4af6b89d042e # v46
         with:
           cache: devenv
       - if: runner.os == 'macOS'
@@ -162,7 +162,7 @@ jobs:
           go-version: '1.27.3'
       - name: Build package fixture without release credentials
         run: PASSLET_BUILD_MODE=unsigned ./scripts/build-macos.sh
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - name: Validate package-manager configuration
         run: nix-build nix/packaging-tests.nix --no-out-link
       - name: Verify installed package artifacts
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - name: Prepare user cache directory
         run: mkdir -p "$HOME/.cache/nix"
       - name: Restore shared Linux Nix cache
@@ -187,7 +187,7 @@ jobs:
           primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
           save: false
-      - uses: teamniteo/gha-actions/nix@ac999a3414005bde340c31ed09f7515243f947ce # v45
+      - uses: teamniteo/gha-actions/nix@28298d3ce74966c134deea7d56ae4af6b89d042e # v46
         with:
           cache: devenv
       - name: Enable KVM for the Nix build users

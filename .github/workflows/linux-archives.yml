@@ -71,20 +71,20 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           ref: ${{ inputs.ref }}
-      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      - uses: cachix/install-nix-action@v31.11.5
       - name: Prepare user cache directory
         run: mkdir -p "$HOME/.cache/nix"
       - name: Restore shared Linux Nix cache
-        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        uses: nix-community/cache-nix-action@v7.0.2
         with:
           primary-key: nix-v1-ubuntu-26.04-${{ runner.arch }}-${{ hashFiles('nix/flake.lock', 'nix/*.nix', 'default.nix', 'shell.nix', 'devenv.nix') }}
           paths: ~/.cache/nix
           save: false
-      - uses: teamniteo/gha-actions/nix@28298d3ce74966c134deea7d56ae4af6b89d042e # v46
+      - uses: teamniteo/gha-actions/nix@v46
         with:
           cache: devenv
       - name: Enable KVM for the Nix build users

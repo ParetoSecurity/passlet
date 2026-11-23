@@ -14,6 +14,35 @@ import unittest
 
 
 class ActivationTests(unittest.TestCase):
+    def test_tailscale_daemon_precedence_and_app_cli_mode(self):
+        fixture = json.loads(Path(sys.argv[1]).read_text())
+        environment = plistlib.loads(fixture["tailscalePlist"].encode())["EnvironmentVariables"]
+        wrapper = Path(environment["PATH"].split(":")[0]) / "tailscale"
+        with tempfile.TemporaryDirectory(prefix="passlet-tailscale-") as directory:
+            root = Path(directory)
+            app = root / "Tailscale.app/Contents/MacOS/Tailscale"
+            app.parent.mkdir(parents=True)
+            daemon_plist = root / "tailscaled.plist"
+            fallback = root / "tailscale"
+            for binary in [app, fallback]:
+                binary.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "${TAILSCALE_BE_CLI:-}" "$@"\nexit 42\n')
+                binary.chmod(0o755)
+            script = wrapper.read_text().replace("/Applications/Tailscale.app/Contents/MacOS/Tailscale", str(app))
+            script = script.replace("/Library/LaunchDaemons/com.tailscale.tailscaled.plist", str(daemon_plist))
+            script = re.sub(r"/nix/store/[^/]+/bin/tailscale", str(fallback), script)
+            for native, daemon in [(True, True), (True, False), (False, True), (False, False)]:
+                if not native and app.exists():
+                    app.unlink()
+                if daemon:
+                    daemon_plist.touch()
+                else:
+                    daemon_plist.unlink(missing_ok=True)
+                use_app = native and not daemon
+                with self.subTest(native=native, daemon=daemon):
+                    result = subprocess.run(["/bin/sh", "-c", script, "tailscale", "serve", "status", "--json"], env={"PATH": "/usr/bin:/bin"}, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 42, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), [str(app if use_app else fallback), "1" if use_app else "", "serve", "status", "--json"])
+
     def test_local_app_survives_missing_store_and_upgrades(self):
         fixture = json.loads(Path(sys.argv[1]).read_text())
         with tempfile.TemporaryDirectory(prefix="passlet-activation-") as directory:

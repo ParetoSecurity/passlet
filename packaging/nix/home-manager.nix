@@ -22,6 +22,13 @@ let
   } // lib.optionalAttrs (cfg.service.sshAgentSocket != null) {
     ssh_agent_socket = cfg.service.sshAgentSocket;
   };
+  tailscaleCli = pkgs.writeShellScriptBin "tailscale" ''
+    if [ ! -f /Library/LaunchDaemons/com.tailscale.tailscaled.plist ] && [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then
+      export TAILSCALE_BE_CLI=1
+      exec /Applications/Tailscale.app/Contents/MacOS/Tailscale "$@"
+    fi
+    exec ${pkgs.tailscale}/bin/tailscale "$@"
+  '';
   plist = "${config.home.homeDirectory}/Library/LaunchAgents/dev.passlet.agent.plist";
 in {
   options.programs.passlet = {
@@ -57,7 +64,7 @@ in {
       default = pkgs.writeText "dev.passlet.agent.plist" (lib.generators.toPlist { escape = true; } {
         AssociatedBundleIdentifiers = [ "dev.passlet.app" ];
         EnvironmentVariables.PATH = lib.concatStringsSep ":"
-          (lib.optional cfg.service.tailscale "${pkgs.tailscale}/bin" ++ [ "/usr/bin" "/bin" ]);
+          (lib.optional cfg.service.tailscale "${tailscaleCli}/bin" ++ [ "/usr/bin" "/bin" ]);
         KeepAlive.SuccessfulExit = false;
         Label = "dev.passlet.agent";
         LimitLoadToSessionType = "Aqua";

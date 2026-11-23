@@ -101,7 +101,18 @@ Install Tailscale 1.104.4 or newer and sign in on both machines. On the Approver
 }
 ```
 
-[Pair the Agents and Approver](SETUP.md#pair-agents), then activate with the same Home Manager or nix-darwin command used above. Home Manager supplies the Tailscale CLI on the service's PATH. Passlet opens a mutually authenticated TLS listener on `127.0.0.1:17401` and configures raw TCP forwarding from Tailscale port `17400`. Matching forwarding is reused, conflicts stop startup, and unrelated routes are preserved.
+[Pair the Agents and Approver](SETUP.md#pair-agents), then activate with the same Home Manager or nix-darwin command used above. This works with both standalone Home Manager and Home Manager integrated with nix-darwin.
+
+`programs.passlet.service.tailscale = true` lets remote Agents connect to Passlet through Tailscale. It does not install or start Tailscale.
+
+Passlet chooses which Tailscale installation to use:
+
+- If you installed the standalone daemon with nix-darwin's `services.tailscale.enable = true`, Passlet uses that daemon.
+- Otherwise, Passlet uses the Tailscale Mac app.
+
+If both are installed, the nix-darwin daemon takes priority. Stopping it does not make Passlet switch to the app.
+
+Passlet opens a mutually authenticated TLS listener on `127.0.0.1:17401` and configures raw TCP forwarding from Tailscale port `17400`. Matching forwarding is reused, conflicts stop startup, and unrelated routes are preserved.
 
 Tailscale must already be running and signed in, with permission to configure Serve. The GUI app works with this loopback backend. Tailnet HTTPS certificates are not required because Passlet authenticates its own TLS connection using paired public keys. Passlet never invokes sudo or changes tailnet policy.
 

@@ -1,21 +1,21 @@
 {
-  "version": "0.12.0",
+  "version": "0.12.1",
   "artifacts": {
     "macos": {
-      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.0/passlet_0.12.0_macos.zip",
-      "sha256": "f8756753e82ddf30d4109c3869dbff0a736b2c82cedd1516766b0a80da6873e0"
+      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.1/passlet_0.12.1_macos.zip",
+      "sha256": "421d8fc77f7b8269c1c4dd38b70b75efbab417971a0d5196884973fe0608c1b3"
     },
     "linux_amd64": {
-      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.0/passlet_0.12.0_linux_amd64.tar.gz",
-      "sha256": "1f26da88e76c64c6c57d35738a625e2b2f89c5a316bef3c772a4a445bb1009e3"
+      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.1/passlet_0.12.1_linux_amd64.tar.gz",
+      "sha256": "ceabccee45aec8bb3728163adccbcdb782da6993580a4037ac3edb92ef613020"
     },
     "linux_arm64": {
-      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.0/passlet_0.12.0_linux_arm64.tar.gz",
-      "sha256": "a120bb7810089d2b60f830e100e811364dabf787c2449f67c4454b9e775de911"
+      "url": "https://github.com/ParetoSecurity/passlet/releases/download/v0.12.1/passlet_0.12.1_linux_arm64.tar.gz",
+      "sha256": "a149b5ce66dca8453fa939b6734fce0119af690837f54bdd56a3251575931c28"
     }
   },
   "preparation": {
-    "run_id": 44401224434,
-    "source_sha": "e8db0f1e3ff8607e68575e114d19f73ff27bf8ae"
+    "run_id": 45153472293,
+    "source_sha": "f8c848ae9fbb3bf8153b370f8337982806466f44"
   }
 }

@@ -96,6 +96,7 @@ in {
       };
     };
     home.file."${codexDirectory}/plugins/cache/passlet/passlet/${pluginVersion}" = lib.mkIf cfg.plugins.codex.enable {
+      recursive = true;
       source = pluginSource;
     };
     home.sessionVariables = lib.mkIf cfg.sshAgent.enable {

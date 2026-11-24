@@ -34,7 +34,7 @@ let
   pluginVersion = (builtins.fromJSON (builtins.readFile (source + "/plugin.json"))).version;
   pluginConfig = system: enabled: xdg:
     (home-manager.lib.homeManagerConfiguration {
-      pkgs = import pkgs.path { inherit system; };
+      pkgs = import pkgs.path { inherit system; config.allowUnfree = false; };
       modules = [ flake.homeManagerModules.default {
         home.username = "alice";
         home.homeDirectory = "/home/alice";
@@ -47,12 +47,14 @@ let
           plugins.codex.enable = true;
           service.enable = false;
         };
+        programs.claude-code.package = pkgs.writeShellScriptBin "claude" "exit 0";
+        programs.codex.package = null;
         programs.codex.settings.plugins."other@other".enabled = true;
       } ];
     }).config;
-  plugins = pluginConfig "x86_64-linux" true false;
+  plugins = pluginConfig pkgs.stdenv.hostPlatform.system true false;
   pluginsMac = pluginConfig "aarch64-darwin" true false;
-  pluginsXdg = pluginConfig "x86_64-linux" true true;
+  pluginsXdg = pluginConfig pkgs.stdenv.hostPlatform.system true true;
   pluginsDisabled = pluginConfig "x86_64-linux" false false;
   cache = ".codex/plugins/cache/passlet/passlet/${pluginVersion}";
   plist = mac.programs.passlet.service.plist.text;
@@ -147,4 +149,13 @@ assert builtins.all (system:
   };
   in package.version == "0.0.0-test" && package.meta.mainProgram == "passlet"
 ) (builtins.attrNames flake.packages);
-pkgs.writeText "passlet-package-module-test.json" (builtins.toJSON result)
+pkgs.runCommand "passlet-package-module-test.json" { } ''
+  test -x ${plugins.programs.claude-code.finalPackage}/bin/claude
+  for cache in ${plugins.home-files}/${cache} ${pluginsXdg.home-files}/.config/codex/plugins/cache/passlet/passlet/${pluginVersion}; do
+    test -d "$cache"
+    test ! -L "$cache"
+    test -f "$cache/plugin.json"
+    test -f "$cache/skills/passlet/SKILL.md"
+  done
+  cp ${pkgs.writeText "passlet-package-module-result.json" (builtins.toJSON result)} "$out"
+''

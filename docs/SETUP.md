@@ -153,7 +153,32 @@ For HTTPS endpoints, Passlet uses the environment's proxy settings, including `H
 
 When Codex reports disabled networking and a connection is denied, Passlet identifies the sandbox restriction. Missing sockets, refused connections, and timeouts retain their own troubleshooting messages. Configure the required endpoint access, or approve running the individual Passlet command outside the sandbox. Do not automatically enable unrestricted networking or exclude every Passlet command.
 
-A sandbox must allow connections to the selected Unix socket as well as access to the Agent's pairing files under `~/.local/share/passlet`. On a local Mac, the socket is `~/.local/share/passlet/passlet.sock`. Use the absolute path when configuring an allowlist. For Claude Code, this belongs in `sandbox.network.allowUnixSockets`. Do not make the socket world-accessible to work around a sandbox denial.
+A sandbox must allow connections to the selected Unix socket and writes to the grant cache in `~/.local/share/passlet/grants`. The other pairing files under `~/.local/share/passlet` only need to be readable. Create the cache directory before the first sandboxed run, because a sandbox that allows writes only inside it cannot create it:
+
+```sh
+mkdir -p -m 700 ~/.local/share/passlet/grants
+```
+
+On a local Mac, the socket is `~/.local/share/passlet/passlet.sock`. Use the absolute path when configuring an allowlist. Do not make the socket world-accessible to work around a sandbox denial.
+
+Claude Code's sandbox blocks Unix sockets and writes outside the project by default. On macOS, allow the socket and the grant cache in Claude Code settings:
+
+```json
+{
+  "sandbox": {
+    "network": {
+      "allowUnixSockets": ["/Users/alice/.local/share/passlet/passlet.sock"]
+    },
+    "filesystem": {
+      "allowWrite": ["~/.local/share/passlet/grants"]
+    }
+  }
+}
+```
+
+Inside the macOS sandbox, `gh` fails certificate verification unless `sandbox.enableWeakerNetworkIsolation` is `true`, which Claude Code documents as a possible data exfiltration path. Git and the skill's `curl` fallback work without it.
+
+On Linux, Claude Code ignores `allowUnixSockets`, because its filter cannot match socket paths. Set `sandbox.network.allowAllUnixSockets` to `true` instead, with the same `allowWrite` entry. This lets sandboxed commands connect to every Unix socket on the machine, not only Passlet's.
 
 Run `passlet doctor` inside the same sandbox as the failing command. A permission denial can come from filesystem permissions or sandbox policy; it does not prove the Approver is stopped. Compare with a check outside the sandbox when diagnosing policy restrictions, remembering that doctor requests Touch ID approval.
 

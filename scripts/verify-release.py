@@ -18,8 +18,8 @@ METADATA = {
     "Casks/passlet.rb",
     "Formula/passlet-agent.rb",
     "packaging/release.json",
-    "plugin.json",
-    ".claude-plugin/plugin.json",
+    "plugins/passlet-dev/plugin.json",
+    "plugins/passlet-dev/.claude-plugin/plugin.json",
 }
 
 
@@ -39,7 +39,7 @@ def verify_source(version, source, root=ROOT):
     for name, expected in expected_docs.items():
         if not (root / name).is_file() or (root / name).read_text() != expected:
             raise ValueError(f"Tagged documentation differs beyond release labels: {name}")
-    for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+    for name in ["plugins/passlet-dev/plugin.json", "plugins/passlet-dev/.claude-plugin/plugin.json"]:
         original = json.loads(subprocess.check_output(["git", "show", f"{source}:{name}"], cwd=root))
         original["version"] = version
         if json.loads((root / name).read_text()) != original:

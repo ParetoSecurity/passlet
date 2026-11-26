@@ -363,7 +363,7 @@ class PublicationTests(unittest.TestCase):
             self.verify()
 
     def test_rejects_plugin_changes_beyond_version(self):
-        for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+        for name in ["plugins/passlet-dev/plugin.json", "plugins/passlet-dev/.claude-plugin/plugin.json"]:
             with self.subTest(manifest=name):
                 path = self.root / name
                 original = path.read_bytes()

@@ -6,13 +6,11 @@ let
     fileset = lib.fileset.unions [
       ../../.agents/plugins
       ../../.claude-plugin
-      ../../assets/passlet.png
-      ../../docs
-      ../../plugin.json
-      ../../skills
+      ../../plugins/passlet-dev
     ];
   };
-  pluginVersion = (builtins.fromJSON (builtins.readFile ../../plugin.json)).version;
+  plugin = "${pluginSource}/plugins/passlet-dev";
+  pluginVersion = (builtins.fromJSON (builtins.readFile ../../plugins/passlet-dev/plugin.json)).version;
   codexDirectory = if config.home.preferXdgDirectories then "${lib.removePrefix "${config.home.homeDirectory}/" config.xdg.configHome}/codex" else ".codex";
   executable = "${cfg.package}/bin/passlet";
   app = "${config.home.homeDirectory}/.local/share/passlet/Passlet.app";
@@ -83,7 +81,7 @@ in {
     programs.claude-code = lib.mkIf cfg.plugins.claude-code.enable {
       enable = lib.mkDefault true;
       marketplaces.passlet = pluginSource;
-      plugins = [ pluginSource ];
+      plugins = [ plugin ];
     };
     programs.codex = lib.mkIf cfg.plugins.codex.enable {
       enable = lib.mkDefault true;
@@ -92,12 +90,12 @@ in {
           source = toString pluginSource;
           source_type = "local";
         };
-        plugins."passlet@passlet".enabled = true;
+        plugins."passlet-dev@passlet".enabled = true;
       };
     };
-    home.file."${codexDirectory}/plugins/cache/passlet/passlet/${pluginVersion}" = lib.mkIf cfg.plugins.codex.enable {
+    home.file."${codexDirectory}/plugins/cache/passlet/passlet-dev/${pluginVersion}" = lib.mkIf cfg.plugins.codex.enable {
       recursive = true;
-      source = pluginSource;
+      source = plugin;
     };
     home.sessionVariables = lib.mkIf cfg.sshAgent.enable {
       SSH_AUTH_SOCK = "${config.home.homeDirectory}/.local/share/passlet/ssh-agent.sock";

@@ -31,7 +31,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(artifact["sha256"], digest)
                 self.assertIn("/releases/download/v1.2.3/", artifact["url"])
                 self.assertIn(digest, cask if platform == "macos" else formula)
-            for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+            for name in ["plugins/passlet-dev/plugin.json", "plugins/passlet-dev/.claude-plugin/plugin.json"]:
                 plugin = json.loads((root / "out" / name).read_text())
                 original = json.loads((ROOT / name).read_text())
                 self.assertEqual(plugin.pop("version"), manifest["version"])
@@ -44,7 +44,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_published_plugins_match_package_version(self):
         version = json.loads((ROOT / "packaging/release.json").read_text())["version"]
-        for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+        for name in ["plugins/passlet-dev/plugin.json", "plugins/passlet-dev/.claude-plugin/plugin.json"]:
             with self.subTest(manifest=name):
                 self.assertEqual(json.loads((ROOT / name).read_text())["version"], version)
 

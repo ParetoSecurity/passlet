@@ -31,7 +31,7 @@ let
   linux = evaluate "x86_64-linux" true null false fakePackage;
   client = evaluate "aarch64-darwin" true false false fakePackage;
   invalidLinux = evaluate "x86_64-linux" true true false fakePackage;
-  pluginVersion = (builtins.fromJSON (builtins.readFile (source + "/plugin.json"))).version;
+  pluginVersion = (builtins.fromJSON (builtins.readFile (source + "/plugins/passlet-dev/plugin.json"))).version;
   pluginConfig = system: enabled: xdg:
     (home-manager.lib.homeManagerConfiguration {
       pkgs = import pkgs.path { inherit system; config.allowUnfree = false; };
@@ -56,7 +56,8 @@ let
   pluginsMac = pluginConfig "aarch64-darwin" true false;
   pluginsXdg = pluginConfig pkgs.stdenv.hostPlatform.system true true;
   pluginsDisabled = pluginConfig "x86_64-linux" false false;
-  cache = ".codex/plugins/cache/passlet/passlet/${pluginVersion}";
+  cache = ".codex/plugins/cache/passlet/passlet-dev/${pluginVersion}";
+  marketplace = plugins.programs.codex.settings.marketplaces.passlet.source;
   plist = mac.programs.passlet.service.plist.text;
   activation = mac.home.activation.passletAgent.data;
   result = { inherit plist; } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
@@ -71,23 +72,22 @@ assert builtins.all (a: a.assertion) plugins.assertions;
 assert builtins.all (a: a.assertion) pluginsMac.assertions;
 assert builtins.all (a: a.assertion) pluginsXdg.assertions;
 assert plugins.programs.codex.enable;
-assert plugins.programs.codex.settings.plugins."passlet@passlet".enabled;
+assert plugins.programs.codex.settings.plugins."passlet-dev@passlet".enabled;
 assert plugins.programs.codex.settings.plugins."other@other".enabled;
 assert plugins.programs.codex.settings.marketplaces.passlet.source_type == "local";
-assert toString plugins.home.file.${cache}.source == plugins.programs.codex.settings.marketplaces.passlet.source;
-assert builtins.elem plugins.programs.claude-code.marketplaces.passlet plugins.programs.claude-code.plugins;
-assert toString plugins.programs.claude-code.marketplaces.passlet == toString plugins.home.file.${cache}.source;
-assert builtins.all (path: builtins.pathExists (plugins.home.file.${cache}.source + "/${path}")) [
+assert toString plugins.home.file.${cache}.source == "${marketplace}/plugins/passlet-dev";
+assert builtins.elem "${marketplace}/plugins/passlet-dev" (map toString plugins.programs.claude-code.plugins);
+assert toString plugins.programs.claude-code.marketplaces.passlet == marketplace;
+assert builtins.all (path: builtins.pathExists "${marketplace}/${path}") [
   ".agents/plugins/marketplace.json"
   ".claude-plugin/marketplace.json"
-  ".claude-plugin/plugin.json"
-  "assets/passlet.png"
-  "docs/SETUP.md"
-  "plugin.json"
-  "skills/passlet/SKILL.md"
+  "plugins/passlet-dev/.claude-plugin/plugin.json"
+  "plugins/passlet-dev/assets/passlet.png"
+  "plugins/passlet-dev/plugin.json"
+  "plugins/passlet-dev/skills/passlet/SKILL.md"
 ];
 assert pluginsMac.home.file ? ${cache};
-assert pluginsXdg.home.file ? ".config/codex/plugins/cache/passlet/passlet/${pluginVersion}";
+assert pluginsXdg.home.file ? ".config/codex/plugins/cache/passlet/passlet-dev/${pluginVersion}";
 assert !(pluginsDisabled.home.file ? ${cache});
 assert !pluginsDisabled.programs.claude-code.enable;
 assert !pluginsDisabled.programs.codex.enable;
@@ -151,7 +151,7 @@ assert builtins.all (system:
 ) (builtins.attrNames flake.packages);
 pkgs.runCommand "passlet-package-module-test.json" { } ''
   test -x ${plugins.programs.claude-code.finalPackage}/bin/claude
-  for cache in ${plugins.home-files}/${cache} ${pluginsXdg.home-files}/.config/codex/plugins/cache/passlet/passlet/${pluginVersion}; do
+  for cache in ${plugins.home-files}/${cache} ${pluginsXdg.home-files}/.config/codex/plugins/cache/passlet/passlet-dev/${pluginVersion}; do
     test -d "$cache"
     test ! -L "$cache"
     test -f "$cache/plugin.json"

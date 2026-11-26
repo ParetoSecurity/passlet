@@ -30,7 +30,7 @@ def sync(source: Path, project: Path) -> None:
     skills.mkdir(exist_ok=True)
     desired = {entry.name: entry for entry in (source / "skills").iterdir() if entry.is_dir()}
     # Project-specific skill has precedence over any future upstream namesake.
-    desired["passlet"] = project / "skills" / "passlet"
+    desired["passlet"] = project / "plugins" / "passlet-dev" / "skills" / "passlet"
     for name, entry in desired.items():
         link(entry, skills / name)
     for entry in skills.iterdir():

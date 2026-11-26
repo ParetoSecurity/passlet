@@ -144,20 +144,20 @@ Passlet keeps its shared local/SSH socket and opens a paired TLS listener at `12
 Home Manager users can enable `programs.passlet.plugins.claude-code.enable` and `programs.passlet.plugins.codex.enable`. See [declarative plugin installation](docs/INSTALLATION.md#install-agent-plugins).
 
 Install the native plugin on each agent account. Both plugins use the same
-[Passlet skill](skills/passlet/SKILL.md). GitHub CLI (`gh`) is optional: when it is unavailable, the skill uses the GitHub REST API through `curl` with the same scoped Passlet grant.
+[Passlet skill](plugins/passlet-dev/skills/passlet/SKILL.md). GitHub CLI (`gh`) is optional: when it is unavailable, the skill uses the GitHub REST API through `curl` with the same scoped Passlet grant.
 
 Claude Code:
 
 ```sh
 claude plugin marketplace add ParetoSecurity/passlet
-claude plugin install passlet@passlet --scope user
+claude plugin install passlet-dev@passlet --scope user
 ```
 
 Codex CLI:
 
 ```sh
 codex plugin marketplace add ParetoSecurity/passlet
-codex plugin add passlet@passlet
+codex plugin add passlet-dev@passlet
 ```
 
 Start a new agent session after installation. To update:
@@ -165,13 +165,12 @@ Start a new agent session after installation. To update:
 ```sh
 # Claude Code
 claude plugin marketplace update passlet
-claude plugin update passlet@passlet
+claude plugin update passlet-dev@passlet
 
 # Codex CLI
 codex plugin marketplace upgrade passlet
-codex plugin add passlet@passlet
+codex plugin add passlet-dev@passlet
 ```
-
 Install the Passlet CLI separately and configure the transport first. Local Mac agents use the default socket; remote agents establish trust with `passlet pair`. Installing a plugin does not mint a token or bypass native approval. Remove any previous manually installed standalone Passlet skill to avoid duplicate skills. The skill is also included in release archives and the app's `Contents/Resources/skills`.
 
 The app and both agent plugins share the same version. The release process generates both plugin manifests alongside the Homebrew/Nix metadata, and the release PR includes them before it is squash-merged and the final release tag is created. Version tags contain matching package and plugin metadata. Do not bump plugin versions separately.

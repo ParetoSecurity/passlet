@@ -21,7 +21,7 @@ Read these files from the release candidate, rather than relying on historical r
 - `.github/workflows/release.yml` and `scripts/release.sh`: actual trigger, signing, asset creation, and upload behavior.
 - `packaging/README.md` and `scripts/package-release.py`: package metadata generation and validation.
 
-Use `skills/passlet/SKILL.md` for authenticated GitHub operations. Reuse a valid grant for `ParetoSecurity/passlet`. Release inspection needs `contents:read`; workflow status and artifact downloads need `actions:read`. Pushing preparation/final tags and package metadata need `contents:write`; opening the metadata PR needs `pull_requests:write`. Request only permissions required by the authorized work. Request workflow write access only when the authorized release PR changes workflows or an authorized recovery operation requires it.
+Use `plugins/passlet-dev/skills/passlet/SKILL.md` for authenticated GitHub operations. Reuse a valid grant for `ParetoSecurity/passlet`. Release inspection needs `contents:read`; workflow status and artifact downloads need `actions:read`. Pushing preparation/final tags and package metadata need `contents:write`; opening the metadata PR needs `pull_requests:write`. Request only permissions required by the authorized work. Request workflow write access only when the authorized release PR changes workflows or an authorized recovery operation requires it.
 
 Pass all authenticated `gh` and Git operations through `passlet exec --grant <grant-path> -- ...`. Never use ambient credentials as a fallback. Keep tokens and signing secrets out of logs and generated files.
 
@@ -61,7 +61,7 @@ For a failed run, report the failing stage and any draft or published assets. If
 
 ## 3. Add metadata to the release PR
 
-- [ ] Inspect all five generated files: `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugin.json`, and `.claude-plugin/plugin.json`. Verify exact archive URLs, hashes, matching versions, and the preparation run ID and SHA.
+- [ ] Inspect all five generated files: `Casks/passlet.rb`, `Formula/passlet-agent.rb`, `packaging/release.json`, `plugins/passlet-dev/plugin.json`, and `plugins/passlet-dev/.claude-plugin/plugin.json`. Verify exact archive URLs, hashes, matching versions, and the preparation run ID and SHA.
 - [ ] Wait for the Release metadata workflow to add the generated files and docs labels to the same PR and dispatch CI. If the PR head moved, prepare the new candidate rather than overwriting changes. For recovery, regenerate with `python3 scripts/package-release.py X.Y.Z <archives> <output> --run-id <run-id> --source-sha <candidate-sha>`, inspect and commit the result to the same PR.
 - [ ] Confirm metadata CI verifies preparation provenance, unchanged source, archive checksums and exact generated metadata. It reuses the preparation's product-test evidence, without running the platform matrix again. Any source change takes the full CI path.
 - [ ] Update the existing PR to describe the implementation and release together. Keep one final commit where practical.

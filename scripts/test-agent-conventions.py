@@ -15,7 +15,7 @@ class ConventionsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             project = root / "project"
-            (project / "skills" / "passlet").mkdir(parents=True)
+            (project / "plugins" / "passlet-dev" / "skills" / "passlet").mkdir(parents=True)
             (project / ".agents" / "skills" / "release-passlet").mkdir(parents=True)
             (project / ".claude").symlink_to(".agents", target_is_directory=True)
             for version in ("old", "new"):
@@ -29,7 +29,7 @@ class ConventionsTest(unittest.TestCase):
                 self.assertEqual((project / ".agents/rules").resolve(), upstream / "rules")
                 self.assertEqual((project / ".agents/commands").resolve(), upstream / "commands")
                 self.assertEqual((project / ".claude/skills/review").resolve(), upstream / "skills/review")
-                self.assertEqual((project / ".claude/skills/passlet").resolve(), project / "skills/passlet")
+                self.assertEqual((project / ".claude/skills/passlet").resolve(), project / "plugins/passlet-dev/skills/passlet")
                 self.assertTrue((project / ".agents/skills/release-passlet").is_dir())
                 self.assertFalse((project / ".agents/skills/release-passlet").is_symlink())
                 self.assertFalse((project / ".agents/pkgs").exists())

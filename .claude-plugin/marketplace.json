@@ -5,8 +5,8 @@
   },
   "plugins": [
     {
-      "name": "passlet",
-      "source": "./",
+      "name": "passlet-dev",
+      "source": "./plugins/passlet-dev",
       "description": "Request scoped GitHub credentials with approval on your Mac."
     }
   ],

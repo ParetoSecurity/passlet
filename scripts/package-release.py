@@ -41,7 +41,7 @@ def generate(version, artifacts, output, run_id=None, source_sha=None, source=RO
         for key, value in replacements.items():
             text = text.replace(key, value)
         files[destination] = text
-    for name in ["plugin.json", ".claude-plugin/plugin.json"]:
+    for name in ["plugins/passlet-dev/plugin.json", "plugins/passlet-dev/.claude-plugin/plugin.json"]:
         plugin = json.loads((source / name).read_text())
         plugin["version"] = version
         files[name] = json.dumps(plugin, indent=2) + "\n"

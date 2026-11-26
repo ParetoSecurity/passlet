@@ -39,7 +39,7 @@ cp packaging/homebrew/service.sh "$APP/Contents/Resources/homebrew-service.sh"
 mkdir -p "$APP/Contents/Resources/docs"
 cp docs/*.md "$APP/Contents/Resources/docs/"
 mkdir -p "$APP/Contents/Resources/skills/passlet"
-cp skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
+cp plugins/passlet-dev/skills/passlet/SKILL.md "$APP/Contents/Resources/skills/passlet/SKILL.md"
 /usr/bin/xcrun swiftc -sdk "$SDKROOT" -target arm64-apple-macosx26.0 -swift-version 5 -O -module-cache-path "$PWD/build/swift-cache" macos/ApprovalState.swift macos/Credentials.swift macos/main.swift -o "$APP/Contents/MacOS/PassletHelper" -framework AppKit -framework Security -framework LocalAuthentication
 ldflags="-X main.version=$version"
 if [ "$mode" != development ]; then ldflags="-s -w $ldflags"; fi

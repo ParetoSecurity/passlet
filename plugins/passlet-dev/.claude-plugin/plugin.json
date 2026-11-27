@@ -1,10 +1,23 @@
 {
   "name": "passlet-dev",
+  "displayName": "Passlet",
   "version": "0.12.1",
   "description": "Request scoped GitHub credentials with approval on your Mac.",
   "license": "MIT",
   "author": {
     "name": "Pareto Security"
   },
-  "icon": "./assets/passlet.png"
+  "icon": "./assets/passlet.png",
+  "homepage": "https://passlet.dev",
+  "repository": "https://github.com/ParetoSecurity/passlet",
+  "documentationUrl": "https://passlet.dev/docs/",
+  "supportUrl": "https://github.com/ParetoSecurity/passlet/issues",
+  "privacyPolicyUrl": "https://paretosecurity.com/legal/privacy/",
+  "keywords": [
+    "agents",
+    "credentials",
+    "github",
+    "security",
+    "touch-id"
+  ]
 }

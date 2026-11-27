@@ -1,6 +1,6 @@
 {
   "name": "passlet-dev",
-  "displayName": "Passlet",
+  "displayName": "Passlet for Agents",
   "version": "0.12.1",
   "description": "Request scoped GitHub credentials with approval on your Mac.",
   "license": "MIT",
